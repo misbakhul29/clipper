@@ -17,13 +17,21 @@ func main() {
 		outputDir   string
 		outputFile  string
 		modeStr     string
-		stratStr    string
-		isShorts    bool
-		shortsStyle string
-		quality     string
-		cacheDir    string
-		noCache     bool
-		segments    string
+		stratStr      string
+		isShorts      bool
+		shortsStyle   string
+		quality       string
+		cacheDir      string
+		noCache       bool
+		concurrency   int
+		watermarkPath string
+		watermarkPos  string
+		overlayText   string
+		textPos       string
+		fontSize      int
+		fontColor     string
+		autoDetect    string
+		segments      string
 	)
 
 	flag.StringVar(&configFile, "config", "", "Path to JSON configuration file")
@@ -37,20 +45,28 @@ func main() {
 	flag.StringVar(&quality, "quality", "best", "YouTube download quality ('best', '1080p', '720p', '480p', '360p', 'worst')")
 	flag.StringVar(&cacheDir, "cache-dir", "./cache", "Directory for caching downloaded YouTube videos")
 	flag.BoolVar(&noCache, "no-cache", false, "Disable YouTube download cache and force re-download")
+	flag.IntVar(&concurrency, "concurrency", 0, "Number of parallel workers for rendering clips (default: CPU cores)")
+	flag.StringVar(&watermarkPath, "watermark", "", "Path to watermark image file (PNG)")
+	flag.StringVar(&watermarkPos, "watermark-pos", "top-right", "Watermark position ('top-right', 'top-left', 'bottom-right', 'bottom-left', 'center')")
+	flag.StringVar(&overlayText, "text", "", "Text caption to render on video clips")
+	flag.StringVar(&textPos, "text-pos", "bottom-center", "Text caption position ('bottom-center', 'top-center', 'center', 'top-left', 'bottom-left')")
+	flag.IntVar(&fontSize, "font-size", 32, "Font size for text caption")
+	flag.StringVar(&fontColor, "font-color", "white", "Font color for text caption ('white', 'yellow', 'cyan', 'red')")
+	flag.StringVar(&autoDetect, "auto-detect", "", "Smart auto-detection mode for segments ('silence' or 'scene')")
 	flag.StringVar(&segments, "segments", "", "Comma-separated segment timestamps (e.g. '00:10-00:25,01:00-01:30')")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "Automated Video Cutting System in Go (Supports Local Videos, YouTube URLs & Shorts 9:16)\n\n")
+		fmt.Fprintf(os.Stderr, "Automated Video Cutting System in Go (Supports Local Videos, YouTube URLs, Shorts 9:16 & Auto-Detect)\n\n")
 		fmt.Fprintf(os.Stderr, "Options:\n")
 		flag.PrintDefaults()
 		fmt.Fprintf(os.Stderr, "\nExamples:\n")
 		fmt.Fprintf(os.Stderr, "  1. Using JSON config file:\n")
 		fmt.Fprintf(os.Stderr, "     %s -config examples/segments.json\n\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  2. Cutting YouTube video directly into Shorts format (1080p):\n")
-		fmt.Fprintf(os.Stderr, "     %s -input \"https://www.youtube.com/watch?v=dQw4w9WgXcQ\" -quality 1080p -segments \"00:10-00:25\" -shorts -shorts-style blur -outdir ./yt_shorts\n\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  3. Using CLI flags (Merge Mode):\n")
-		fmt.Fprintf(os.Stderr, "     %s -input sample.mp4 -segments \"00:05-00:15,00:30-00:45\" -mode merge -output final.mp4\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  2. Smart Auto Silence Detection + Parallel Workers:\n")
+		fmt.Fprintf(os.Stderr, "     %s -input video.mp4 -auto-detect silence -concurrency 4 -shorts -outdir ./shorts_silence\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  3. Adding Text Caption and Watermark Image:\n")
+		fmt.Fprintf(os.Stderr, "     %s -input sample.mp4 -segments \"00:05-00:15\" -text \"My Channel\" -watermark logo.png\n", os.Args[0])
 	}
 
 	flag.Parse()
@@ -100,6 +116,30 @@ func main() {
 	if noCache {
 		cfg.NoCache = true
 	}
+	if concurrency > 0 {
+		cfg.Concurrency = concurrency
+	}
+	if watermarkPath != "" {
+		cfg.WatermarkPath = watermarkPath
+	}
+	if watermarkPos != "" {
+		cfg.WatermarkPos = watermarkPos
+	}
+	if overlayText != "" {
+		cfg.OverlayText = overlayText
+	}
+	if textPos != "" {
+		cfg.TextPos = textPos
+	}
+	if fontSize > 0 {
+		cfg.FontSize = fontSize
+	}
+	if fontColor != "" {
+		cfg.FontColor = fontColor
+	}
+	if autoDetect != "" {
+		cfg.AutoDetect = autoDetect
+	}
 
 	// Parse CLI segments string if provided
 	if segments != "" {
@@ -111,7 +151,7 @@ func main() {
 		cfg.Segments = append(cfg.Segments, parsedSegs...)
 	}
 
-	if cfg.InputFile == "" || len(cfg.Segments) == 0 {
+	if cfg.InputFile == "" || (len(cfg.Segments) == 0 && cfg.AutoDetect == "") {
 		flag.Usage()
 		os.Exit(1)
 	}

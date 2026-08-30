@@ -1,58 +1,72 @@
 # Automated Video Clipping System (Golang + FFmpeg)
 
-Sistem pemotong video otomatis berbasis **Go (Golang)** yang terintegrasi dengan **FFmpeg**. Sistem ini memproses potongan video berdasarkan timestamp `start` dan `end`, mendukung **YouTube URL**, **Smart Caching System**, pemisahan folder otomatis, pemeliharaan kualitas video, serta konversi otomatis ke format **YouTube Shorts / TikTok / Reels (9:16)**.
+Sistem pemotong video otomatis berbasis **Go (Golang)** yang terintegrasi dengan **FFmpeg**. Sistem ini mendukung:
+- ⚡ **Parallel Concurrency Engine** (Render banyak klip sekaligus secara paralel via Goroutines).
+- 🎙️ **Smart Silence & Scene Auto-Detection** (Deteksi otomatis bagian percakapan/suara atau perpindahan adegan tanpa timestamp manual).
+- 🎨 **Watermark Image & Text Overlay** (Penambahan logo watermark PNG & caption teks otomatis).
+- 📱 **YouTube Shorts / TikTok / Reels (9:16)** (Format vertikal dengan style *center crop* atau *blurred background*).
+- 💾 **Smart Caching System** (`./cache` auto-reuse video YouTube).
+- 📽️ **YouTube Video Quality Selector** (Pilihan 1080p, 720p, 480p, 360p, best, worst).
+
+---
+
+## 🚀 Fitur Baru & Cara Menggunakannya
+
+### 1. Smart Silence & Scene Detection (`-auto-detect`)
+Sistem secara otomatis mendeteksi bagian percakapan/audio yang aktif (menghapus hening) atau pergantian adegan tanpa perlu mengisikan segmen timestamp manual:
+
+```bash
+# Otomatis deteksi percakapan & potong klipnya
+go run ./cmd/clipper -input video.mp4 -auto-detect silence -outdir ./speech_clips
+
+# Otomatis deteksi percakapan lalu ubah langsung jadi Shorts 9:16
+go run ./cmd/clipper -input "https://youtu.be/xxx" -auto-detect silence -shorts -outdir ./shorts_auto
+```
+
+---
+
+### 2. Parallel Concurrency Engine (`-concurrency`)
+Manfaatkan seluruh core CPU kamu untuk memotong banyak segmen video secara bersamaan (paralel):
+
+```bash
+# Menggunakan 4 worker thread paralel
+go run ./cmd/clipper -input video.mp4 -segments "00:10-00:25,01:00-01:30,02:15-02:45,04:00-04:30" -concurrency 4
+```
+
+---
+
+### 3. Watermark & Text Overlay (`-watermark` & `-text`)
+Tambahkan watermark logo dan caption teks judul secara otomatis pada klip hasil eksport:
+
+```bash
+# Tambahkan Teks Caption & Logo Watermark
+go run ./cmd/clipper -input video.mp4 -segments "00:10-00:30" -text "Eps.69 Highlight" -text-pos bottom-center -watermark logo.png -watermark-pos top-right
+```
 
 ---
 
 ## ⚡ Smart Caching System (`./cache`)
 
-Sistem secara otomatis mengimplementasikan **Smart Caching** untuk menghemat kuota internet dan mempercepat proses clipping:
-
-1. **Auto Reuse**: Saat kamu memproses URL YouTube yang sama (meski dengan timestamp atau mode Shorts yang berbeda), sistem **TIDAK AKAN mengunduh ulang** video tersebut.
-2. **Instant Processing**: Video yang telah tersimpan di direktori `./cache/` langsung digunakan kembali secara instan (`[CACHE HIT]`).
+1. **Auto Reuse**: Saat kamu memproses URL YouTube yang sama, sistem **TIDAK AKAN mengunduh ulang** video tersebut.
+2. **Instant Processing**: Video di `./cache/` langsung digunakan kembali secara instan (`[CACHE HIT]`).
 3. **Pilihan Flag**:
-   - `-cache-dir <dir>`: Menentukan direktori lokasi penyimpanan cache (default: `./cache`).
+   - `-cache-dir <dir>`: Lokasi penyimpanan cache (default: `./cache`).
    - `-no-cache`: Mengabaikan cache dan memaksa download ulang dari YouTube.
 
 ---
 
 ## 📽️ Pilihan Kualitas Video YouTube (`-quality`)
 
-- **`best` (Default)**: Mengunduh resolusi kualitas tertinggi yang tersedia (hingga 4K/2K/1080p).
-- **`1080p`**: Memilih resolusi Maksimal 1080p (Full HD).
-- **`720p`**: Memilih resolusi Maksimal 720p (HD).
-- **`480p`**: Memilih resolusi 480p.
-- **`360p`**: Memilih resolusi 360p.
-- **`worst`**: Mengunduh resolusi paling rendah (hemat kuota).
+- **`best` (Default)**: Mengunduh kualitas tertinggi (hingga 4K/1080p).
+- **`1080p`**: Kualitas Maksimal 1080p (Full HD).
+- **`720p`**: Kualitas Maksimal 720p (HD).
+- **`480p` / `360p`**: Kualitas hemat kuota.
 
 ---
 
-## 🚀 Cara Menggunakan
+## 📂 Generate Konfigurasi JSON (`cmd/genconfig`)
 
-### 1. Memotong Video YouTube dengan Smart Cache & Shorts (9:16)
 ```bash
-# Perintah 1: Mengunduh 1080p dan menyimpannya di cache (Pertama kali)
-go run ./cmd/clipper -input "https://www.youtube.com/watch?v=t7xtO3KqsmM" -quality 1080p -segments "00:22-01:45" -outdir ./yt_clips
-
-# Perintah 2: Eksekusi ulang URL sama untuk Shorts -> INSTAN via [CACHE HIT] tanpa download ulang!
-go run ./cmd/clipper -input "https://www.youtube.com/watch?v=t7xtO3KqsmM" -segments "00:22-01:45" -shorts -shorts-style blur -outdir ./yt_clips
-```
-
-### 2. Memaksa Download Ulang Tanpa Cache (`-no-cache`)
-```bash
-go run ./cmd/clipper -input "https://www.youtube.com/watch?v=t7xtO3KqsmM" -no-cache -segments "00:10-00:30"
-```
-
-### 3. Generate Konfigurasi JSON (`cmd/genconfig`)
-```bash
-# Mode Interaktif Wizard (Termasuk prompt cache)
+# Mode Interaktif Wizard (Termasuk prompt Auto-Detect, Watermark, & Concurrency)
 go run ./cmd/genconfig -i
-
-# Via CLI Flags dengan Cache & Quality
-go run ./cmd/genconfig -file my_clips.json -input "https://youtu.be/xxx" -quality 1080p -shorts -segments "00:10-00:25:intro"
-```
-
-Jalankan config yang dibuat:
-```bash
-go run ./cmd/clipper -config my_clips.json
 ```

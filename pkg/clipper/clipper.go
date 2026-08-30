@@ -4,8 +4,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 
+	"clipping/pkg/detector"
 	"clipping/pkg/downloader"
 )
 
@@ -47,6 +50,29 @@ func (c *Clipper) Process(cfg *Config) error {
 		return fmt.Errorf("input file does not exist: %s", cfg.InputFile)
 	}
 
+	// Auto Detection if segments are empty
+	if len(cfg.Segments) == 0 && cfg.AutoDetect != "" {
+		fmt.Printf("Auto-detecting segments using '%s' detection mode...\n", cfg.AutoDetect)
+		var detected []detector.DetectedSegment
+		var err error
+		if cfg.AutoDetect == "silence" {
+			detected, err = detector.DetectSilence(c.runner.FFmpegPath, cfg.InputFile, -30, 0.5)
+		} else if cfg.AutoDetect == "scene" {
+			detected, err = detector.DetectScenes(c.runner.FFmpegPath, cfg.InputFile, 0.3)
+		}
+		if err != nil {
+			return fmt.Errorf("auto detection failed: %w", err)
+		}
+		for _, d := range detected {
+			cfg.Segments = append(cfg.Segments, Segment{
+				Start: d.Start,
+				End:   d.End,
+				Title: d.Title,
+			})
+		}
+		fmt.Printf("Auto-detected %d active segments!\n", len(cfg.Segments))
+	}
+
 	outputDir := cfg.OutputDir
 	if outputDir == "" {
 		outputDir = "."
@@ -68,12 +94,42 @@ func (c *Clipper) Process(cfg *Config) error {
 	ext := filepath.Ext(cfg.InputFile)
 	baseName := strings.TrimSuffix(filepath.Base(cfg.InputFile), ext)
 
-	var createdFiles []string
-	var isTempFile []bool
+	numWorkers := cfg.Concurrency
+	if numWorkers <= 0 {
+		numWorkers = runtime.NumCPU()
+	}
+	if numWorkers > len(cfg.Segments) {
+		numWorkers = len(cfg.Segments)
+	}
 
-	fmt.Printf("Starting video processing: %s (%d segments)\n", cfg.InputFile, len(cfg.Segments))
+	fmt.Printf("Starting video processing: %s (%d segments, %d workers)\n", cfg.InputFile, len(cfg.Segments), numWorkers)
 	fmt.Printf("Mode: %s, Strategy: %s, Shorts (9:16): %v (style: %s)\n", cfg.Mode, cfg.Strategy, cfg.Shorts, cfg.ShortsStyle)
+	if cfg.WatermarkPath != "" {
+		fmt.Printf("Watermark: %s (pos: %s)\n", cfg.WatermarkPath, cfg.WatermarkPos)
+	}
+	if cfg.OverlayText != "" {
+		fmt.Printf("Overlay Text: '%s' (pos: %s)\n", cfg.OverlayText, cfg.TextPos)
+	}
 
+	type job struct {
+		index       int
+		startSec    float64
+		durationSec float64
+		segPath     string
+		isTemp      bool
+	}
+
+	type jobResult struct {
+		index   int
+		segPath string
+		isTemp  bool
+		err     error
+	}
+
+	jobs := make(chan job, len(cfg.Segments))
+	results := make(chan jobResult, len(cfg.Segments))
+
+	// Populate jobs
 	for i, seg := range cfg.Segments {
 		startSec, _, durationSec, err := CalculateDuration(seg.Start, seg.End)
 		if err != nil {
@@ -83,7 +139,6 @@ func (c *Clipper) Process(cfg *Config) error {
 		var segFileName string
 		title := strings.TrimSpace(seg.Title)
 		if title != "" {
-			// sanitize title
 			title = strings.ReplaceAll(title, " ", "_")
 			segFileName = fmt.Sprintf("%s_%s%s", baseName, title, ext)
 		} else {
@@ -91,26 +146,57 @@ func (c *Clipper) Process(cfg *Config) error {
 		}
 
 		segPath := filepath.Join(outputDir, segFileName)
-
-		// If in merge mode, prefix temporary cut clips
+		isTemp := false
 		if cfg.Mode == ModeMerge {
 			segPath = filepath.Join(outputDir, fmt.Sprintf(".tmp_%s_clip_%03d%s", baseName, i+1, ext))
-			isTempFile = append(isTempFile, true)
-		} else {
-			isTempFile = append(isTempFile, false)
+			isTemp = true
 		}
 
-		fmt.Printf("[%d/%d] Cutting segment: %s -> %s (duration: %.2fs) -> %s\n",
-			i+1, len(cfg.Segments), seg.Start, seg.End, durationSec, segPath)
-
-		err = c.runner.CutSegment(cfg.InputFile, startSec, durationSec, segPath, cfg.Strategy, cfg.Shorts, cfg.ShortsStyle)
-		if err != nil {
-			// Clean up any files created so far on failure
-			c.cleanupFiles(createdFiles, isTempFile)
-			return fmt.Errorf("failed to cut segment %d: %w", i+1, err)
+		jobs <- job{
+			index:       i,
+			startSec:    startSec,
+			durationSec: durationSec,
+			segPath:     segPath,
+			isTemp:      isTemp,
 		}
+	}
+	close(jobs)
 
-		createdFiles = append(createdFiles, segPath)
+	// Launch worker pool
+	var wg sync.WaitGroup
+	for w := 0; w < numWorkers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := range jobs {
+				fmt.Printf("[%d/%d] Cutting segment: %.2fs -> duration %.2fs -> %s\n",
+					j.index+1, len(cfg.Segments), j.startSec, j.durationSec, j.segPath)
+
+				err := c.runner.CutSegment(cfg, j.startSec, j.durationSec, j.segPath)
+				results <- jobResult{
+					index:   j.index,
+					segPath: j.segPath,
+					isTemp:  j.isTemp,
+					err:     err,
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
+	close(results)
+
+	// Collect results in order
+	createdFiles := make([]string, len(cfg.Segments))
+	isTempFiles := make([]bool, len(cfg.Segments))
+
+	for r := range results {
+		if r.err != nil {
+			c.cleanupFiles(createdFiles, isTempFiles)
+			return fmt.Errorf("failed cutting segment %d: %w", r.index+1, r.err)
+		}
+		createdFiles[r.index] = r.segPath
+		isTempFiles[r.index] = r.isTemp
 	}
 
 	if cfg.Mode == ModeMerge {
@@ -124,8 +210,7 @@ func (c *Clipper) Process(cfg *Config) error {
 		fmt.Printf("Merging %d segments into final video: %s\n", len(createdFiles), finalOutput)
 		err := c.runner.MergeSegments(createdFiles, finalOutput)
 
-		// Clean up temporary segment files created for merge
-		c.cleanupFiles(createdFiles, isTempFile)
+		c.cleanupFiles(createdFiles, isTempFiles)
 
 		if err != nil {
 			return fmt.Errorf("failed to merge segments: %w", err)
@@ -140,7 +225,7 @@ func (c *Clipper) Process(cfg *Config) error {
 
 func (c *Clipper) cleanupFiles(files []string, isTemp []bool) {
 	for i, f := range files {
-		if i < len(isTemp) && isTemp[i] {
+		if f != "" && i < len(isTemp) && isTemp[i] {
 			os.Remove(f)
 		}
 	}

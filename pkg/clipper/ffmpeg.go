@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 // FFmpegRunner handles invoking the ffmpeg executable.
@@ -26,69 +27,151 @@ func NewFFmpegRunner(customPath string) (*FFmpegRunner, error) {
 	return &FFmpegRunner{FFmpegPath: path}, nil
 }
 
-// CutSegment trims a single segment from inputPath to outputPath.
-func (f *FFmpegRunner) CutSegment(inputPath string, startSec, durationSec float64, outputPath string, strategy CutStrategy, isShorts bool, shortsStyle string) error {
+// CutSegment trims a single segment from inputPath to outputPath based on config settings.
+func (f *FFmpegRunner) CutSegment(cfg *Config, startSec, durationSec float64, outputPath string) error {
 	startStr := FormatSeconds(startSec)
 	durStr := FormatSeconds(durationSec)
 
-	var args []string
+	hasWatermark := cfg.WatermarkPath != ""
+	hasOverlayText := cfg.OverlayText != ""
+	needsReencode := cfg.Shorts || hasWatermark || hasOverlayText || cfg.Strategy == StrategyAccurate
 
-	if isShorts {
-		// Video filter required for 9:16 Shorts format
-		args = []string{
+	if !needsReencode {
+		// Fast copy mode without re-encoding
+		args := []string{
 			"-y",
 			"-ss", startStr,
-			"-i", inputPath,
-			"-t", durStr,
-		}
-
-		if shortsStyle == "blur" {
-			filterComplex := "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=20:5[bg];[0:v]scale=1080:1920:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2"
-			args = append(args, "-filter_complex", filterComplex)
-		} else {
-			// Center crop 9:16 (default)
-			args = append(args, "-vf", "crop=ih*(9/16):ih,scale=1080:1920")
-		}
-
-		args = append(args,
-			"-c:v", "mpeg4",
-			"-c:a", "aac",
-			"-avoid_negative_ts", "make_zero",
-			outputPath,
-		)
-	} else if strategy == StrategyFast {
-		// Fast copy mode: placing -ss before -i for fast seek, -to/-t after -i
-		args = []string{
-			"-y",
-			"-ss", startStr,
-			"-i", inputPath,
+			"-i", cfg.InputFile,
 			"-t", durStr,
 			"-c", "copy",
 			"-avoid_negative_ts", "make_zero",
 			outputPath,
 		}
-	} else {
-		// Accurate mode: re-encode for frame accuracy
-		args = []string{
-			"-y",
-			"-ss", startStr,
-			"-i", inputPath,
-			"-t", durStr,
-			"-c:v", "mpeg4",
-			"-c:a", "aac",
-			"-avoid_negative_ts", "make_zero",
-			outputPath,
+		return f.runFFmpeg(args)
+	}
+
+	// Re-encoding mode with optional video filters
+	args := []string{
+		"-y",
+		"-ss", startStr,
+		"-i", cfg.InputFile,
+	}
+
+	if hasWatermark {
+		args = append(args, "-i", cfg.WatermarkPath)
+	}
+
+	args = append(args, "-t", durStr)
+
+	filterGraph := buildFilterGraph(cfg, hasWatermark, hasOverlayText)
+	if filterGraph != "" {
+		if hasWatermark || cfg.ShortsStyle == "blur" {
+			args = append(args, "-filter_complex", filterGraph)
+		} else {
+			args = append(args, "-vf", filterGraph)
 		}
 	}
 
+	args = append(args,
+		"-c:v", "mpeg4",
+		"-c:a", "aac",
+		"-avoid_negative_ts", "make_zero",
+		outputPath,
+	)
+
+	return f.runFFmpeg(args)
+}
+
+func buildFilterGraph(cfg *Config, hasWatermark, hasOverlayText bool) string {
+	var filters []string
+
+	// 1. Shorts Aspect Ratio Filter
+	if cfg.Shorts {
+		if cfg.ShortsStyle == "blur" {
+			bgFilter := "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=20:5[bg];[0:v]scale=1080:1920:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2"
+			if hasWatermark {
+				watermarkOverlay := getWatermarkPosition(cfg.WatermarkPos)
+				return fmt.Sprintf("%s[base];[1:v]scale=150:-1[wm];[base][wm]%s", bgFilter, watermarkOverlay)
+			}
+			return bgFilter
+		}
+		filters = append(filters, "crop=ih*(9/16):ih,scale=1080:1920")
+	}
+
+	// 2. Overlay Text (drawtext)
+	if hasOverlayText {
+		textPos := getTextPosition(cfg.TextPos)
+		fontColor := cfg.FontColor
+		if fontColor == "" {
+			fontColor = "white"
+		}
+		fontSize := cfg.FontSize
+		if fontSize <= 0 {
+			fontSize = 32
+		}
+		// Escape single quotes for drawtext
+		escapedText := strings.ReplaceAll(cfg.OverlayText, "'", "'\\''")
+		drawtext := fmt.Sprintf("drawtext=text='%s':%s:fontsize=%d:fontcolor=%s:box=1:boxcolor=black@0.5:boxborderw=5",
+			escapedText, textPos, fontSize, fontColor)
+		filters = append(filters, drawtext)
+	}
+
+	// Simple filter chain string
+	simpleChain := strings.Join(filters, ",")
+
+	if hasWatermark {
+		wmOverlay := getWatermarkPosition(cfg.WatermarkPos)
+		if simpleChain != "" {
+			return fmt.Sprintf("[0:v]%s[v0];[1:v]scale=150:-1[wm];[v0][wm]%s", simpleChain, wmOverlay)
+		}
+		return fmt.Sprintf("[0:v][1:v]scale=150:-1[wm];[0:v][wm]%s", wmOverlay)
+	}
+
+	return simpleChain
+}
+
+func getWatermarkPosition(pos string) string {
+	switch strings.ToLower(pos) {
+	case "top-left":
+		return "overlay=20:20"
+	case "bottom-left":
+		return "overlay=20:main_h-overlay_h-20"
+	case "bottom-right":
+		return "overlay=main_w-overlay_w-20:main_h-overlay_h-20"
+	case "center":
+		return "overlay=(main_w-overlay_w)/2:(main_h-overlay_h)/2"
+	default: // "top-right"
+		return "overlay=main_w-overlay_w-20:20"
+	}
+}
+
+func getTextPosition(pos string) string {
+	switch strings.ToLower(pos) {
+	case "top-left":
+		return "x=20:y=20"
+	case "top-center":
+		return "x=(w-text_w)/2:y=30"
+	case "top-right":
+		return "x=w-text_w-20:y=20"
+	case "center":
+		return "x=(w-text_w)/2:y=(h-text_h)/2"
+	case "bottom-left":
+		return "x=20:y=h-text_h-30"
+	case "bottom-right":
+		return "x=w-text_w-20:y=h-text_h-30"
+	default: // "bottom-center"
+		return "x=(w-text_w)/2:y=h-text_h-50"
+	}
+}
+
+func (f *FFmpegRunner) runFFmpeg(args []string) error {
 	cmd := exec.Command(f.FFmpegPath, args...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("ffmpeg cut failed: %w\nOutput: %s", err, stderr.String())
+		return fmt.Errorf("ffmpeg execution failed: %w\nOutput: %s", err, stderr.String())
 	}
-
 	return nil
 }
 
