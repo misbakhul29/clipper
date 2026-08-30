@@ -1,0 +1,36 @@
+# Binaries & Executables
+./clipper
+./genconfig
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test & Local Output Directories
+cache/
+yt_clips/
+output_clips/
+clips/
+shorts/
+
+# Media Files
+*.mp4
+*.mkv
+*.avi
+*.webm
+*.mov
+*.flv
+*.ts
+
+# Temporary Files
+.tmp_*
+*.tmp
+*.log
+
+# OS & IDE Files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
