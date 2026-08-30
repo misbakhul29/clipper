@@ -49,6 +49,7 @@ type Config struct {
 	FontColor     string      `json:"font_color"`   // Font color for overlay text (e.g. "white", "yellow")
 	AutoDetect    string      `json:"auto_detect"`  // Auto detection mode: "silence", "scene", or "ai"
 	TranslateLang string      `json:"translate_lang"`// Target language for subtitle translation (e.g. "id", "en")
+	BurnSubtitles bool        `json:"burn_subtitles"`// Hardcode/burn-in subtitles directly onto video clips
 	OpenRouterKey string      `json:"openrouter_key"`// OpenRouter API Key for AI highlight detection
 	AIModel       string      `json:"ai_model"`     // OpenRouter AI model (default: "openrouter/free")
 	Segments      []Segment   `json:"segments"`

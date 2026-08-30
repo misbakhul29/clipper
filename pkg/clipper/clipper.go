@@ -139,6 +139,20 @@ func (c *Clipper) Process(cfg *Config) error {
 		numWorkers = len(cfg.Segments)
 	}
 
+	var allSubEntries []transcriber.SubtitleEntry
+	if cfg.BurnSubtitles {
+		fmt.Printf("Fetching subtitles for burnt-in captions...\n")
+		lang := cfg.TranslateLang
+		if lang == "" {
+			lang = "id"
+		}
+		subs, err := transcriber.FetchSubtitles(originalInput, cfg.CacheDir, lang)
+		if err == nil {
+			allSubEntries = subs
+			fmt.Printf("Loaded %d subtitle entries for burn-in captions!\n", len(allSubEntries))
+		}
+	}
+
 	fmt.Printf("Starting video processing: %s (%d segments, %d workers)\n", cfg.InputFile, len(cfg.Segments), numWorkers)
 	fmt.Printf("Mode: %s, Strategy: %s, Shorts (9:16): %v (style: %s)\n", cfg.Mode, cfg.Strategy, cfg.Shorts, cfg.ShortsStyle)
 	if cfg.WatermarkPath != "" {
@@ -146,6 +160,9 @@ func (c *Clipper) Process(cfg *Config) error {
 	}
 	if cfg.OverlayText != "" {
 		fmt.Printf("Overlay Text: '%s' (pos: %s)\n", cfg.OverlayText, cfg.TextPos)
+	}
+	if cfg.BurnSubtitles {
+		fmt.Printf("Burnt-in Subtitles: Enabled\n")
 	}
 
 	type job struct {
@@ -209,7 +226,19 @@ func (c *Clipper) Process(cfg *Config) error {
 				fmt.Printf("[%d/%d] Cutting segment: %.2fs -> duration %.2fs -> %s\n",
 					j.index+1, len(cfg.Segments), j.startSec, j.durationSec, j.segPath)
 
-				err := c.runner.CutSegment(cfg, j.startSec, j.durationSec, j.segPath)
+				subPath := ""
+				if len(allSubEntries) > 0 {
+					sliced := transcriber.SliceSubtitles(allSubEntries, j.startSec, j.startSec+j.durationSec)
+					if len(sliced) > 0 {
+						tmpSubFile := filepath.Join(outputDir, fmt.Sprintf(".sub_%03d.ass", j.index+1))
+						if err := transcriber.ExportASS(sliced, tmpSubFile); err == nil {
+							subPath = tmpSubFile
+							defer os.Remove(tmpSubFile)
+						}
+					}
+				}
+
+				err := c.runner.CutSegment(cfg, j.startSec, j.durationSec, j.segPath, subPath)
 				results <- jobResult{
 					index:   j.index,
 					segPath: j.segPath,

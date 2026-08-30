@@ -21,8 +21,9 @@ type AIHighlight struct {
 }
 
 type OpenRouterRequest struct {
-	Model    string    `json:"model"`
-	Messages []Message `json:"messages"`
+	Model            string    `json:"model"`
+	Messages         []Message `json:"messages"`
+	IncludeReasoning bool      `json:"include_reasoning"`
 }
 
 type Message struct {
@@ -58,9 +59,11 @@ func AnalyzeHighlights(entries []transcriber.SubtitleEntry, apiKey, model, targe
 		model = "openrouter/free"
 	}
 
-	// Prepare transcript summary string
+	// Compact/group subtitle entries to prevent LLM prompt bloat and API timeout
+	groupedEntries := groupSubtitleEntries(entries, 15.0)
+
 	var sb strings.Builder
-	for _, entry := range entries {
+	for _, entry := range groupedEntries {
 		sb.WriteString(fmt.Sprintf("[%s -> %s] %s\n", entry.Start, entry.End, entry.Text))
 	}
 
@@ -106,7 +109,7 @@ Do NOT include any markdown codeblocks or explanation. Return ONLY the raw JSON 
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 180 * time.Second}
+	client := &http.Client{Timeout: 300 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("OpenRouter API request failed: %w", err)
@@ -177,4 +180,80 @@ func repairTruncatedJSON(content string) string {
 		}
 	}
 	return content
+}
+
+func groupSubtitleEntries(entries []transcriber.SubtitleEntry, groupWindowSec float64) []transcriber.SubtitleEntry {
+	if len(entries) == 0 {
+		return entries
+	}
+	var grouped []transcriber.SubtitleEntry
+
+	var currentStart, currentEnd string
+	var currentTexts []string
+
+	for i, entry := range entries {
+		if i == 0 {
+			currentStart = entry.Start
+			currentEnd = entry.End
+			currentTexts = append(currentTexts, entry.Text)
+			continue
+		}
+
+		startSec := parseTimestampToSeconds(entry.Start)
+		currStartSec := parseTimestampToSeconds(currentStart)
+
+		if startSec-currStartSec < groupWindowSec {
+			currentEnd = entry.End
+			if !containsText(currentTexts, entry.Text) {
+				currentTexts = append(currentTexts, entry.Text)
+			}
+		} else {
+			grouped = append(grouped, transcriber.SubtitleEntry{
+				Start: currentStart,
+				End:   currentEnd,
+				Text:  strings.Join(currentTexts, " "),
+			})
+			currentStart = entry.Start
+			currentEnd = entry.End
+			currentTexts = []string{entry.Text}
+		}
+	}
+
+	if currentStart != "" && len(currentTexts) > 0 {
+		grouped = append(grouped, transcriber.SubtitleEntry{
+			Start: currentStart,
+			End:   currentEnd,
+			Text:  strings.Join(currentTexts, " "),
+		})
+	}
+
+	return grouped
+}
+
+func parseTimestampToSeconds(ts string) float64 {
+	parts := strings.Split(ts, ":")
+	if len(parts) == 3 {
+		var h, m, s float64
+		fmt.Sscanf(parts[0], "%f", &h)
+		fmt.Sscanf(parts[1], "%f", &m)
+		fmt.Sscanf(parts[2], "%f", &s)
+		return h*3600 + m*60 + s
+	} else if len(parts) == 2 {
+		var m, s float64
+		fmt.Sscanf(parts[0], "%f", &m)
+		fmt.Sscanf(parts[1], "%f", &s)
+		return m*60 + s
+	}
+	var s float64
+	fmt.Sscanf(ts, "%f", &s)
+	return s
+}
+
+func containsText(slice []string, text string) bool {
+	for _, item := range slice {
+		if item == text {
+			return true
+		}
+	}
+	return false
 }
