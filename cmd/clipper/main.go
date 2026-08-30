@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"clipping/pkg/clipper"
@@ -12,11 +14,13 @@ import (
 
 func main() {
 	var (
-		configFile  string
-		inputFile   string
-		outputDir   string
-		outputFile  string
-		modeStr     string
+		configFile    string
+		initConfig    string
+		interactive   bool
+		inputFile     string
+		outputDir     string
+		outputFile    string
+		modeStr       string
 		stratStr      string
 		isShorts      bool
 		shortsStyle   string
@@ -35,6 +39,10 @@ func main() {
 	)
 
 	flag.StringVar(&configFile, "config", "", "Path to JSON configuration file")
+	flag.StringVar(&initConfig, "init-config", "", "Generate a JSON configuration file (e.g. -init-config config.json)")
+	flag.BoolVar(&interactive, "i", false, "Run interactive config generator wizard")
+	flag.BoolVar(&interactive, "interactive", false, "Run interactive config generator wizard")
+
 	flag.StringVar(&inputFile, "input", "", "Path to source input video file or YouTube URL")
 	flag.StringVar(&outputDir, "outdir", ".", "Output directory for cut videos")
 	flag.StringVar(&outputFile, "output", "", "Output filename (used in merge mode)")
@@ -61,15 +69,63 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Options:\n")
 		flag.PrintDefaults()
 		fmt.Fprintf(os.Stderr, "\nExamples:\n")
-		fmt.Fprintf(os.Stderr, "  1. Using JSON config file:\n")
-		fmt.Fprintf(os.Stderr, "     %s -config examples/segments.json\n\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  2. Smart Auto Silence Detection + Parallel Workers:\n")
-		fmt.Fprintf(os.Stderr, "     %s -input video.mp4 -auto-detect silence -concurrency 4 -shorts -outdir ./shorts_silence\n\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  3. Adding Text Caption and Watermark Image:\n")
-		fmt.Fprintf(os.Stderr, "     %s -input sample.mp4 -segments \"00:05-00:15\" -text \"My Channel\" -watermark logo.png\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  1. Generate JSON Config via Interactive Wizard:\n")
+		fmt.Fprintf(os.Stderr, "     %s -i\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  2. Generate JSON Config via Flags:\n")
+		fmt.Fprintf(os.Stderr, "     %s -init-config my_config.json -input video.mp4 -segments \"00:10-00:25\" -shorts\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  3. Process Video using JSON Config:\n")
+		fmt.Fprintf(os.Stderr, "     %s -config my_config.json\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  4. Smart Auto Silence Detection + Parallel Workers:\n")
+		fmt.Fprintf(os.Stderr, "     %s -input video.mp4 -auto-detect silence -concurrency 4 -shorts -outdir ./shorts_silence\n", os.Args[0])
 	}
 
 	flag.Parse()
+
+	// Handle Interactive Config Generator (-i / -interactive)
+	if interactive {
+		targetFile := initConfig
+		if targetFile == "" {
+			targetFile = "config.json"
+		}
+		runInteractiveWizard(targetFile)
+		return
+	}
+
+	// Handle Config File Generation via Flag (-init-config config.json)
+	if initConfig != "" {
+		parsedSegs, err := parseCLISegments(segments)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error parsing -segments flag: %v\n", err)
+			os.Exit(1)
+		}
+		genCfg := clipper.Config{
+			InputFile:     inputFile,
+			OutputDir:     outputDir,
+			OutputFile:    outputFile,
+			Mode:          clipper.Mode(modeStr),
+			Strategy:      clipper.CutStrategy(stratStr),
+			Shorts:        isShorts,
+			ShortsStyle:   shortsStyle,
+			Quality:       quality,
+			CacheDir:      cacheDir,
+			NoCache:       noCache,
+			Concurrency:   concurrency,
+			WatermarkPath: watermarkPath,
+			WatermarkPos:  watermarkPos,
+			OverlayText:   overlayText,
+			TextPos:       textPos,
+			FontSize:      fontSize,
+			FontColor:     fontColor,
+			AutoDetect:    autoDetect,
+			Segments:      parsedSegs,
+		}
+		if err := saveConfig(initConfig, genCfg); err != nil {
+			fmt.Fprintf(os.Stderr, "Error generating config file '%s': %v\n", initConfig, err)
+			os.Exit(1)
+		}
+		fmt.Printf("Successfully generated configuration file: %s\n", initConfig)
+		return
+	}
 
 	var cfg clipper.Config
 
@@ -178,14 +234,148 @@ func parseCLISegments(raw string) ([]clipper.Segment, error) {
 		if pair == "" {
 			continue
 		}
-		parts := strings.Split(pair, "-")
+
+		title := ""
+		timePart := pair
+		if strings.Contains(pair, ":") && (strings.Count(pair, ":") > 4 || strings.LastIndex(pair, ":") > strings.LastIndex(pair, "-")) {
+			idx := strings.LastIndex(pair, ":")
+			timePart = pair[:idx]
+			title = pair[idx+1:]
+		}
+
+		parts := strings.Split(timePart, "-")
 		if len(parts) != 2 {
-			return nil, fmt.Errorf("invalid segment pair '%s', expected format 'START-END'", pair)
+			return nil, fmt.Errorf("invalid segment pair '%s', expected format 'START-END' or 'START-END:TITLE'", pair)
 		}
 		result = append(result, clipper.Segment{
 			Start: strings.TrimSpace(parts[0]),
 			End:   strings.TrimSpace(parts[1]),
+			Title: strings.TrimSpace(title),
 		})
 	}
 	return result, nil
+}
+
+func runInteractiveWizard(defaultFile string) {
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Println("=== Interactive Config Generator Wizard ===")
+
+	fileOut := promptString(reader, "Output config filename", defaultFile)
+	inputFile := promptString(reader, "Input video file path or YouTube URL", "https://www.youtube.com/watch?v=sample")
+	outputDir := promptString(reader, "Output directory for clips", "./output_clips")
+
+	fmt.Println("\nMode options:")
+	fmt.Println("  1. split (Cut into individual clip files)")
+	fmt.Println("  2. merge (Cut and merge into single video)")
+	modeChoice := promptString(reader, "Select mode (1 or 2)", "1")
+	mode := clipper.ModeSplit
+	if modeChoice == "2" || strings.ToLower(modeChoice) == "merge" {
+		mode = clipper.ModeMerge
+	}
+
+	outputFile := ""
+	if mode == clipper.ModeMerge {
+		outputFile = promptString(reader, "Merged output video filename", "merged_highlight.mp4")
+	}
+
+	fmt.Println("\nCutting strategy options:")
+	fmt.Println("  1. fast     (Stream copy, super fast without re-encoding)")
+	fmt.Println("  2. accurate (Re-encode for frame-accurate cuts)")
+	stratChoice := promptString(reader, "Select strategy (1 or 2)", "1")
+	strategy := clipper.StrategyFast
+	if stratChoice == "2" || strings.ToLower(stratChoice) == "accurate" {
+		strategy = clipper.StrategyAccurate
+	}
+
+	shortsChoice := promptString(reader, "\nConvert to 9:16 Shorts/Reels format? (y/n)", "n")
+	isShorts := strings.ToLower(shortsChoice) == "y" || strings.ToLower(shortsChoice) == "yes"
+	shortsStyle := "crop"
+	if isShorts {
+		fmt.Println("Shorts aspect ratio style:")
+		fmt.Println("  1. crop (Center crop 9:16)")
+		fmt.Println("  2. blur (Blurred top/bottom background 9:16)")
+		styleChoice := promptString(reader, "Select style (1 or 2)", "1")
+		if styleChoice == "2" || strings.ToLower(styleChoice) == "blur" {
+			shortsStyle = "blur"
+		}
+	}
+
+	quality := promptString(reader, "\nYouTube Video Download Quality (best, 1080p, 720p, 480p, 360p, worst)", "best")
+	autoDetect := promptString(reader, "\nAuto Detection Mode (press Enter to skip, or enter 'silence' / 'scene')", "")
+
+	var segments []clipper.Segment
+	if autoDetect == "" {
+		fmt.Println("\nEnter video segments (press Enter with empty start time when finished):")
+		segIdx := 1
+		for {
+			fmt.Printf("\n--- Segment #%d ---\n", segIdx)
+			start := promptString(reader, "Start time (e.g. 00:00:10 or 10)", "")
+			if start == "" {
+				if len(segments) == 0 {
+					fmt.Println("Warning: At least one segment or auto-detect is required. Please enter start time.")
+					continue
+				}
+				break
+			}
+			end := promptString(reader, "End time (e.g. 00:00:25 or 25)", "")
+			title := promptString(reader, "Segment title/label (optional)", "")
+
+			segments = append(segments, clipper.Segment{
+				Start: start,
+				End:   end,
+				Title: title,
+			})
+			segIdx++
+		}
+	}
+
+	cfg := clipper.Config{
+		InputFile:   inputFile,
+		OutputDir:   outputDir,
+		OutputFile:  outputFile,
+		Mode:        mode,
+		Strategy:    strategy,
+		Shorts:      isShorts,
+		ShortsStyle: shortsStyle,
+		Quality:     quality,
+		AutoDetect:  autoDetect,
+		Segments:    segments,
+	}
+
+	if err := saveConfig(fileOut, cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "\nError saving config: %v\n", err)
+		return
+	}
+
+	fmt.Printf("\nSuccessfully created configuration file: %s\n", fileOut)
+}
+
+func promptString(reader *bufio.Reader, prompt, defaultValue string) string {
+	if defaultValue != "" {
+		fmt.Printf("%s [%s]: ", prompt, defaultValue)
+	} else {
+		fmt.Printf("%s: ", prompt)
+	}
+	input, _ := reader.ReadString('\n')
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return defaultValue
+	}
+	return input
+}
+
+func saveConfig(filePath string, cfg clipper.Config) error {
+	dir := filepath.Dir(filePath)
+	if dir != "." && dir != "" {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return err
+		}
+	}
+
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(filePath, data, 0644)
 }
