@@ -35,6 +35,8 @@ func main() {
 		fontSize      int
 		fontColor     string
 		autoDetect    string
+		openRouterKey string
+		aiModel       string
 		segments      string
 	)
 
@@ -60,7 +62,9 @@ func main() {
 	flag.StringVar(&textPos, "text-pos", "bottom-center", "Text caption position ('bottom-center', 'top-center', 'center', 'top-left', 'bottom-left')")
 	flag.IntVar(&fontSize, "font-size", 32, "Font size for text caption")
 	flag.StringVar(&fontColor, "font-color", "white", "Font color for text caption ('white', 'yellow', 'cyan', 'red')")
-	flag.StringVar(&autoDetect, "auto-detect", "", "Smart auto-detection mode for segments ('silence' or 'scene')")
+	flag.StringVar(&autoDetect, "auto-detect", "", "Smart auto-detection mode for segments ('silence', 'scene', or 'ai')")
+	flag.StringVar(&openRouterKey, "openrouter-key", "", "OpenRouter API Key for AI highlight detection (defaults to $OPENROUTER_API_KEY)")
+	flag.StringVar(&aiModel, "ai-model", "openrouter/free", "OpenRouter AI model name")
 	flag.StringVar(&segments, "segments", "", "Comma-separated segment timestamps (e.g. '00:10-00:25,01:00-01:30')")
 
 	flag.Usage = func() {
@@ -195,6 +199,12 @@ func main() {
 	}
 	if autoDetect != "" {
 		cfg.AutoDetect = autoDetect
+	}
+	if openRouterKey != "" {
+		cfg.OpenRouterKey = openRouterKey
+	}
+	if aiModel != "" {
+		cfg.AIModel = aiModel
 	}
 
 	// Parse CLI segments string if provided

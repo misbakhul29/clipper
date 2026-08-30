@@ -47,7 +47,9 @@ type Config struct {
 	TextPos       string      `json:"text_pos"`     // Position for overlay text
 	FontSize      int         `json:"font_size"`    // Font size for overlay text
 	FontColor     string      `json:"font_color"`   // Font color for overlay text (e.g. "white", "yellow")
-	AutoDetect    string      `json:"auto_detect"`  // Auto detection mode: "silence" or "scene"
+	AutoDetect    string      `json:"auto_detect"`  // Auto detection mode: "silence", "scene", or "ai"
+	OpenRouterKey string      `json:"openrouter_key"`// OpenRouter API Key for AI highlight detection
+	AIModel       string      `json:"ai_model"`     // OpenRouter AI model (default: "openrouter/free")
 	Segments      []Segment   `json:"segments"`
 }
 
@@ -82,6 +84,9 @@ func (c *Config) Validate() error {
 	}
 	if c.CacheDir == "" {
 		c.CacheDir = "./cache"
+	}
+	if c.AIModel == "" {
+		c.AIModel = "openrouter/free"
 	}
 	if c.Concurrency <= 0 {
 		c.Concurrency = runtime.NumCPU()

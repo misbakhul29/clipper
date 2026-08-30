@@ -1,0 +1,40 @@
+package ai
+
+import (
+	"testing"
+)
+
+func TestParseAIHighlightsJSON(t *testing.T) {
+	rawJSON := `[
+  {"start": "00:01:10", "end": "00:01:45", "title": "funny_joke"},
+  {"start": "00:05:00", "end": "00:05:30", "title": "key_tip"}
+]`
+
+	highlights, err := ParseAIHighlightsJSON(rawJSON)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(highlights) != 2 {
+		t.Fatalf("expected 2 highlights, got %d", len(highlights))
+	}
+
+	if highlights[0].Start != "00:01:10" || highlights[0].Title != "funny_joke" {
+		t.Errorf("highlight 0 mismatch: %+v", highlights[0])
+	}
+}
+
+func TestParseAIHighlightsJSON_MarkdownWrapped(t *testing.T) {
+	markdownJSON := "```json\n" + `[
+  {"start": "00:02:00", "end": "00:02:25", "title": "intro_highlight"}
+]` + "\n```"
+
+	highlights, err := ParseAIHighlightsJSON(markdownJSON)
+	if err != nil {
+		t.Fatalf("unexpected error parsing markdown wrapped JSON: %v", err)
+	}
+
+	if len(highlights) != 1 || highlights[0].Title != "intro_highlight" {
+		t.Errorf("highlight mismatch: %+v", highlights)
+	}
+}
