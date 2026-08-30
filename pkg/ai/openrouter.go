@@ -21,8 +21,9 @@ type AIHighlight struct {
 }
 
 type OpenRouterRequest struct {
-	Model    string    `json:"model"`
-	Messages []Message `json:"messages"`
+	Model            string    `json:"model"`
+	Messages         []Message `json:"messages"`
+	IncludeReasoning bool      `json:"include_reasoning"`
 }
 
 type Message struct {
