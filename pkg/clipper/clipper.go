@@ -34,6 +34,8 @@ func (c *Clipper) Process(cfg *Config) error {
 		return fmt.Errorf("configuration error: %w", err)
 	}
 
+	originalInput := cfg.InputFile
+
 	// Check if InputFile is a YouTube URL
 	if downloader.IsYouTubeURL(cfg.InputFile) {
 		fmt.Printf("Detected YouTube URL input: %s\n", cfg.InputFile)
@@ -55,14 +57,19 @@ func (c *Clipper) Process(cfg *Config) error {
 	// Auto Detection if segments are empty
 	if len(cfg.Segments) == 0 && cfg.AutoDetect != "" {
 		fmt.Printf("Auto-detecting segments using '%s' detection mode...\n", cfg.AutoDetect)
-		if cfg.AutoDetect == "ai" || cfg.AutoDetect == "transcript" {
+		switch cfg.AutoDetect {
+		case "ai", "transcript":
 			fmt.Printf("Fetching subtitles for AI analysis...\n")
-			subEntries, err := transcriber.FetchSubtitles(cfg.InputFile, cfg.CacheDir)
+			lang := cfg.TranslateLang
+			if lang == "" {
+				lang = "id"
+			}
+			subEntries, err := transcriber.FetchSubtitles(originalInput, cfg.CacheDir, lang)
 			if err != nil {
 				return fmt.Errorf("failed to fetch subtitles: %w", err)
 			}
-			fmt.Printf("Analyzing %d subtitle entries via OpenRouter AI (%s)...\n", len(subEntries), cfg.AIModel)
-			highlights, err := ai.AnalyzeHighlights(subEntries, cfg.OpenRouterKey, cfg.AIModel)
+			fmt.Printf("Analyzing %d subtitle entries via OpenRouter AI (%s, target lang: %s)...\n", len(subEntries), cfg.AIModel, lang)
+			highlights, err := ai.AnalyzeHighlights(subEntries, cfg.OpenRouterKey, cfg.AIModel, lang)
 			if err != nil {
 				return fmt.Errorf("OpenRouter AI highlight analysis failed: %w", err)
 			}
@@ -73,7 +80,7 @@ func (c *Clipper) Process(cfg *Config) error {
 					Title: h.Title,
 				})
 			}
-		} else if cfg.AutoDetect == "silence" {
+		case "silence":
 			detected, err := detector.DetectSilence(c.runner.FFmpegPath, cfg.InputFile, -30, 0.5)
 			if err != nil {
 				return fmt.Errorf("silence auto detection failed: %w", err)
@@ -85,7 +92,7 @@ func (c *Clipper) Process(cfg *Config) error {
 					Title: d.Title,
 				})
 			}
-		} else if cfg.AutoDetect == "scene" {
+		case "scene":
 			detected, err := detector.DetectScenes(c.runner.FFmpegPath, cfg.InputFile, 0.3)
 			if err != nil {
 				return fmt.Errorf("scene auto detection failed: %w", err)
@@ -97,7 +104,7 @@ func (c *Clipper) Process(cfg *Config) error {
 					Title: d.Title,
 				})
 			}
-		} else {
+		default:
 			return fmt.Errorf("unrecognized auto_detect mode '%s', expected 'silence', 'scene', or 'ai'", cfg.AutoDetect)
 		}
 		fmt.Printf("Auto-detected %d segments!\n", len(cfg.Segments))

@@ -38,3 +38,19 @@ func TestParseAIHighlightsJSON_MarkdownWrapped(t *testing.T) {
 		t.Errorf("highlight mismatch: %+v", highlights)
 	}
 }
+
+func TestParseAIHighlightsJSON_Truncated(t *testing.T) {
+	truncatedJSON := `[
+  {"start": "00:01:00", "end": "00:01:30", "title": "item1"},
+  {"start": "00:02:00", "end": "00:02:30", "title": "item2"},
+  {"start": "00:03:00", "end": "00:03:30", "title": "item3"`
+
+	highlights, err := ParseAIHighlightsJSON(truncatedJSON)
+	if err != nil {
+		t.Fatalf("unexpected error parsing truncated JSON: %v", err)
+	}
+
+	if len(highlights) != 2 {
+		t.Fatalf("expected 2 repaired highlights, got %d", len(highlights))
+	}
+}
