@@ -1,0 +1,76 @@
+package clipper
+
+import "fmt"
+
+// Mode specifies how the cut segments should be saved.
+type Mode string
+
+const (
+	ModeSplit Mode = "split"
+	ModeMerge Mode = "merge"
+)
+
+// CutStrategy specifies whether FFmpeg uses stream copy or re-encoding.
+type CutStrategy string
+
+const (
+	StrategyFast     CutStrategy = "fast"     // -c copy (fast, may align to nearest keyframe)
+	StrategyAccurate CutStrategy = "accurate" // re-encode with libx264/aac (frame-accurate)
+)
+
+// Segment represents a video cut specification.
+type Segment struct {
+	Start string `json:"start"` // e.g. "00:00:10", "10", "01:15.5"
+	End   string `json:"end"`   // e.g. "00:00:25", "25", "01:30.0"
+	Title string `json:"title,omitempty"`
+}
+
+// Config holds options for the video cutting job.
+type Config struct {
+	InputFile   string      `json:"input"`
+	OutputDir   string      `json:"output_dir"`
+	OutputFile  string      `json:"output"`      // Used for merge mode or prefix
+	Mode        Mode        `json:"mode"`        // "split" or "merge"
+	Strategy    CutStrategy `json:"strategy"`    // "fast" or "accurate"
+	Shorts      bool        `json:"shorts"`      // Convert to 9:16 Shorts format
+	ShortsStyle string      `json:"shorts_style"`// "crop" (center 9:16) or "blur" (blurred background 9:16)
+	Quality     string      `json:"quality"`     // YouTube download quality e.g. "best", "1080p", "720p", "480p", "360p", "worst"
+	CacheDir    string      `json:"cache_dir"`   // Directory to cache downloaded YouTube videos (default: "./cache")
+	NoCache     bool        `json:"no_cache"`    // Disable YouTube download cache and force re-download
+	Segments    []Segment   `json:"segments"`
+}
+
+// Validate checks the configuration for missing or invalid parameters.
+func (c *Config) Validate() error {
+	if c.InputFile == "" {
+		return fmt.Errorf("input video file path is required")
+	}
+	if len(c.Segments) == 0 {
+		return fmt.Errorf("at least one segment must be provided")
+	}
+	if c.Mode == "" {
+		c.Mode = ModeSplit
+	}
+	if c.Mode != ModeSplit && c.Mode != ModeMerge {
+		return fmt.Errorf("invalid mode '%s', must be 'split' or 'merge'", c.Mode)
+	}
+	if c.Strategy == "" {
+		c.Strategy = StrategyFast
+	}
+	if c.Strategy != StrategyFast && c.Strategy != StrategyAccurate {
+		return fmt.Errorf("invalid strategy '%s', must be 'fast' or 'accurate'", c.Strategy)
+	}
+	if c.ShortsStyle == "" {
+		c.ShortsStyle = "crop"
+	}
+	if c.ShortsStyle != "crop" && c.ShortsStyle != "blur" {
+		return fmt.Errorf("invalid shorts_style '%s', must be 'crop' or 'blur'", c.ShortsStyle)
+	}
+	if c.Quality == "" {
+		c.Quality = "best"
+	}
+	if c.CacheDir == "" {
+		c.CacheDir = "./cache"
+	}
+	return nil
+}

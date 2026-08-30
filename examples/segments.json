@@ -1,0 +1,19 @@
+{
+  "input": "test_video.mp4",
+  "output_dir": "./output_clips",
+  "output": "merged_highlight.mp4",
+  "mode": "merge",
+  "strategy": "accurate",
+  "segments": [
+    {
+      "start": "00:00:01",
+      "end": "00:00:03",
+      "title": "intro"
+    },
+    {
+      "start": "00:00:05",
+      "end": "00:00:08",
+      "title": "highlight"
+    }
+  ]
+}
