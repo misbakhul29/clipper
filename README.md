@@ -1,6 +1,7 @@
 # Automated Video Clipping System (Golang + FFmpeg)
 
 Sistem pemotong video otomatis berbasis **Go (Golang)** yang terintegrasi dengan **FFmpeg** & **OpenRouter AI**. Sistem ini mendukung:
+- 💬 **Burnt-In Subtitles & Auto Translation (`-burn-subtitles` / `-subtitles`)** (Menempelkan subtitle terjemahan secara otomatis dan permanen pada video klip/Shorts).
 - 🤖 **AI Transcript Highlights (`openrouter/free`)** (Deteksi otomatis klip paling menarik/viral dari transkrip subtitle menggunakan LLM via OpenRouter API).
 - 🎙️ **Smart Silence & Scene Auto-Detection** (Deteksi otomatis bagian percakapan/suara atau perpindahan adegan tanpa timestamp manual).
 - ⚡ **Parallel Concurrency Engine** (Render banyak klip sekaligus secara paralel via Goroutines).
@@ -11,21 +12,27 @@ Sistem pemotong video otomatis berbasis **Go (Golang)** yang terintegrasi dengan
 
 ---
 
+## 💬 Burnt-In Subtitles (`-burn-subtitles`)
+
+Tambahkan subtitle terjemahan yang menempel secara permanen (*hardcoded captions*) pada video Shorts / klip:
+
+```bash
+# Render Shorts (9:16 Blur) + Auto-Detect AI + Subtitle Terjemahan Bahasa Indonesia Nempel di Video!
+go run ./cmd/clipper -input "https://www.youtube.com/watch?v=xxx" -auto-detect ai -shorts -shorts-style blur -burn-subtitles -translate-lang id -outdir ./yt_subtitled_shorts
+```
+
+---
+
 ## 🤖 AI Transcript Highlights (`-auto-detect ai`)
 
 Fitur kecerdasan buatan untuk menganalisis transkrip subtitle video (YouTube / VTT / SRT) dan memilih segmen-segmen terbaik yang berpotensi viral menggunakan **OpenRouter API** (`openrouter/free` router):
 
 ```bash
-# 1. Set API Key OpenRouter di Environment Variable (opsional bisa via flag -openrouter-key)
+# Set API Key OpenRouter di Environment Variable (opsional bisa via flag -openrouter-key)
 export OPENROUTER_API_KEY="sk-or-v1-..."
 
-# 2. Jalankan Auto-Detect AI untuk memotong klip YouTube & otomatis dikonversi ke Shorts (9:16)
-go run ./cmd/clipper -input "https://www.youtube.com/watch?v=xxx" -auto-detect ai -shorts -outdir ./yt_ai_shorts
-```
-
-Kamu juga bisa menggunakan model spesifik lainnya via flag `-ai-model`:
-```bash
-go run ./cmd/clipper -input video.mp4 -auto-detect ai -ai-model "google/gemini-2.0-flash-exp:free" -shorts
+# Jalankan Auto-Detect AI
+go run ./cmd/clipper -input "https://www.youtube.com/watch?v=xxx" -auto-detect ai -shorts -burn-subtitles
 ```
 
 ---
@@ -37,32 +44,10 @@ go run ./cmd/clipper -input video.mp4 -auto-detect ai -ai-model "google/gemini-2
 go run ./cmd/clipper -i
 
 # Generate JSON Config via Flags
-go run ./cmd/clipper -init-config my_clips.json -input "https://youtu.be/xxx" -shorts -auto-detect ai
+go run ./cmd/clipper -init-config my_clips.json -input "https://youtu.be/xxx" -shorts -auto-detect ai -burn-subtitles
 ```
 
 Jalankan config yang dibuat:
 ```bash
 go run ./cmd/clipper -config my_clips.json
-```
-
----
-
-## 🚀 Fitur Lainnya
-
-### 1. Smart Silence & Scene Detection (`-auto-detect silence` / `scene`)
-```bash
-# Otomatis deteksi percakapan & potong klipnya
-go run ./cmd/clipper -input video.mp4 -auto-detect silence -outdir ./speech_clips
-```
-
-### 2. Parallel Concurrency Engine (`-concurrency`)
-```bash
-# Menggunakan 4 worker thread paralel
-go run ./cmd/clipper -input video.mp4 -segments "00:10-00:25,01:00-01:30" -concurrency 4
-```
-
-### 3. Watermark & Text Overlay (`-watermark` & `-text`)
-```bash
-# Tambahkan Teks Caption & Logo Watermark
-go run ./cmd/clipper -input video.mp4 -segments "00:10-00:30" -text "Eps.69 Highlight" -text-pos bottom-center -watermark logo.png -watermark-pos top-right
 ```

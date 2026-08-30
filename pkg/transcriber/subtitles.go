@@ -195,3 +195,93 @@ func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
 }
+
+// SliceSubtitles extracts subtitle entries that overlap with the segment time interval [startSec, endSec]
+// and shifts timestamps to be relative to 00:00:00.00.
+func SliceSubtitles(entries []SubtitleEntry, startSec, endSec float64) []SubtitleEntry {
+	var sliced []SubtitleEntry
+
+	for _, entry := range entries {
+		eStart := parseTimestampToSec(entry.Start)
+		eEnd := parseTimestampToSec(entry.End)
+
+		// Check overlap with interval [startSec, endSec]
+		if eEnd > startSec && eStart < endSec {
+			relStart := eStart - startSec
+			if relStart < 0 {
+				relStart = 0
+			}
+			relEnd := eEnd - startSec
+			if relEnd > (endSec - startSec) {
+				relEnd = endSec - startSec
+			}
+
+			sliced = append(sliced, SubtitleEntry{
+				Start: formatASSTime(relStart),
+				End:   formatASSTime(relEnd),
+				Text:  entry.Text,
+			})
+		}
+	}
+
+	return sliced
+}
+
+// ExportASS exports subtitle entries into an Advanced SubStation Alpha (.ass) format file for FFmpeg burn-in.
+func ExportASS(entries []SubtitleEntry, outputPath string) error {
+	var sb strings.Builder
+	sb.WriteString("[Script Info]\n")
+	sb.WriteString("ScriptType: v4.00+\n")
+	sb.WriteString("PlayResX: 1080\n")
+	sb.WriteString("PlayResY: 1920\n")
+	sb.WriteString("ScaledBorderAndShadow: yes\n\n")
+
+	sb.WriteString("[V4+ Styles]\n")
+	sb.WriteString("Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n")
+	sb.WriteString("Style: Default,Arial,24,&H00FFFFFF,&H00000000,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,1,2,30,30,160,1\n\n")
+
+	sb.WriteString("[Events]\n")
+	sb.WriteString("Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")
+
+	for _, entry := range entries {
+		cleanText := strings.ReplaceAll(entry.Text, "\n", "\\N")
+		sb.WriteString(fmt.Sprintf("Dialogue: 0,%s,%s,Default,,0,0,0,,%s\n", entry.Start, entry.End, cleanText))
+	}
+
+	dir := filepath.Dir(outputPath)
+	if dir != "." && dir != "" {
+		_ = os.MkdirAll(dir, 0755)
+	}
+
+	return os.WriteFile(outputPath, []byte(sb.String()), 0644)
+}
+
+func parseTimestampToSec(ts string) float64 {
+	ts = strings.ReplaceAll(ts, ",", ".")
+	parts := strings.Split(ts, ":")
+	if len(parts) == 3 {
+		var h, m, s float64
+		fmt.Sscanf(parts[0], "%f", &h)
+		fmt.Sscanf(parts[1], "%f", &m)
+		fmt.Sscanf(parts[2], "%f", &s)
+		return h*3600 + m*60 + s
+	} else if len(parts) == 2 {
+		var m, s float64
+		fmt.Sscanf(parts[0], "%f", &m)
+		fmt.Sscanf(parts[1], "%f", &s)
+		return m*60 + s
+	}
+	var s float64
+	fmt.Sscanf(ts, "%f", &s)
+	return s
+}
+
+func formatASSTime(sec float64) string {
+	if sec < 0 {
+		sec = 0
+	}
+	hours := int(sec) / 3600
+	mins := (int(sec) % 3600) / 60
+	secs := sec - float64(hours*3600+mins*60)
+	return fmt.Sprintf("%d:%02d:%05.2f", hours, mins, secs)
+}

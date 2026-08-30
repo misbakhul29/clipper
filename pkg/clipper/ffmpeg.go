@@ -27,14 +27,15 @@ func NewFFmpegRunner(customPath string) (*FFmpegRunner, error) {
 	return &FFmpegRunner{FFmpegPath: path}, nil
 }
 
-// CutSegment trims a single segment from inputPath to outputPath based on config settings.
-func (f *FFmpegRunner) CutSegment(cfg *Config, startSec, durationSec float64, outputPath string) error {
+// CutSegment trims a single segment from inputPath to outputPath based on config settings and optional subtitle ASS path.
+func (f *FFmpegRunner) CutSegment(cfg *Config, startSec, durationSec float64, outputPath string, subPath string) error {
 	startStr := FormatSeconds(startSec)
 	durStr := FormatSeconds(durationSec)
 
 	hasWatermark := cfg.WatermarkPath != ""
 	hasOverlayText := cfg.OverlayText != ""
-	needsReencode := cfg.Shorts || hasWatermark || hasOverlayText || cfg.Strategy == StrategyAccurate
+	hasSubtitles := subPath != ""
+	needsReencode := cfg.Shorts || hasWatermark || hasOverlayText || hasSubtitles || cfg.Strategy == StrategyAccurate
 
 	if !needsReencode {
 		// Fast copy mode without re-encoding
@@ -63,7 +64,7 @@ func (f *FFmpegRunner) CutSegment(cfg *Config, startSec, durationSec float64, ou
 
 	args = append(args, "-t", durStr)
 
-	filterGraph := buildFilterGraph(cfg, hasWatermark, hasOverlayText)
+	filterGraph := buildFilterGraph(cfg, hasWatermark, hasOverlayText, subPath)
 	if filterGraph != "" {
 		if hasWatermark || cfg.ShortsStyle == "blur" {
 			args = append(args, "-filter_complex", filterGraph)
@@ -82,13 +83,18 @@ func (f *FFmpegRunner) CutSegment(cfg *Config, startSec, durationSec float64, ou
 	return f.runFFmpeg(args)
 }
 
-func buildFilterGraph(cfg *Config, hasWatermark, hasOverlayText bool) string {
+func buildFilterGraph(cfg *Config, hasWatermark, hasOverlayText bool, subPath string) string {
 	var filters []string
 
 	// 1. Shorts Aspect Ratio Filter
 	if cfg.Shorts {
 		if cfg.ShortsStyle == "blur" {
 			bgFilter := "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=20:5[bg];[0:v]scale=1080:1920:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2"
+			if subPath != "" {
+				escapedSub := strings.ReplaceAll(subPath, "\\", "/")
+				escapedSub = strings.ReplaceAll(escapedSub, ":", "\\:")
+				bgFilter = fmt.Sprintf("%s[vsub];[vsub]subtitles='%s'", bgFilter, escapedSub)
+			}
 			if hasWatermark {
 				watermarkOverlay := getWatermarkPosition(cfg.WatermarkPos)
 				return fmt.Sprintf("%s[base];[1:v]scale=150:-1[wm];[base][wm]%s", bgFilter, watermarkOverlay)
@@ -96,6 +102,13 @@ func buildFilterGraph(cfg *Config, hasWatermark, hasOverlayText bool) string {
 			return bgFilter
 		}
 		filters = append(filters, "crop=ih*(9/16):ih,scale=1080:1920")
+	}
+
+	// 2. Burnt-In Subtitles (subtitles filter)
+	if subPath != "" {
+		escapedSub := strings.ReplaceAll(subPath, "\\", "/")
+		escapedSub = strings.ReplaceAll(escapedSub, ":", "\\:")
+		filters = append(filters, fmt.Sprintf("subtitles='%s'", escapedSub))
 	}
 
 	// 2. Overlay Text (drawtext)
