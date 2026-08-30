@@ -50,6 +50,7 @@ type Config struct {
 	AutoDetect    string      `json:"auto_detect"`  // Auto detection mode: "silence", "scene", or "ai"
 	TranslateLang string      `json:"translate_lang"`// Target language for subtitle translation (e.g. "id", "en")
 	BurnSubtitles bool        `json:"burn_subtitles"`// Hardcode/burn-in subtitles directly onto video clips
+	SubFontSize   int         `json:"sub_font_size"` // Subtitle font size for burnt-in captions (default: 48)
 	OpenRouterKey string      `json:"openrouter_key"`// OpenRouter API Key for AI highlight detection
 	AIModel       string      `json:"ai_model"`     // OpenRouter AI model (default: "openrouter/free")
 	Segments      []Segment   `json:"segments"`
@@ -101,6 +102,9 @@ func (c *Config) Validate() error {
 	}
 	if c.FontSize <= 0 {
 		c.FontSize = 32
+	}
+	if c.SubFontSize <= 0 {
+		c.SubFontSize = 48
 	}
 	if c.FontColor == "" {
 		c.FontColor = "white"
