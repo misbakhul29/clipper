@@ -1,35 +1,43 @@
 # Automated Video Clipping System (Golang + FFmpeg)
 
-Sistem pemotong video otomatis berbasis **Go (Golang)** yang terintegrasi dengan **FFmpeg**. Sistem ini mendukung:
-- ⚡ **Parallel Concurrency Engine** (Render banyak klip sekaligus secara paralel via Goroutines).
+Sistem pemotong video otomatis berbasis **Go (Golang)** yang terintegrasi dengan **FFmpeg** & **OpenRouter AI**. Sistem ini mendukung:
+- 🤖 **AI Transcript Highlights (`openrouter/free`)** (Deteksi otomatis klip paling menarik/viral dari transkrip subtitle menggunakan LLM via OpenRouter API).
 - 🎙️ **Smart Silence & Scene Auto-Detection** (Deteksi otomatis bagian percakapan/suara atau perpindahan adegan tanpa timestamp manual).
+- ⚡ **Parallel Concurrency Engine** (Render banyak klip sekaligus secara paralel via Goroutines).
 - 🎨 **Watermark Image & Text Overlay** (Penambahan logo watermark PNG & caption teks otomatis).
 - 📱 **YouTube Shorts / TikTok / Reels (9:16)** (Format vertikal dengan style *center crop* atau *blurred background*).
 - 💾 **Smart Caching System** (`./cache` auto-reuse video YouTube).
 - 📽️ **YouTube Video Quality Selector** (Pilihan 1080p, 720p, 480p, 360p, best, worst).
-- ⚙️ **Unified Config Generator** (Generate file konfigurasi JSON via interaktif `-i` atau flag `-init-config`).
 
 ---
 
-## 📂 Struktur Project (`cmd/` & `pkg/`)
+## 🤖 AI Transcript Highlights (`-auto-detect ai`)
 
-- [cmd/clipper/main.go](file:///home/misbakhulmunir/Dokumen/projects/clipping/cmd/clipper/main.go): Single executable CLI untuk memotong, mengunduh/menggabungkan video, serta meng-generate konfigurasi JSON.
-- [pkg/clipper](file:///home/misbakhulmunir/Dokumen/projects/clipping/pkg/clipper/clipper.go): Core library pemotong video & FFmpeg wrapper.
-- [pkg/detector](file:///home/misbakhulmunir/Dokumen/projects/clipping/pkg/detector/detector.go): Smart Silence & Scene Detection module.
-- [pkg/downloader](file:///home/misbakhulmunir/Dokumen/projects/clipping/pkg/downloader/youtube.go): Module pengunduh otomatis YouTube video.
+Fitur kecerdasan buatan untuk menganalisis transkrip subtitle video (YouTube / VTT / SRT) dan memilih segmen-segmen terbaik yang berpotensi viral menggunakan **OpenRouter API** (`openrouter/free` router):
+
+```bash
+# 1. Set API Key OpenRouter di Environment Variable (opsional bisa via flag -openrouter-key)
+export OPENROUTER_API_KEY="sk-or-v1-..."
+
+# 2. Jalankan Auto-Detect AI untuk memotong klip YouTube & otomatis dikonversi ke Shorts (9:16)
+go run ./cmd/clipper -input "https://www.youtube.com/watch?v=xxx" -auto-detect ai -shorts -outdir ./yt_ai_shorts
+```
+
+Kamu juga bisa menggunakan model spesifik lainnya via flag `-ai-model`:
+```bash
+go run ./cmd/clipper -input video.mp4 -auto-detect ai -ai-model "google/gemini-2.0-flash-exp:free" -shorts
+```
 
 ---
 
 ## ⚙️ Generate Konfigurasi JSON (`-init-config` / `-i`)
 
-Kamu bisa membuat file konfigurasi JSON secara otomatis langsung via perintah `clipper`:
-
 ```bash
-# 1. Mode Interaktif Wizard (-i)
+# Mode Interaktif Wizard
 go run ./cmd/clipper -i
 
-# 2. Generate JSON Config via Flags (-init-config)
-go run ./cmd/clipper -init-config my_clips.json -input "https://youtu.be/xxx" -shorts -quality 1080p -segments "00:10-00:25:intro"
+# Generate JSON Config via Flags
+go run ./cmd/clipper -init-config my_clips.json -input "https://youtu.be/xxx" -shorts -auto-detect ai
 ```
 
 Jalankan config yang dibuat:
@@ -39,15 +47,12 @@ go run ./cmd/clipper -config my_clips.json
 
 ---
 
-## 🚀 Fitur & Perintah Lainnya
+## 🚀 Fitur Lainnya
 
-### 1. Smart Silence & Scene Detection (`-auto-detect`)
+### 1. Smart Silence & Scene Detection (`-auto-detect silence` / `scene`)
 ```bash
 # Otomatis deteksi percakapan & potong klipnya
 go run ./cmd/clipper -input video.mp4 -auto-detect silence -outdir ./speech_clips
-
-# Otomatis deteksi percakapan lalu ubah langsung jadi Shorts 9:16
-go run ./cmd/clipper -input "https://youtu.be/xxx" -auto-detect silence -shorts -outdir ./shorts_auto
 ```
 
 ### 2. Parallel Concurrency Engine (`-concurrency`)

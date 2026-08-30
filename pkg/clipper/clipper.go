@@ -8,8 +8,10 @@ import (
 	"strings"
 	"sync"
 
+	"clipping/pkg/ai"
 	"clipping/pkg/detector"
 	"clipping/pkg/downloader"
+	"clipping/pkg/transcriber"
 )
 
 // Clipper orchestrates the video processing tasks.
@@ -53,24 +55,52 @@ func (c *Clipper) Process(cfg *Config) error {
 	// Auto Detection if segments are empty
 	if len(cfg.Segments) == 0 && cfg.AutoDetect != "" {
 		fmt.Printf("Auto-detecting segments using '%s' detection mode...\n", cfg.AutoDetect)
-		var detected []detector.DetectedSegment
-		var err error
-		if cfg.AutoDetect == "silence" {
-			detected, err = detector.DetectSilence(c.runner.FFmpegPath, cfg.InputFile, -30, 0.5)
+		if cfg.AutoDetect == "ai" || cfg.AutoDetect == "transcript" {
+			fmt.Printf("Fetching subtitles for AI analysis...\n")
+			subEntries, err := transcriber.FetchSubtitles(cfg.InputFile, cfg.CacheDir)
+			if err != nil {
+				return fmt.Errorf("failed to fetch subtitles: %w", err)
+			}
+			fmt.Printf("Analyzing %d subtitle entries via OpenRouter AI (%s)...\n", len(subEntries), cfg.AIModel)
+			highlights, err := ai.AnalyzeHighlights(subEntries, cfg.OpenRouterKey, cfg.AIModel)
+			if err != nil {
+				return fmt.Errorf("OpenRouter AI highlight analysis failed: %w", err)
+			}
+			for _, h := range highlights {
+				cfg.Segments = append(cfg.Segments, Segment{
+					Start: h.Start,
+					End:   h.End,
+					Title: h.Title,
+				})
+			}
+		} else if cfg.AutoDetect == "silence" {
+			detected, err := detector.DetectSilence(c.runner.FFmpegPath, cfg.InputFile, -30, 0.5)
+			if err != nil {
+				return fmt.Errorf("silence auto detection failed: %w", err)
+			}
+			for _, d := range detected {
+				cfg.Segments = append(cfg.Segments, Segment{
+					Start: d.Start,
+					End:   d.End,
+					Title: d.Title,
+				})
+			}
 		} else if cfg.AutoDetect == "scene" {
-			detected, err = detector.DetectScenes(c.runner.FFmpegPath, cfg.InputFile, 0.3)
+			detected, err := detector.DetectScenes(c.runner.FFmpegPath, cfg.InputFile, 0.3)
+			if err != nil {
+				return fmt.Errorf("scene auto detection failed: %w", err)
+			}
+			for _, d := range detected {
+				cfg.Segments = append(cfg.Segments, Segment{
+					Start: d.Start,
+					End:   d.End,
+					Title: d.Title,
+				})
+			}
+		} else {
+			return fmt.Errorf("unrecognized auto_detect mode '%s', expected 'silence', 'scene', or 'ai'", cfg.AutoDetect)
 		}
-		if err != nil {
-			return fmt.Errorf("auto detection failed: %w", err)
-		}
-		for _, d := range detected {
-			cfg.Segments = append(cfg.Segments, Segment{
-				Start: d.Start,
-				End:   d.End,
-				Title: d.Title,
-			})
-		}
-		fmt.Printf("Auto-detected %d active segments!\n", len(cfg.Segments))
+		fmt.Printf("Auto-detected %d segments!\n", len(cfg.Segments))
 	}
 
 	outputDir := cfg.OutputDir
