@@ -37,6 +37,7 @@ func main() {
 		autoDetect    string
 		translateLang string
 		burnSubtitles bool
+		subFontSize   int
 		openRouterKey string
 		aiModel       string
 		segments      string
@@ -68,6 +69,7 @@ func main() {
 	flag.StringVar(&translateLang, "translate-lang", "id", "Target language for AI titles and subtitle translation ('id', 'en', etc.)")
 	flag.BoolVar(&burnSubtitles, "burn-subtitles", false, "Hardcode/burn-in subtitles directly onto video clips")
 	flag.BoolVar(&burnSubtitles, "subtitles", false, "Hardcode/burn-in subtitles directly onto video clips")
+	flag.IntVar(&subFontSize, "sub-font-size", 48, "Subtitle font size for burnt-in captions")
 	flag.StringVar(&openRouterKey, "openrouter-key", "", "OpenRouter API Key for AI highlight detection (defaults to $OPENROUTER_API_KEY)")
 	flag.StringVar(&aiModel, "ai-model", "openrouter/free", "OpenRouter AI model name")
 	flag.StringVar(&segments, "segments", "", "Comma-separated segment timestamps (e.g. '00:10-00:25,01:00-01:30')")
@@ -210,6 +212,9 @@ func main() {
 	}
 	if burnSubtitles {
 		cfg.BurnSubtitles = true
+	}
+	if subFontSize > 0 {
+		cfg.SubFontSize = subFontSize
 	}
 	if openRouterKey != "" {
 		cfg.OpenRouterKey = openRouterKey

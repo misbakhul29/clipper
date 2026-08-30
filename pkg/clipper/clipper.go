@@ -231,7 +231,7 @@ func (c *Clipper) Process(cfg *Config) error {
 					sliced := transcriber.SliceSubtitles(allSubEntries, j.startSec, j.startSec+j.durationSec)
 					if len(sliced) > 0 {
 						tmpSubFile := filepath.Join(outputDir, fmt.Sprintf(".sub_%03d.ass", j.index+1))
-						if err := transcriber.ExportASS(sliced, tmpSubFile); err == nil {
+						if err := transcriber.ExportASS(sliced, tmpSubFile, cfg.SubFontSize, cfg.Shorts); err == nil {
 							subPath = tmpSubFile
 							defer os.Remove(tmpSubFile)
 						}

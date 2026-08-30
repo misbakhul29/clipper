@@ -228,7 +228,16 @@ func SliceSubtitles(entries []SubtitleEntry, startSec, endSec float64) []Subtitl
 }
 
 // ExportASS exports subtitle entries into an Advanced SubStation Alpha (.ass) format file for FFmpeg burn-in.
-func ExportASS(entries []SubtitleEntry, outputPath string) error {
+func ExportASS(entries []SubtitleEntry, outputPath string, fontSize int, isShorts bool) error {
+	if fontSize <= 0 {
+		fontSize = 48
+	}
+
+	marginV := 160
+	if isShorts {
+		marginV = 420 // Position subtitle higher up on 9:16 Shorts frame
+	}
+
 	var sb strings.Builder
 	sb.WriteString("[Script Info]\n")
 	sb.WriteString("ScriptType: v4.00+\n")
@@ -238,7 +247,7 @@ func ExportASS(entries []SubtitleEntry, outputPath string) error {
 
 	sb.WriteString("[V4+ Styles]\n")
 	sb.WriteString("Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n")
-	sb.WriteString("Style: Default,Arial,24,&H00FFFFFF,&H00000000,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,1,2,30,30,160,1\n\n")
+	sb.WriteString(fmt.Sprintf("Style: Default,Arial,%d,&H00FFFFFF,&H00000000,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,4,1,2,40,40,%d,1\n\n", fontSize, marginV))
 
 	sb.WriteString("[Events]\n")
 	sb.WriteString("Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")
