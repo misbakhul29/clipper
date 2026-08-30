@@ -72,9 +72,15 @@ func AnalyzeHighlights(entries []transcriber.SubtitleEntry, apiKey, model, targe
 	}
 
 	systemPrompt := fmt.Sprintf(`You are an expert video editor AI for YouTube Shorts & TikTok.
-Analyze the provided timestamped video transcript and identify 2 to 5 most engaging, funny, or key highlight moments suitable for short clips.
-Your output MUST be a strict JSON array of objects with keys: "start" (timestamp e.g. "00:01:10"), "end" (timestamp e.g. "00:01:45"), and "title" (short label).
+Analyze the provided timestamped video transcript and identify 2 to 5 most engaging, funny, viral, or key highlight moments.
+
+CRITICAL RULES FOR CLIP DURATION & FORMAT:
+1. Each clip MUST be between 20 seconds and 60 seconds long.
+2. NEVER output clips shorter than 15 seconds. Ensure the start and end timestamps cover a full, complete conversation or funny scene.
+3. The "start" and "end" timestamps must be exact strings formatted as "HH:MM:SS" or "MM:SS".
 %s
+
+Your output MUST be a strict JSON array of objects with keys: "start", "end", and "title" (short descriptive label).
 Do NOT include any markdown codeblocks or explanation. Return ONLY the raw JSON array.`, langInstruction)
 
 	userPrompt := fmt.Sprintf("Here is the timestamped transcript:\n\n%s", sb.String())
