@@ -46,7 +46,7 @@ type AIError struct {
 }
 
 // AnalyzeHighlights sends timestamped transcript entries to OpenRouter API to select top engaging highlight clips.
-func AnalyzeHighlights(entries []transcriber.SubtitleEntry, apiKey, model string) ([]AIHighlight, error) {
+func AnalyzeHighlights(entries []transcriber.SubtitleEntry, apiKey, model, targetLang string) ([]AIHighlight, error) {
 	if apiKey == "" {
 		apiKey = os.Getenv("OPENROUTER_API_KEY")
 	}
@@ -64,10 +64,24 @@ func AnalyzeHighlights(entries []transcriber.SubtitleEntry, apiKey, model string
 		sb.WriteString(fmt.Sprintf("[%s -> %s] %s\n", entry.Start, entry.End, entry.Text))
 	}
 
-	systemPrompt := `You are an expert video editor AI for YouTube Shorts & TikTok.
-Analyze the provided timestamped video transcript and identify 2 to 5 most engaging, funny, or key highlight moments suitable for short clips.
-Your output MUST be a strict JSON array of objects with keys: "start" (timestamp e.g. "00:01:10"), "end" (timestamp e.g. "00:01:45"), and "title" (short label).
-Do NOT include any markdown codeblocks or explanation. Return ONLY the raw JSON array.`
+	langInstruction := ""
+	if targetLang == "id" || strings.HasPrefix(strings.ToLower(targetLang), "ind") {
+		langInstruction = "The 'title' field MUST be written in Bahasa Indonesia (Indonesian)."
+	} else if targetLang != "" {
+		langInstruction = fmt.Sprintf("The 'title' field MUST be written in %s language.", targetLang)
+	}
+
+	systemPrompt := fmt.Sprintf(`You are an expert video editor AI for YouTube Shorts & TikTok.
+Analyze the provided timestamped video transcript and identify 2 to 5 most engaging, funny, viral, or key highlight moments.
+
+CRITICAL RULES FOR CLIP DURATION & FORMAT:
+1. Each clip MUST be between 20 seconds and 60 seconds long.
+2. NEVER output clips shorter than 15 seconds. Ensure the start and end timestamps cover a full, complete conversation or funny scene.
+3. The "start" and "end" timestamps must be exact strings formatted as "HH:MM:SS" or "MM:SS".
+%s
+
+Your output MUST be a strict JSON array of objects with keys: "start", "end", and "title" (short descriptive label).
+Do NOT include any markdown codeblocks or explanation. Return ONLY the raw JSON array.`, langInstruction)
 
 	userPrompt := fmt.Sprintf("Here is the timestamped transcript:\n\n%s", sb.String())
 
@@ -92,7 +106,7 @@ Do NOT include any markdown codeblocks or explanation. Return ONLY the raw JSON 
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 60 * time.Second}
+	client := &http.Client{Timeout: 180 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("OpenRouter API request failed: %w", err)
@@ -140,6 +154,8 @@ func ParseAIHighlightsJSON(content string) ([]AIHighlight, error) {
 		content = strings.TrimSpace(content)
 	}
 
+	content = repairTruncatedJSON(content)
+
 	var highlights []AIHighlight
 	if err := json.Unmarshal([]byte(content), &highlights); err != nil {
 		return nil, fmt.Errorf("failed to parse AI JSON response: %w. Content: %s", err, content)
@@ -150,4 +166,15 @@ func ParseAIHighlightsJSON(content string) ([]AIHighlight, error) {
 	}
 
 	return highlights, nil
+}
+
+func repairTruncatedJSON(content string) string {
+	content = strings.TrimSpace(content)
+	if strings.HasPrefix(content, "[") && !strings.HasSuffix(content, "]") {
+		lastClose := strings.LastIndex(content, "}")
+		if lastClose != -1 {
+			return content[:lastClose+1] + "]"
+		}
+	}
+	return content
 }

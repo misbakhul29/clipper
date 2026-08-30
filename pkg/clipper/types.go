@@ -48,6 +48,7 @@ type Config struct {
 	FontSize      int         `json:"font_size"`    // Font size for overlay text
 	FontColor     string      `json:"font_color"`   // Font color for overlay text (e.g. "white", "yellow")
 	AutoDetect    string      `json:"auto_detect"`  // Auto detection mode: "silence", "scene", or "ai"
+	TranslateLang string      `json:"translate_lang"`// Target language for subtitle translation (e.g. "id", "en")
 	OpenRouterKey string      `json:"openrouter_key"`// OpenRouter API Key for AI highlight detection
 	AIModel       string      `json:"ai_model"`     // OpenRouter AI model (default: "openrouter/free")
 	Segments      []Segment   `json:"segments"`

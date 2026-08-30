@@ -79,7 +79,7 @@ func ParseVTT(content string) ([]SubtitleEntry, error) {
 }
 
 // FetchSubtitles attempts to retrieve subtitles for a YouTube URL or local file path.
-func FetchSubtitles(inputStr, outputDir string) ([]SubtitleEntry, error) {
+func FetchSubtitles(inputStr, outputDir, lang string) ([]SubtitleEntry, error) {
 	if outputDir == "" {
 		outputDir = "."
 	}
@@ -94,16 +94,39 @@ func FetchSubtitles(inputStr, outputDir string) ([]SubtitleEntry, error) {
 	}
 
 	// Case 2: YouTube URL download subtitles via yt-dlp
+	if lang != "" {
+		matches, _ := filepath.Glob(filepath.Join(outputDir, fmt.Sprintf("*%s*.vtt", lang)))
+		if len(matches) > 0 {
+			data, err := os.ReadFile(matches[0])
+			if err == nil && len(data) > 0 {
+				return ParseVTT(string(data))
+			}
+		}
+	} else {
+		matches, _ := filepath.Glob(filepath.Join(outputDir, "sub_*.vtt"))
+		if len(matches) > 0 {
+			data, err := os.ReadFile(matches[0])
+			if err == nil && len(data) > 0 {
+				return ParseVTT(string(data))
+			}
+		}
+	}
+
 	binPath := findYtDlpBinary()
 	if binPath == "" {
 		return nil, fmt.Errorf("yt-dlp binary required to fetch YouTube subtitles")
 	}
 
 	subTemplate := filepath.Join(outputDir, "sub_%(id)s")
+	subLangArg := "id,en,ko,all"
+	if lang != "" {
+		subLangArg = fmt.Sprintf("%s,id,en,ko,all", lang)
+	}
+
 	args := []string{
 		"--write-auto-sub",
 		"--write-sub",
-		"--sub-lang", "en,id,en-orig",
+		"--sub-lang", subLangArg,
 		"--sub-format", "vtt",
 		"--skip-download",
 		"-o", subTemplate,
@@ -113,8 +136,14 @@ func FetchSubtitles(inputStr, outputDir string) ([]SubtitleEntry, error) {
 	cmd := exec.Command(binPath, args...)
 	_ = cmd.Run()
 
-	// Look for generated VTT files in outputDir
-	matches, _ := filepath.Glob(filepath.Join(outputDir, "sub_*.vtt"))
+	var matches []string
+	if lang != "" {
+		matches, _ = filepath.Glob(filepath.Join(outputDir, fmt.Sprintf("*%s*.vtt", lang)))
+	}
+	if len(matches) == 0 {
+		matches, _ = filepath.Glob(filepath.Join(outputDir, "sub_*.vtt"))
+	}
+
 	if len(matches) == 0 {
 		return nil, fmt.Errorf("failed to download subtitles from YouTube input: %s", inputStr)
 	}
