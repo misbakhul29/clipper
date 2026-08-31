@@ -162,6 +162,17 @@ func findYtDlpBinary() string {
 	if path, err := exec.LookPath("yt-dlp"); err == nil {
 		return path
 	}
+	cacheDir, err := os.UserCacheDir()
+	if err == nil {
+		binName := "yt-dlp"
+		if runtime.GOOS == "windows" {
+			binName = "yt-dlp.exe"
+		}
+		userBin := filepath.Join(cacheDir, "clipper", "bin", binName)
+		if fileExists(userBin) {
+			return userBin
+		}
+	}
 	localBin := filepath.Join("bin", "yt-dlp")
 	if runtime.GOOS == "windows" {
 		localBin = filepath.Join("bin", "yt-dlp.exe")

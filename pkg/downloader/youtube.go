@@ -94,7 +94,7 @@ func ExtractVideoID(urlStr string) string {
 }
 
 func ensureYtDlpBinary() (string, error) {
-	// Check system PATH
+	// 1. Check system PATH
 	if path, err := exec.LookPath("yt-dlp"); err == nil {
 		return path, nil
 	}
@@ -102,18 +102,24 @@ func ensureYtDlpBinary() (string, error) {
 		return path, nil
 	}
 
-	// Check local ./bin/yt-dlp
-	localBin := filepath.Join("bin", "yt-dlp")
-	if runtime.GOOS == "windows" {
-		localBin = filepath.Join("bin", "yt-dlp.exe")
-	}
-	if _, err := os.Stat(localBin); err == nil {
-		return filepath.Abs(localBin)
+	// 2. Check User Cache Directory (~/.cache/clipper/bin/yt-dlp)
+	userBin := GetYtDlpCachePath()
+	if _, err := os.Stat(userBin); err == nil {
+		return userBin, nil
 	}
 
-	// Auto-download yt-dlp standalone binary into ./bin/yt-dlp
-	fmt.Println("yt-dlp binary not found in PATH. Auto-downloading latest yt-dlp binary...")
-	binDir := "bin"
+	// 3. Check Legacy ./bin/yt-dlp in current working directory
+	legacyBin := filepath.Join("bin", "yt-dlp")
+	if runtime.GOOS == "windows" {
+		legacyBin = filepath.Join("bin", "yt-dlp.exe")
+	}
+	if _, err := os.Stat(legacyBin); err == nil {
+		return filepath.Abs(legacyBin)
+	}
+
+	// 4. Auto-download yt-dlp standalone binary into user cache directory
+	fmt.Printf("yt-dlp binary not found in PATH. Auto-downloading yt-dlp to %s...\n", userBin)
+	binDir := filepath.Dir(userBin)
 	if err := os.MkdirAll(binDir, 0755); err != nil {
 		return "", err
 	}
@@ -133,9 +139,9 @@ func ensureYtDlpBinary() (string, error) {
 		return "", fmt.Errorf("failed to download yt-dlp, status code: %d", resp.StatusCode)
 	}
 
-	out, err := os.OpenFile(localBin, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
+	out, err := os.OpenFile(userBin, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
 	if err != nil {
-		return "", fmt.Errorf("failed to create local yt-dlp binary file: %w", err)
+		return "", fmt.Errorf("failed to create yt-dlp binary file: %w", err)
 	}
 	defer out.Close()
 
@@ -143,7 +149,21 @@ func ensureYtDlpBinary() (string, error) {
 		return "", fmt.Errorf("failed to save yt-dlp binary: %w", err)
 	}
 
-	return filepath.Abs(localBin)
+	return userBin, nil
+}
+
+// GetYtDlpCachePath returns the OS-specific user cache path for stored yt-dlp binary
+func GetYtDlpCachePath() string {
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		cacheDir = "."
+	}
+	appBinDir := filepath.Join(cacheDir, "clipper", "bin")
+	binName := "yt-dlp"
+	if runtime.GOOS == "windows" {
+		binName = "yt-dlp.exe"
+	}
+	return filepath.Join(appBinDir, binName)
 }
 
 func downloadWithYtDlp(binPath, urlStr, outputDir, quality, videoID string) (string, error) {
