@@ -90,14 +90,11 @@ func buildFilterGraph(cfg *Config, hasWatermark, hasOverlayText bool, subPath st
 	if cfg.Shorts {
 		if cfg.ShortsStyle == "blur" {
 			graph := "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=20:5[bg];[0:v]scale=1080:1920:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2"
-			currentPad := "[vblur]"
-			graph = fmt.Sprintf("%s%s", graph, currentPad)
 
 			if subPath != "" {
 				escapedSub := strings.ReplaceAll(subPath, "\\", "/")
 				escapedSub = strings.ReplaceAll(escapedSub, ":", "\\:")
-				graph = fmt.Sprintf("%s;%ssubtitles='%s'[vsub]", graph, currentPad, escapedSub)
-				currentPad = "[vsub]"
+				graph = fmt.Sprintf("%s,subtitles='%s'", graph, escapedSub)
 			}
 
 			if hasOverlayText {
@@ -113,13 +110,12 @@ func buildFilterGraph(cfg *Config, hasWatermark, hasOverlayText bool, subPath st
 				escapedText := strings.ReplaceAll(cfg.OverlayText, "'", "'\\''")
 				drawtext := fmt.Sprintf("drawtext=text='%s':%s:fontsize=%d:fontcolor=%s:box=1:boxcolor=black@0.5:boxborderw=5",
 					escapedText, textPos, fontSize, fontColor)
-				graph = fmt.Sprintf("%s;%s%s[vtxt]", graph, currentPad, drawtext)
-				currentPad = "[vtxt]"
+				graph = fmt.Sprintf("%s,%s", graph, drawtext)
 			}
 
 			if hasWatermark {
 				watermarkOverlay := getWatermarkPosition(cfg.WatermarkPos)
-				graph = fmt.Sprintf("%s;[1:v]scale=150:-1[wm];%s[wm]%s", graph, currentPad, watermarkOverlay)
+				graph = fmt.Sprintf("%s[vbase];[1:v]scale=150:-1[wm];[vbase][wm]%s", graph, watermarkOverlay)
 			}
 			return graph
 		} else if cfg.ShortsStyle == "smart-crop" {
