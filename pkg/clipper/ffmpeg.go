@@ -77,7 +77,8 @@ func (f *FFmpegRunner) CutSegment(cfg *Config, startSec, durationSec float64, ou
 	args = append(args, vEncArgs...)
 	args = append(args,
 		"-c:a", "aac",
-		"-b:a", "192k",
+		"-b:a", "320k",
+		"-ar", "48000",
 		"-avoid_negative_ts", "make_zero",
 		outputPath,
 	)
@@ -90,25 +91,47 @@ func selectVideoEncoderArgs(ffmpegPath string) []string {
 	output := string(out)
 	if err == nil {
 		if strings.Contains(output, "libx264") {
-			return []string{"-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p"}
+			return []string{
+				"-c:v", "libx264",
+				"-crf", "16",
+				"-preset", "slow",
+				"-pix_fmt", "yuv420p",
+				"-movflags", "+faststart",
+			}
 		}
 		if strings.Contains(output, "h264_nvenc") {
-			return []string{"-c:v", "h264_nvenc", "-cq", "18", "-preset", "p4", "-pix_fmt", "yuv420p"}
+			return []string{
+				"-c:v", "h264_nvenc",
+				"-cq", "16",
+				"-preset", "p6",
+				"-pix_fmt", "yuv420p",
+				"-movflags", "+faststart",
+			}
 		}
 		if strings.Contains(output, "libopenh264") {
-			return []string{"-c:v", "libopenh264", "-b:v", "10M", "-pix_fmt", "yuv420p"}
+			return []string{
+				"-c:v", "libopenh264",
+				"-b:v", "15M",
+				"-pix_fmt", "yuv420p",
+				"-movflags", "+faststart",
+			}
 		}
 	}
-	return []string{"-c:v", "mpeg4", "-q:v", "2", "-b:v", "10M"}
+	return []string{
+		"-c:v", "mpeg4",
+		"-q:v", "1",
+		"-b:v", "15M",
+		"-movflags", "+faststart",
+	}
 }
 
 func buildFilterGraph(cfg *Config, hasWatermark, hasOverlayText bool, subPath string) string {
 	var filters []string
 
-	// 1. Shorts Aspect Ratio Filter
+	// 1. Shorts Aspect Ratio Filter (High Quality Lanczos Resampling)
 	if cfg.Shorts {
 		if cfg.ShortsStyle == "blur" {
-			graph := "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=20:5[bg];[0:v]scale=1080:1920:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2"
+			graph := "[0:v]scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920,boxblur=20:5[bg];[0:v]scale=1080:1920:force_original_aspect_ratio=decrease:flags=lanczos[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2"
 
 			if subPath != "" {
 				escapedSub := strings.ReplaceAll(subPath, "\\", "/")
@@ -139,9 +162,9 @@ func buildFilterGraph(cfg *Config, hasWatermark, hasOverlayText bool, subPath st
 			return graph
 		} else if cfg.ShortsStyle == "smart-crop" {
 			// Smart Subject Motion Auto-Crop
-			filters = append(filters, "crop=w='ih*(9/16)':h='ih':x='(iw-ow)/2':y=0,scale=1080:1920")
+			filters = append(filters, "crop=w='ih*(9/16)':h='ih':x='(iw-ow)/2':y=0,scale=1080:1920:flags=lanczos")
 		} else {
-			filters = append(filters, "crop=ih*(9/16):ih,scale=1080:1920")
+			filters = append(filters, "crop=ih*(9/16):ih,scale=1080:1920:flags=lanczos")
 		}
 	}
 
