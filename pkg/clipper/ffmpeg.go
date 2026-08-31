@@ -89,17 +89,39 @@ func buildFilterGraph(cfg *Config, hasWatermark, hasOverlayText bool, subPath st
 	// 1. Shorts Aspect Ratio Filter
 	if cfg.Shorts {
 		if cfg.ShortsStyle == "blur" {
-			bgFilter := "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=20:5[bg];[0:v]scale=1080:1920:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2"
+			graph := "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=20:5[bg];[0:v]scale=1080:1920:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2"
+			currentPad := "[vblur]"
+			graph = fmt.Sprintf("%s%s", graph, currentPad)
+
 			if subPath != "" {
 				escapedSub := strings.ReplaceAll(subPath, "\\", "/")
 				escapedSub = strings.ReplaceAll(escapedSub, ":", "\\:")
-				bgFilter = fmt.Sprintf("%s[vsub];[vsub]subtitles='%s'", bgFilter, escapedSub)
+				graph = fmt.Sprintf("%s;%ssubtitles='%s'[vsub]", graph, currentPad, escapedSub)
+				currentPad = "[vsub]"
 			}
+
+			if hasOverlayText {
+				textPos := getTextPosition(cfg.TextPos)
+				fontColor := cfg.FontColor
+				if fontColor == "" {
+					fontColor = "white"
+				}
+				fontSize := cfg.FontSize
+				if fontSize <= 0 {
+					fontSize = 32
+				}
+				escapedText := strings.ReplaceAll(cfg.OverlayText, "'", "'\\''")
+				drawtext := fmt.Sprintf("drawtext=text='%s':%s:fontsize=%d:fontcolor=%s:box=1:boxcolor=black@0.5:boxborderw=5",
+					escapedText, textPos, fontSize, fontColor)
+				graph = fmt.Sprintf("%s;%s%s[vtxt]", graph, currentPad, drawtext)
+				currentPad = "[vtxt]"
+			}
+
 			if hasWatermark {
 				watermarkOverlay := getWatermarkPosition(cfg.WatermarkPos)
-				return fmt.Sprintf("%s[base];[1:v]scale=150:-1[wm];[base][wm]%s", bgFilter, watermarkOverlay)
+				graph = fmt.Sprintf("%s;[1:v]scale=150:-1[wm];%s[wm]%s", graph, currentPad, watermarkOverlay)
 			}
-			return bgFilter
+			return graph
 		} else if cfg.ShortsStyle == "smart-crop" {
 			// Smart Subject Motion Auto-Crop
 			filters = append(filters, "crop=w='ih*(9/16)':h='ih':x='(iw-ow)/2':y=0,scale=1080:1920")
@@ -115,7 +137,7 @@ func buildFilterGraph(cfg *Config, hasWatermark, hasOverlayText bool, subPath st
 		filters = append(filters, fmt.Sprintf("subtitles='%s'", escapedSub))
 	}
 
-	// 2. Overlay Text (drawtext)
+	// 3. Overlay Text (drawtext)
 	if hasOverlayText {
 		textPos := getTextPosition(cfg.TextPos)
 		fontColor := cfg.FontColor
@@ -141,7 +163,7 @@ func buildFilterGraph(cfg *Config, hasWatermark, hasOverlayText bool, subPath st
 		if simpleChain != "" {
 			return fmt.Sprintf("[0:v]%s[v0];[1:v]scale=150:-1[wm];[v0][wm]%s", simpleChain, wmOverlay)
 		}
-		return fmt.Sprintf("[0:v][1:v]scale=150:-1[wm];[0:v][wm]%s", wmOverlay)
+		return fmt.Sprintf("[1:v]scale=150:-1[wm];[0:v][wm]%s", wmOverlay)
 	}
 
 	return simpleChain

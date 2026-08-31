@@ -2,6 +2,7 @@ package transcriber
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -289,10 +290,14 @@ func formatASSTime(sec float64) string {
 	if sec < 0 {
 		sec = 0
 	}
-	hours := int(sec) / 3600
-	mins := (int(sec) % 3600) / 60
-	secs := sec - float64(hours*3600+mins*60)
-	return fmt.Sprintf("%d:%02d:%05.2f", hours, mins, secs)
+	totalCentisecs := int(math.Round(sec * 100))
+	cs := totalCentisecs % 100
+	totalSecs := totalCentisecs / 100
+	secs := totalSecs % 60
+	totalMins := totalSecs / 60
+	mins := totalMins % 60
+	hours := totalMins / 60
+	return fmt.Sprintf("%d:%02d:%02d.%02d", hours, mins, secs, cs)
 }
 
 // ChunkSubtitlesToWords splits long subtitle entries into rapid 2-3 word micro-chunks with interpolated timestamps for TikTok-style animated captions.

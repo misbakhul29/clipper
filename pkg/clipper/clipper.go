@@ -252,12 +252,14 @@ func (c *Clipper) Process(cfg *Config) error {
 						}
 						if exportErr == nil {
 							subPath = tmpSubFile
-							defer os.Remove(tmpSubFile)
 						}
 					}
 				}
 
 				err := c.runner.CutSegment(cfg, j.startSec, j.durationSec, j.segPath, subPath)
+				if subPath != "" {
+					_ = os.Remove(subPath)
+				}
 				results <- jobResult{
 					index:   j.index,
 					segPath: j.segPath,
