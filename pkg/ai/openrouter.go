@@ -59,6 +59,15 @@ func AnalyzeHighlights(entries []transcriber.SubtitleEntry, apiKey, model, targe
 		model = "openrouter/free"
 	}
 
+	highlights, err := callOpenRouterAPI(entries, apiKey, model, targetLang)
+	if err != nil && model != "openrouter/free" {
+		fmt.Printf("[AI WARN] Model '%s' failed: %v. Retrying with fallback model 'openrouter/free'...\n", model, err)
+		return callOpenRouterAPI(entries, apiKey, "openrouter/free", targetLang)
+	}
+	return highlights, err
+}
+
+func callOpenRouterAPI(entries []transcriber.SubtitleEntry, apiKey, model, targetLang string) ([]AIHighlight, error) {
 	// Compact/group subtitle entries to prevent LLM prompt bloat and API timeout
 	groupedEntries := groupSubtitleEntries(entries, 15.0)
 
@@ -94,6 +103,7 @@ Do NOT include any markdown codeblocks or explanation. Return ONLY the raw JSON 
 			{Role: "system", Content: systemPrompt},
 			{Role: "user", Content: userPrompt},
 		},
+		IncludeReasoning: false,
 	}
 
 	jsonData, err := json.Marshal(reqBody)
