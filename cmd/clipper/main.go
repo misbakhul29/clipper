@@ -74,8 +74,11 @@ func main() {
 	flag.StringVar(&subStyle, "sub-style", "karaoke", "Subtitle style for burnt-in captions ('karaoke' for TikTok 2-word chunks, or 'standard')")
 	flag.IntVar(&subFontSize, "sub-font-size", 48, "Subtitle font size for burnt-in captions")
 	flag.BoolVar(&useWhisper, "use-whisper", false, "Force local Whisper AI for speech-to-text transcription")
+	var aiRouter, aiKey string
+	flag.StringVar(&aiRouter, "ai-router", "openrouter", "AI API Provider ('openrouter', 'gemini', 'deepseek', 'openai')")
+	flag.StringVar(&aiKey, "ai-key", "", "API Key for selected AI router (e.g. Gemini/DeepSeek/OpenAI key)")
 	flag.StringVar(&openRouterKey, "openrouter-key", "", "OpenRouter API Key for AI highlight detection (defaults to $OPENROUTER_API_KEY)")
-	flag.StringVar(&aiModel, "ai-model", "openrouter/free", "OpenRouter AI model name")
+	flag.StringVar(&aiModel, "ai-model", "openrouter/free", "AI model name (e.g. 'openrouter/free', 'gemini-2.0-flash', 'deepseek-chat', 'gpt-4o-mini')")
 	flag.StringVar(&segments, "segments", "", "Comma-separated segment timestamps (e.g. '00:10-00:25,01:00-01:30')")
 
 	flag.Usage = func() {
@@ -227,10 +230,18 @@ func main() {
 	if isFlagPassed("use-whisper") {
 		cfg.UseWhisper = useWhisper
 	}
+	if isFlagPassed("ai-router") {
+		cfg.AIConfig.APIRouter = aiRouter
+	}
+	if isFlagPassed("ai-key") {
+		cfg.AIConfig.APIKey = aiKey
+	}
 	if isFlagPassed("openrouter-key") {
+		cfg.AIConfig.APIKey = openRouterKey
 		cfg.OpenRouterKey = openRouterKey
 	}
 	if isFlagPassed("ai-model") {
+		cfg.AIConfig.Model = aiModel
 		cfg.AIModel = aiModel
 	}
 

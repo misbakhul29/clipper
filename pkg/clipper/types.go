@@ -3,6 +3,9 @@ package clipper
 import (
 	"fmt"
 	"runtime"
+	"strings"
+
+	"clipping/pkg/ai"
 )
 
 // Mode specifies how the cut segments should be saved.
@@ -30,32 +33,33 @@ type Segment struct {
 
 // Config holds options for the video cutting job.
 type Config struct {
-	InputFile     string      `json:"input"`
-	OutputDir     string      `json:"output_dir"`
-	OutputFile    string      `json:"output"`       // Used for merge mode or prefix
-	Mode          Mode        `json:"mode"`         // "split" or "merge"
-	Strategy      CutStrategy `json:"strategy"`     // "fast" or "accurate"
-	Shorts        bool        `json:"shorts"`       // Convert to 9:16 Shorts format
-	ShortsStyle   string      `json:"shorts_style"` // "crop" (center 9:16) or "blur" (blurred background 9:16)
-	Quality       string      `json:"quality"`      // YouTube download quality e.g. "best", "1080p", "720p", "480p", "360p", "worst"
-	CacheDir      string      `json:"cache_dir"`    // Directory to cache downloaded YouTube videos (default: "./cache")
-	NoCache       bool        `json:"no_cache"`     // Disable YouTube download cache and force re-download
-	Concurrency   int         `json:"concurrency"`  // Number of parallel workers for rendering clips (default: NumCPU)
-	WatermarkPath string      `json:"watermark"`    // Path to watermark image (PNG)
-	WatermarkPos  string      `json:"watermark_pos"`// Position: top-left, top-right, bottom-left, bottom-right, center
-	OverlayText   string      `json:"overlay_text"` // Text caption to render on video
-	TextPos       string      `json:"text_pos"`     // Position for overlay text
-	FontSize      int         `json:"font_size"`    // Font size for overlay text
-	FontColor     string      `json:"font_color"`   // Font color for overlay text (e.g. "white", "yellow")
-	AutoDetect    string      `json:"auto_detect"`  // Auto detection mode: "silence", "scene", or "ai"
-	TranslateLang string      `json:"translate_lang"`// Target language for subtitle translation (e.g. "id", "en")
-	BurnSubtitles bool        `json:"burn_subtitles"`// Hardcode/burn-in subtitles directly onto video clips
-	SubStyle      string      `json:"sub_style"`    // Subtitle style: "karaoke" (TikTok 2-word chunks) or "standard"
-	SubFontSize   int         `json:"sub_font_size"` // Subtitle font size for burnt-in captions (default: 48)
-	UseWhisper    bool        `json:"use_whisper"`   // Force local Whisper AI for speech-to-text transcription
-	OpenRouterKey string      `json:"openrouter_key"`// OpenRouter API Key for AI highlight detection
-	AIModel       string      `json:"ai_model"`     // OpenRouter AI model (default: "openrouter/free")
-	Segments      []Segment   `json:"segments"`
+	InputFile     string              `json:"input"`
+	OutputDir     string              `json:"output_dir"`
+	OutputFile    string              `json:"output"`       // Used for merge mode or prefix
+	Mode          Mode                `json:"mode"`         // "split" or "merge"
+	Strategy      CutStrategy         `json:"strategy"`     // "fast" or "accurate"
+	Shorts        bool                `json:"shorts"`       // Convert to 9:16 Shorts format
+	ShortsStyle   string              `json:"shorts_style"` // "crop" (center 9:16) or "blur" (blurred background 9:16)
+	Quality       string              `json:"quality"`      // YouTube download quality e.g. "best", "1080p", "720p", "480p", "360p", "worst"
+	CacheDir      string              `json:"cache_dir"`    // Directory to cache downloaded YouTube videos (default: "./cache")
+	NoCache       bool                `json:"no_cache"`     // Disable YouTube download cache and force re-download
+	Concurrency   int                 `json:"concurrency"`  // Number of parallel workers for rendering clips (default: NumCPU)
+	WatermarkPath string              `json:"watermark"`    // Path to watermark image (PNG)
+	WatermarkPos  string              `json:"watermark_pos"`// Position: top-left, top-right, bottom-left, bottom-right, center
+	OverlayText   string              `json:"overlay_text"` // Text caption to render on video
+	TextPos       string              `json:"text_pos"`     // Position for overlay text
+	FontSize      int                 `json:"font_size"`    // Font size for overlay text
+	FontColor     string              `json:"font_color"`   // Font color for overlay text (e.g. "white", "yellow")
+	AutoDetect    string              `json:"auto_detect"`  // Auto detection mode: "silence", "scene", or "ai"
+	TranslateLang string              `json:"translate_lang"`// Target language for subtitle translation (e.g. "id", "en")
+	BurnSubtitles bool                `json:"burn_subtitles"`// Hardcode/burn-in subtitles directly onto video clips
+	SubStyle      string              `json:"sub_style"`    // Subtitle style: "karaoke" (TikTok 2-word chunks) or "standard"
+	SubFontSize   int                 `json:"sub_font_size"` // Subtitle font size for burnt-in captions (default: 48)
+	UseWhisper    bool                `json:"use_whisper"`   // Force local Whisper AI for speech-to-text transcription
+	AIConfig      ai.AIProviderConfig `json:"ai_config"`    // Multi-provider AI config
+	OpenRouterKey string              `json:"openrouter_key"`// OpenRouter API Key (legacy fallback)
+	AIModel       string              `json:"ai_model"`     // AI model name (legacy fallback)
+	Segments      []Segment           `json:"segments"`
 }
 
 // Validate checks the configuration for missing or invalid parameters.
@@ -90,9 +94,32 @@ func (c *Config) Validate() error {
 	if c.CacheDir == "" {
 		c.CacheDir = "./cache"
 	}
-	if c.AIModel == "" {
-		c.AIModel = "openrouter/free"
+
+	// Validate / Sync AIConfig
+	if c.AIConfig.APIRouter == "" {
+		c.AIConfig.APIRouter = "openrouter"
 	}
+	if c.AIConfig.APIKey == "" && c.OpenRouterKey != "" {
+		c.AIConfig.APIKey = c.OpenRouterKey
+	}
+	if c.AIConfig.Model == "" && c.AIModel != "" {
+		c.AIConfig.Model = c.AIModel
+	}
+	if c.AIConfig.Model == "" {
+		router := strings.ToLower(c.AIConfig.APIRouter)
+		if router == "gemini" {
+			c.AIConfig.Model = "gemini-2.0-flash"
+		} else if router == "deepseek" {
+			c.AIConfig.Model = "deepseek-chat"
+		} else if router == "openai" || router == "codex" {
+			c.AIConfig.Model = "gpt-4o-mini"
+		} else {
+			c.AIConfig.Model = "openrouter/free"
+		}
+	}
+	// Sync back flat fields for compatibility
+	c.OpenRouterKey = c.AIConfig.APIKey
+	c.AIModel = c.AIConfig.Model
 	if c.Concurrency <= 0 {
 		c.Concurrency = runtime.NumCPU()
 	}

@@ -78,10 +78,10 @@ func (c *Clipper) Process(cfg *Config) error {
 			if err != nil {
 				return fmt.Errorf("failed to fetch or transcribe subtitles: %w", err)
 			}
-			fmt.Printf("Analyzing %d subtitle entries via OpenRouter AI (%s, target lang: %s)...\n", len(subEntries), cfg.AIModel, lang)
-			highlights, err := ai.AnalyzeHighlights(subEntries, cfg.OpenRouterKey, cfg.AIModel, lang)
+			fmt.Printf("Analyzing %d subtitle entries via AI (%s / %s, target lang: %s)...\n", len(subEntries), cfg.AIConfig.APIRouter, cfg.AIConfig.Model, lang)
+			highlights, err := ai.AnalyzeHighlightsMultiProvider(subEntries, cfg.AIConfig, lang)
 			if err != nil {
-				return fmt.Errorf("OpenRouter AI highlight analysis failed: %w", err)
+				return fmt.Errorf("AI highlight analysis failed: %w", err)
 			}
 			for _, h := range highlights {
 				cfg.Segments = append(cfg.Segments, Segment{
