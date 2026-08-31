@@ -15,6 +15,12 @@ Sistem pemotong video otomatis berbasis **Go (Golang)** yang terintegrasi dengan
 
 ---
 
+## 📖 Dokumentasi Lengkap Baris Perintah (CLI Flags)
+
+Daftar lengkap flag, parameter, dan contoh penggunaan dapat dilihat di **[CLI_USAGE.md](CLI_USAGE.md)**.
+
+---
+
 ## 🎤 TikTok Karaoke Subtitles (`-sub-style karaoke`)
 
 ```bash
