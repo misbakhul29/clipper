@@ -54,3 +54,16 @@ func TestParseAIHighlightsJSON_Truncated(t *testing.T) {
 		t.Fatalf("expected 2 repaired highlights, got %d", len(highlights))
 	}
 }
+
+func TestParseAIHighlightsJSON_NoisyTags(t *testing.T) {
+	noisyJSON := `[{"start": "00:01:00", "end": "00:01:30", "title": "item1"}]</arg_value></tool_call>[{"start": "00:01:00", "end": "00:01:30", "title": "item1"}]`
+
+	highlights, err := ParseAIHighlightsJSON(noisyJSON)
+	if err != nil {
+		t.Fatalf("unexpected error parsing noisy JSON: %v", err)
+	}
+
+	if len(highlights) != 1 {
+		t.Fatalf("expected 1 highlight, got %d", len(highlights))
+	}
+}

@@ -37,7 +37,9 @@ func main() {
 		autoDetect    string
 		translateLang string
 		burnSubtitles bool
+		subStyle      string
 		subFontSize   int
+		useWhisper    bool
 		openRouterKey string
 		aiModel       string
 		segments      string
@@ -54,7 +56,7 @@ func main() {
 	flag.StringVar(&modeStr, "mode", "split", "Operation mode: 'split' (separate files) or 'merge' (combined file)")
 	flag.StringVar(&stratStr, "strategy", "fast", "Cut strategy: 'fast' (stream copy) or 'accurate' (re-encode)")
 	flag.BoolVar(&isShorts, "shorts", false, "Convert cut videos to 9:16 Shorts/Reels/TikTok format")
-	flag.StringVar(&shortsStyle, "shorts-style", "crop", "Shorts aspect ratio style: 'crop' (center crop 9:16) or 'blur' (blurred background 9:16)")
+	flag.StringVar(&shortsStyle, "shorts-style", "crop", "Shorts aspect ratio style: 'crop' (center crop 9:16), 'blur' (blurred background), or 'smart-crop'")
 	flag.StringVar(&quality, "quality", "best", "YouTube download quality ('best', '1080p', '720p', '480p', '360p', 'worst')")
 	flag.StringVar(&cacheDir, "cache-dir", "./cache", "Directory for caching downloaded YouTube videos")
 	flag.BoolVar(&noCache, "no-cache", false, "Disable YouTube download cache and force re-download")
@@ -69,7 +71,9 @@ func main() {
 	flag.StringVar(&translateLang, "translate-lang", "id", "Target language for AI titles and subtitle translation ('id', 'en', etc.)")
 	flag.BoolVar(&burnSubtitles, "burn-subtitles", false, "Hardcode/burn-in subtitles directly onto video clips")
 	flag.BoolVar(&burnSubtitles, "subtitles", false, "Hardcode/burn-in subtitles directly onto video clips")
+	flag.StringVar(&subStyle, "sub-style", "karaoke", "Subtitle style for burnt-in captions ('karaoke' for TikTok 2-word chunks, or 'standard')")
 	flag.IntVar(&subFontSize, "sub-font-size", 48, "Subtitle font size for burnt-in captions")
+	flag.BoolVar(&useWhisper, "use-whisper", false, "Force local Whisper AI for speech-to-text transcription")
 	flag.StringVar(&openRouterKey, "openrouter-key", "", "OpenRouter API Key for AI highlight detection (defaults to $OPENROUTER_API_KEY)")
 	flag.StringVar(&aiModel, "ai-model", "openrouter/free", "OpenRouter AI model name")
 	flag.StringVar(&segments, "segments", "", "Comma-separated segment timestamps (e.g. '00:10-00:25,01:00-01:30')")
@@ -213,8 +217,14 @@ func main() {
 	if burnSubtitles {
 		cfg.BurnSubtitles = true
 	}
+	if subStyle != "" {
+		cfg.SubStyle = subStyle
+	}
 	if subFontSize > 0 {
 		cfg.SubFontSize = subFontSize
+	}
+	if useWhisper {
+		cfg.UseWhisper = true
 	}
 	if openRouterKey != "" {
 		cfg.OpenRouterKey = openRouterKey

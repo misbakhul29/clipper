@@ -50,3 +50,18 @@ func TestSliceSubtitles(t *testing.T) {
 		t.Errorf("sliced 0 timestamp mismatch: start=%s end=%s", sliced[0].Start, sliced[0].End)
 	}
 }
+
+func TestChunkSubtitlesToWords(t *testing.T) {
+	entries := []SubtitleEntry{
+		{Start: "0:00:00.00", End: "0:00:04.00", Text: "Hello everyone and welcome to our video today"},
+	}
+
+	chunked := ChunkSubtitlesToWords(entries, 3)
+	if len(chunked) != 3 {
+		t.Fatalf("expected 3 chunks for 8 words (3+3+2), got %d", len(chunked))
+	}
+
+	if chunked[0].Text != "Hello everyone and" {
+		t.Errorf("chunk 0 text mismatch: %s", chunked[0].Text)
+	}
+}

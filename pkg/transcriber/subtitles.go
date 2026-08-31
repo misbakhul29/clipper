@@ -294,3 +294,87 @@ func formatASSTime(sec float64) string {
 	secs := sec - float64(hours*3600+mins*60)
 	return fmt.Sprintf("%d:%02d:%05.2f", hours, mins, secs)
 }
+
+// ChunkSubtitlesToWords splits long subtitle entries into rapid 2-3 word micro-chunks with interpolated timestamps for TikTok-style animated captions.
+func ChunkSubtitlesToWords(entries []SubtitleEntry, maxWords int) []SubtitleEntry {
+	if maxWords <= 0 {
+		maxWords = 3
+	}
+
+	var chunked []SubtitleEntry
+	for _, entry := range entries {
+		words := strings.Fields(entry.Text)
+		if len(words) <= maxWords {
+			chunked = append(chunked, entry)
+			continue
+		}
+
+		startSec := parseTimestampToSec(entry.Start)
+		endSec := parseTimestampToSec(entry.End)
+		totalDur := endSec - startSec
+		if totalDur <= 0 {
+			chunked = append(chunked, entry)
+			continue
+		}
+		timePerWord := totalDur / float64(len(words))
+
+		for i := 0; i < len(words); i += maxWords {
+			endIdx := i + maxWords
+			if endIdx > len(words) {
+				endIdx = len(words)
+			}
+			chunkWords := words[i:endIdx]
+
+			cStartSec := startSec + float64(i)*timePerWord
+			cEndSec := startSec + float64(endIdx)*timePerWord
+
+			chunked = append(chunked, SubtitleEntry{
+				Start: formatASSTime(cStartSec),
+				End:   formatASSTime(cEndSec),
+				Text:  strings.Join(chunkWords, " "),
+			})
+		}
+	}
+
+	return chunked
+}
+
+// ExportKaraokeASS exports subtitle entries into TikTok-style ASS format with yellow active word styling and thick outline.
+func ExportKaraokeASS(entries []SubtitleEntry, outputPath string, fontSize int, isShorts bool) error {
+	if fontSize <= 0 {
+		fontSize = 54
+	}
+
+	marginV := 180
+	if isShorts {
+		marginV = 440 // Centered in lower third of 9:16 frame
+	}
+
+	var sb strings.Builder
+	sb.WriteString("[Script Info]\n")
+	sb.WriteString("ScriptType: v4.00+\n")
+	sb.WriteString("PlayResX: 1080\n")
+	sb.WriteString("PlayResY: 1920\n")
+	sb.WriteString("ScaledBorderAndShadow: yes\n\n")
+
+	sb.WriteString("[V4+ Styles]\n")
+	sb.WriteString("Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n")
+	// Style: Vibrant Yellow (&H0000FFFF) text with thick black outline (&H00000000) and shadow
+	sb.WriteString(fmt.Sprintf("Style: Default,Impact,%d,&H0000FFFF,&H00000000,&H00000000,&H90000000,-1,0,0,0,105,105,1,0,1,5,2,2,40,40,%d,1\n\n", fontSize, marginV))
+
+	sb.WriteString("[Events]\n")
+	sb.WriteString("Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")
+
+	for _, entry := range entries {
+		upperText := strings.ToUpper(strings.TrimSpace(entry.Text))
+		cleanText := strings.ReplaceAll(upperText, "\n", " ")
+		sb.WriteString(fmt.Sprintf("Dialogue: 0,%s,%s,Default,,0,0,0,,%s\n", entry.Start, entry.End, cleanText))
+	}
+
+	dir := filepath.Dir(outputPath)
+	if dir != "." && dir != "" {
+		_ = os.MkdirAll(dir, 0755)
+	}
+
+	return os.WriteFile(outputPath, []byte(sb.String()), 0644)
+}

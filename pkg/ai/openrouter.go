@@ -157,6 +157,27 @@ func ParseAIHighlightsJSON(content string) ([]AIHighlight, error) {
 		content = strings.TrimSpace(content)
 	}
 
+	// Extract the first valid JSON array [...] using bracket matching to ignore any trailing LLM noise or tool XML tags
+	firstIdx := strings.Index(content, "[")
+	if firstIdx != -1 {
+		depth := 0
+		endIdx := -1
+		for i := firstIdx; i < len(content); i++ {
+			if content[i] == '[' {
+				depth++
+			} else if content[i] == ']' {
+				depth--
+				if depth == 0 {
+					endIdx = i
+					break
+				}
+			}
+		}
+		if endIdx != -1 {
+			content = content[firstIdx : endIdx+1]
+		}
+	}
+
 	content = repairTruncatedJSON(content)
 
 	var highlights []AIHighlight

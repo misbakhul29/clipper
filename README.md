@@ -1,38 +1,35 @@
 # Automated Video Clipping System (Golang + FFmpeg)
 
-Sistem pemotong video otomatis berbasis **Go (Golang)** yang terintegrasi dengan **FFmpeg** & **OpenRouter AI**. Sistem ini mendukung:
-- 💬 **Burnt-In Subtitles & Auto Translation (`-burn-subtitles` / `-subtitles`)** (Menempelkan subtitle terjemahan secara otomatis dan permanen pada video klip/Shorts).
+Sistem pemotong video otomatis berbasis **Go (Golang)** yang terintegrasi dengan **FFmpeg**, **OpenRouter AI**, dan **Local Whisper AI**. Sistem ini mendukung:
+
+- 🎤 **TikTok & Instagram Reels Karaoke Subtitles (`-sub-style karaoke`)** (Subtitle animasi cepat per 2–3 kata berlatar kuning menyala + font Impact tebal yang viral di media sosial).
+- 🎙️ **Local Whisper Speech-to-Text (`-use-whisper`)** (Ekstraksi subtitle AI secara otomatis dan offline dari audio video menggunakan Whisper AI).
+- 👤 **Smart Subject Motion Auto-Crop (`-shorts-style smart-crop`)** (Pemotongan vertikal 9:16 yang memfokuskan kamera ke subjek bergerak).
+- 💬 **Burnt-In Subtitles & Auto Translation (`-burn-subtitles`)** (Menempelkan subtitle terjemahan secara otomatis dan permanen pada video klip/Shorts dengan kustomisasi `-sub-font-size`).
 - 🤖 **AI Transcript Highlights (`openrouter/free`)** (Deteksi otomatis klip paling menarik/viral dari transkrip subtitle menggunakan LLM via OpenRouter API).
 - 🎙️ **Smart Silence & Scene Auto-Detection** (Deteksi otomatis bagian percakapan/suara atau perpindahan adegan tanpa timestamp manual).
 - ⚡ **Parallel Concurrency Engine** (Render banyak klip sekaligus secara paralel via Goroutines).
 - 🎨 **Watermark Image & Text Overlay** (Penambahan logo watermark PNG & caption teks otomatis).
-- 📱 **YouTube Shorts / TikTok / Reels (9:16)** (Format vertikal dengan style *center crop* atau *blurred background*).
-- 💾 **Smart Caching System** (`./cache` auto-reuse video YouTube).
-- 📽️ **YouTube Video Quality Selector** (Pilihan 1080p, 720p, 480p, 360p, best, worst).
+- 📱 **YouTube Shorts / TikTok / Reels (9:16)** (Format vertikal dengan style *center crop*, *smart crop*, atau *blurred background*).
+- 💾 **Smart Caching System** (`./cache` auto-reuse video YouTube & transkrip Whisper).
 
 ---
 
-## 💬 Burnt-In Subtitles (`-burn-subtitles`)
-
-Tambahkan subtitle terjemahan yang menempel secara permanen (*hardcoded captions*) pada video Shorts / klip:
+## 🎤 TikTok Karaoke Subtitles (`-sub-style karaoke`)
 
 ```bash
-# Render Shorts (9:16 Blur) + Auto-Detect AI + Subtitle Terjemahan Bahasa Indonesia Nempel di Video!
-go run ./cmd/clipper -input "https://www.youtube.com/watch?v=xxx" -auto-detect ai -shorts -shorts-style blur -burn-subtitles -translate-lang id -outdir ./yt_subtitled_shorts
+# Render Shorts (9:16 Blur) + AI Auto-Detect + TikTok Animated Karaoke Subtitles (Kuning Menyala, 54pt)
+go run ./cmd/clipper -input "https://www.youtube.com/watch?v=xxx" -auto-detect ai -shorts -shorts-style blur -burn-subtitles -sub-style karaoke -sub-font-size 54 -translate-lang id -outdir ./yt_karaoke_shorts
 ```
 
 ---
 
-## 🤖 AI Transcript Highlights (`-auto-detect ai`)
+## 🎙️ Local Whisper Speech-to-Text (`-use-whisper`)
 
-Fitur kecerdasan buatan untuk menganalisis transkrip subtitle video (YouTube / VTT / SRT) dan memilih segmen-segmen terbaik yang berpotensi viral menggunakan **OpenRouter API** (`openrouter/free` router):
+Jika video lokal / YouTube tidak memiliki subtitle CC bawaan, gunakan `-use-whisper` untuk transkripsi offline otomatis:
 
 ```bash
-# Set API Key OpenRouter di Environment Variable (opsional bisa via flag -openrouter-key)
-export OPENROUTER_API_KEY="sk-or-v1-..."
-
-# Jalankan Auto-Detect AI
-go run ./cmd/clipper -input "https://www.youtube.com/watch?v=xxx" -auto-detect ai -shorts -burn-subtitles
+go run ./cmd/clipper -input "my_local_video.mp4" -auto-detect ai -use-whisper -shorts -burn-subtitles -sub-style karaoke
 ```
 
 ---
@@ -42,12 +39,4 @@ go run ./cmd/clipper -input "https://www.youtube.com/watch?v=xxx" -auto-detect a
 ```bash
 # Mode Interaktif Wizard
 go run ./cmd/clipper -i
-
-# Generate JSON Config via Flags
-go run ./cmd/clipper -init-config my_clips.json -input "https://youtu.be/xxx" -shorts -auto-detect ai -burn-subtitles
-```
-
-Jalankan config yang dibuat:
-```bash
-go run ./cmd/clipper -config my_clips.json
 ```
