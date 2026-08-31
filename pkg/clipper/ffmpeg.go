@@ -86,41 +86,47 @@ func (f *FFmpegRunner) CutSegment(cfg *Config, startSec, durationSec float64, ou
 	return f.runFFmpeg(args)
 }
 
+func isEncoderWorking(ffmpegPath, encoder string) bool {
+	cmd := exec.Command(ffmpegPath, "-f", "lavfi", "-i", "color=c=black:s=16x16:d=0.1", "-c:v", encoder, "-f", "null", "-")
+	return cmd.Run() == nil
+}
+
 func selectVideoEncoderArgs(ffmpegPath string) []string {
-	out, err := exec.Command(ffmpegPath, "-encoders").CombinedOutput()
-	output := string(out)
-	if err == nil {
-		if strings.Contains(output, "libx264") {
-			return []string{
-				"-c:v", "libx264",
-				"-crf", "16",
-				"-preset", "slow",
-				"-pix_fmt", "yuv420p",
-				"-movflags", "+faststart",
-			}
-		}
-		if strings.Contains(output, "h264_nvenc") {
-			return []string{
-				"-c:v", "h264_nvenc",
-				"-cq", "16",
-				"-preset", "p6",
-				"-pix_fmt", "yuv420p",
-				"-movflags", "+faststart",
-			}
-		}
-		if strings.Contains(output, "libopenh264") {
-			return []string{
-				"-c:v", "libopenh264",
-				"-b:v", "15M",
-				"-pix_fmt", "yuv420p",
-				"-movflags", "+faststart",
-			}
+	if isEncoderWorking(ffmpegPath, "libx264") {
+		return []string{
+			"-c:v", "libx264",
+			"-crf", "16",
+			"-preset", "slow",
+			"-pix_fmt", "yuv420p",
+			"-movflags", "+faststart",
 		}
 	}
+	if isEncoderWorking(ffmpegPath, "h264_nvenc") {
+		return []string{
+			"-c:v", "h264_nvenc",
+			"-cq", "16",
+			"-preset", "p6",
+			"-pix_fmt", "yuv420p",
+			"-movflags", "+faststart",
+		}
+	}
+	if isEncoderWorking(ffmpegPath, "libopenh264") {
+		return []string{
+			"-c:v", "libopenh264",
+			"-b:v", "20M",
+			"-pix_fmt", "yuv420p",
+			"-movflags", "+faststart",
+		}
+	}
+	// Fallback to MPEG-4 Ultra-HD Quality Scale (-q:v 1, -b:v 25M, -mbd rd -flags +mv4+aic)
 	return []string{
 		"-c:v", "mpeg4",
 		"-q:v", "1",
-		"-b:v", "15M",
+		"-b:v", "25M",
+		"-mbd", "rd",
+		"-flags", "+mv4+aic",
+		"-cmp", "2",
+		"-subcmp", "2",
 		"-movflags", "+faststart",
 	}
 }
