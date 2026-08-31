@@ -81,8 +81,8 @@ func (c *Config) Validate() error {
 	if c.ShortsStyle == "" {
 		c.ShortsStyle = "crop"
 	}
-	if c.ShortsStyle != "crop" && c.ShortsStyle != "blur" {
-		return fmt.Errorf("invalid shorts_style '%s', must be 'crop' or 'blur'", c.ShortsStyle)
+	if c.ShortsStyle != "crop" && c.ShortsStyle != "blur" && c.ShortsStyle != "smart-crop" {
+		return fmt.Errorf("invalid shorts_style '%s', must be 'crop', 'blur', or 'smart-crop'", c.ShortsStyle)
 	}
 	if c.Quality == "" {
 		c.Quality = "best"
