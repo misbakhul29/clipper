@@ -73,14 +73,33 @@ func (f *FFmpegRunner) CutSegment(cfg *Config, startSec, durationSec float64, ou
 		}
 	}
 
+	vEncArgs := selectVideoEncoderArgs(f.FFmpegPath)
+	args = append(args, vEncArgs...)
 	args = append(args,
-		"-c:v", "mpeg4",
 		"-c:a", "aac",
+		"-b:a", "192k",
 		"-avoid_negative_ts", "make_zero",
 		outputPath,
 	)
 
 	return f.runFFmpeg(args)
+}
+
+func selectVideoEncoderArgs(ffmpegPath string) []string {
+	out, err := exec.Command(ffmpegPath, "-encoders").CombinedOutput()
+	output := string(out)
+	if err == nil {
+		if strings.Contains(output, "libx264") {
+			return []string{"-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p"}
+		}
+		if strings.Contains(output, "h264_nvenc") {
+			return []string{"-c:v", "h264_nvenc", "-cq", "18", "-preset", "p4", "-pix_fmt", "yuv420p"}
+		}
+		if strings.Contains(output, "libopenh264") {
+			return []string{"-c:v", "libopenh264", "-b:v", "10M", "-pix_fmt", "yuv420p"}
+		}
+	}
+	return []string{"-c:v", "mpeg4", "-q:v", "2", "-b:v", "10M"}
 }
 
 func buildFilterGraph(cfg *Config, hasWatermark, hasOverlayText bool, subPath string) string {
