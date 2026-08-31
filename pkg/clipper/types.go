@@ -50,7 +50,9 @@ type Config struct {
 	AutoDetect    string      `json:"auto_detect"`  // Auto detection mode: "silence", "scene", or "ai"
 	TranslateLang string      `json:"translate_lang"`// Target language for subtitle translation (e.g. "id", "en")
 	BurnSubtitles bool        `json:"burn_subtitles"`// Hardcode/burn-in subtitles directly onto video clips
+	SubStyle      string      `json:"sub_style"`    // Subtitle style: "karaoke" (TikTok 2-word chunks) or "standard"
 	SubFontSize   int         `json:"sub_font_size"` // Subtitle font size for burnt-in captions (default: 48)
+	UseWhisper    bool        `json:"use_whisper"`   // Force local Whisper AI for speech-to-text transcription
 	OpenRouterKey string      `json:"openrouter_key"`// OpenRouter API Key for AI highlight detection
 	AIModel       string      `json:"ai_model"`     // OpenRouter AI model (default: "openrouter/free")
 	Segments      []Segment   `json:"segments"`
@@ -105,6 +107,9 @@ func (c *Config) Validate() error {
 	}
 	if c.SubFontSize <= 0 {
 		c.SubFontSize = 48
+	}
+	if c.SubStyle == "" {
+		c.SubStyle = "karaoke"
 	}
 	if c.FontColor == "" {
 		c.FontColor = "white"

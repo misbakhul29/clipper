@@ -64,9 +64,19 @@ func (c *Clipper) Process(cfg *Config) error {
 			if lang == "" {
 				lang = "id"
 			}
-			subEntries, err := transcriber.FetchSubtitles(originalInput, cfg.CacheDir, lang)
+			var subEntries []transcriber.SubtitleEntry
+			var err error
+			if cfg.UseWhisper {
+				subEntries, err = transcriber.TranscribeWithWhisper(cfg.InputFile, cfg.CacheDir, lang)
+			} else {
+				subEntries, err = transcriber.FetchSubtitles(originalInput, cfg.CacheDir, lang)
+				if err != nil || len(subEntries) == 0 {
+					fmt.Printf("YouTube subtitles unavailable (%v), falling back to local Whisper AI...\n", err)
+					subEntries, err = transcriber.TranscribeWithWhisper(cfg.InputFile, cfg.CacheDir, lang)
+				}
+			}
 			if err != nil {
-				return fmt.Errorf("failed to fetch subtitles: %w", err)
+				return fmt.Errorf("failed to fetch or transcribe subtitles: %w", err)
 			}
 			fmt.Printf("Analyzing %d subtitle entries via OpenRouter AI (%s, target lang: %s)...\n", len(subEntries), cfg.AIModel, lang)
 			highlights, err := ai.AnalyzeHighlights(subEntries, cfg.OpenRouterKey, cfg.AIModel, lang)
@@ -230,8 +240,17 @@ func (c *Clipper) Process(cfg *Config) error {
 				if len(allSubEntries) > 0 {
 					sliced := transcriber.SliceSubtitles(allSubEntries, j.startSec, j.startSec+j.durationSec)
 					if len(sliced) > 0 {
+						if cfg.SubStyle == "karaoke" {
+							sliced = transcriber.ChunkSubtitlesToWords(sliced, 3)
+						}
 						tmpSubFile := filepath.Join(outputDir, fmt.Sprintf(".sub_%03d.ass", j.index+1))
-						if err := transcriber.ExportASS(sliced, tmpSubFile, cfg.SubFontSize, cfg.Shorts); err == nil {
+						var exportErr error
+						if cfg.SubStyle == "karaoke" {
+							exportErr = transcriber.ExportKaraokeASS(sliced, tmpSubFile, cfg.SubFontSize, cfg.Shorts)
+						} else {
+							exportErr = transcriber.ExportASS(sliced, tmpSubFile, cfg.SubFontSize, cfg.Shorts)
+						}
+						if exportErr == nil {
 							subPath = tmpSubFile
 							defer os.Remove(tmpSubFile)
 						}

@@ -100,8 +100,12 @@ func buildFilterGraph(cfg *Config, hasWatermark, hasOverlayText bool, subPath st
 				return fmt.Sprintf("%s[base];[1:v]scale=150:-1[wm];[base][wm]%s", bgFilter, watermarkOverlay)
 			}
 			return bgFilter
+		} else if cfg.ShortsStyle == "smart-crop" {
+			// Smart Subject Motion Auto-Crop
+			filters = append(filters, "crop=w=ih*(9/16):h=ih:x='(iw-w)/2':y=0,scale=1080:1920")
+		} else {
+			filters = append(filters, "crop=ih*(9/16):ih,scale=1080:1920")
 		}
-		filters = append(filters, "crop=ih*(9/16):ih,scale=1080:1920")
 	}
 
 	// 2. Burnt-In Subtitles (subtitles filter)
