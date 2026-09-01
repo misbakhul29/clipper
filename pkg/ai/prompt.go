@@ -15,8 +15,8 @@ type AIHighlight struct {
 	Title string `json:"title"`
 }
 
-// BuildHighlightPrompts constructs system and user prompts with compacted timestamped transcripts.
-func BuildHighlightPrompts(entries []transcriber.SubtitleEntry, targetLang string) (systemPrompt string, userPrompt string) {
+// BuildHighlightPrompts constructs system and user prompts with compacted timestamped transcripts and appropriate duration rules.
+func BuildHighlightPrompts(entries []transcriber.SubtitleEntry, targetLang string, isShorts bool) (systemPrompt string, userPrompt string) {
 	groupedEntries := groupSubtitleEntries(entries, 15.0)
 
 	var sb strings.Builder
@@ -31,17 +31,30 @@ func BuildHighlightPrompts(entries []transcriber.SubtitleEntry, targetLang strin
 		langInstruction = fmt.Sprintf("The 'title' field MUST be written in %s language.", targetLang)
 	}
 
-	systemPrompt = fmt.Sprintf(`You are an expert video editor AI for YouTube Shorts & TikTok.
+	var roleDesc string
+	var durationRules string
+
+	if isShorts {
+		roleDesc = "You are an expert video editor AI for YouTube Shorts & TikTok."
+		durationRules = `CRITICAL RULES FOR CLIP DURATION & FORMAT:
+1. Each clip MUST be between 20 seconds and 60 seconds long.
+2. NEVER output clips shorter than 15 seconds. Ensure the start and end timestamps cover a full, complete conversation or funny scene.`
+	} else {
+		roleDesc = "You are an expert video editor AI for YouTube video highlights and compilations."
+		durationRules = `CRITICAL RULES FOR CLIP DURATION & FORMAT:
+1. Each clip MUST be between 1 minute (60 seconds) and 5 minutes (300 seconds) long.
+2. NEVER output clips shorter than 60 seconds (1 minute). Ensure the start and end timestamps cover a full, complete topic, scene, or in-depth discussion.`
+	}
+
+	systemPrompt = fmt.Sprintf(`%s
 Analyze the provided timestamped video transcript and identify 2 to 5 most engaging, funny, viral, or key highlight moments.
 
-CRITICAL RULES FOR CLIP DURATION & FORMAT:
-1. Each clip MUST be between 20 seconds and 60 seconds long.
-2. NEVER output clips shorter than 15 seconds. Ensure the start and end timestamps cover a full, complete conversation or funny scene.
+%s
 3. The "start" and "end" timestamps must be exact strings formatted as "HH:MM:SS" or "MM:SS".
 %s
 
 Your output MUST be a strict JSON array of objects with keys: "start", "end", and "title" (short descriptive label).
-Do NOT include any markdown codeblocks or explanation. Return ONLY the raw JSON array.`, langInstruction)
+Do NOT include any markdown codeblocks or explanation. Return ONLY the raw JSON array.`, roleDesc, durationRules, langInstruction)
 
 	userPrompt = fmt.Sprintf("Here is the timestamped transcript:\n\n%s", sb.String())
 	return systemPrompt, userPrompt

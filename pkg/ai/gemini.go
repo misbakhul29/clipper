@@ -39,13 +39,13 @@ type GeminiError struct {
 }
 
 // AnalyzeHighlightsGemini sends transcript entries to Google Gemini REST API.
-func AnalyzeHighlightsGemini(entries []transcriber.SubtitleEntry, apiKey, model, targetLang string) ([]AIHighlight, error) {
+func AnalyzeHighlightsGemini(entries []transcriber.SubtitleEntry, apiKey, model, targetLang string, isShorts bool) ([]AIHighlight, error) {
 	resolvedKey, resolvedModel, err := resolveAPIKeyAndModel(apiKey, "GEMINI_API_KEY", model, "gemini-2.0-flash", "Gemini")
 	if err != nil {
 		return nil, err
 	}
 
-	systemPrompt, userPrompt := BuildHighlightPrompts(entries, targetLang)
+	systemPrompt, userPrompt := BuildHighlightPrompts(entries, targetLang, isShorts)
 
 	reqBody := GeminiRequest{
 		Contents: []GeminiContent{

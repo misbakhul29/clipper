@@ -103,7 +103,8 @@ func (c *Clipper) Process(cfg *Config) error {
 			if err != nil {
 				return fmt.Errorf("failed to fetch or transcribe subtitles: %w", err)
 			}
-			fmt.Printf("Analyzing %d subtitle entries via AI (%s / %s, target lang: %s)...\n", len(subEntries), cfg.AIConfig.APIRouter, cfg.AIConfig.Model, lang)
+			cfg.AIConfig.IsShorts = cfg.Shorts
+			fmt.Printf("Analyzing %d subtitle entries via AI (%s / %s, is_shorts: %v, target lang: %s)...\n", len(subEntries), cfg.AIConfig.APIRouter, cfg.AIConfig.Model, cfg.Shorts, lang)
 			highlights, err := ai.AnalyzeHighlightsMultiProvider(subEntries, cfg.AIConfig, lang)
 			if err != nil {
 				return fmt.Errorf("AI highlight analysis failed: %w", err)

@@ -72,18 +72,39 @@ func TestParseAIHighlightsJSON_NoisyTags(t *testing.T) {
 	}
 }
 
-func TestBuildHighlightPrompts(t *testing.T) {
+func TestBuildHighlightPrompts_Shorts(t *testing.T) {
 	entries := []transcriber.SubtitleEntry{
 		{Start: "00:00:01", End: "00:00:05", Text: "Halo semuanya"},
 		{Start: "00:00:06", End: "00:00:10", Text: "selamat datang di video ini"},
 	}
 
-	sysPrompt, userPrompt := BuildHighlightPrompts(entries, "id")
+	sysPrompt, userPrompt := BuildHighlightPrompts(entries, "id", true)
+	if !strings.Contains(sysPrompt, "YouTube Shorts & TikTok") {
+		t.Errorf("expected YouTube Shorts & TikTok in sysPrompt, got: %s", sysPrompt)
+	}
+	if !strings.Contains(sysPrompt, "between 20 seconds and 60 seconds") {
+		t.Errorf("expected shorts duration rule in sysPrompt, got: %s", sysPrompt)
+	}
 	if !strings.Contains(sysPrompt, "Bahasa Indonesia") {
 		t.Errorf("expected Indonesian language instruction in sysPrompt, got: %s", sysPrompt)
 	}
 	if !strings.Contains(userPrompt, "Halo semuanya") {
 		t.Errorf("expected transcript text in userPrompt, got: %s", userPrompt)
+	}
+}
+
+func TestBuildHighlightPrompts_NonShorts(t *testing.T) {
+	entries := []transcriber.SubtitleEntry{
+		{Start: "00:00:01", End: "00:00:05", Text: "Halo semuanya"},
+		{Start: "00:00:06", End: "00:00:10", Text: "selamat datang di video ini"},
+	}
+
+	sysPrompt, _ := BuildHighlightPrompts(entries, "en", false)
+	if !strings.Contains(sysPrompt, "YouTube video highlights and compilations") {
+		t.Errorf("expected long-form highlights in sysPrompt, got: %s", sysPrompt)
+	}
+	if !strings.Contains(sysPrompt, "between 1 minute (60 seconds) and 5 minutes (300 seconds)") {
+		t.Errorf("expected 1 to 5 min duration rule in sysPrompt, got: %s", sysPrompt)
 	}
 }
 

@@ -46,8 +46,8 @@ type OpenRouterRequest = OpenAICompatibleRequest
 type OpenRouterResponse = OpenAICompatibleResponse
 
 // callOpenAICompatibleAPI sends highlight detection prompts to any OpenAI-compatible completions endpoint.
-func callOpenAICompatibleAPI(endpoint string, entries []transcriber.SubtitleEntry, apiKey, model, targetLang string) ([]AIHighlight, error) {
-	systemPrompt, userPrompt := BuildHighlightPrompts(entries, targetLang)
+func callOpenAICompatibleAPI(endpoint string, entries []transcriber.SubtitleEntry, apiKey, model, targetLang string, isShorts bool) ([]AIHighlight, error) {
+	systemPrompt, userPrompt := BuildHighlightPrompts(entries, targetLang, isShorts)
 
 	reqBody := OpenAICompatibleRequest{
 		Model: model,
