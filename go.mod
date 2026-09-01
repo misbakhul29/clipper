@@ -1,4 +1,4 @@
-module clipping
+module github.com/misbakhul29/clipper
 
 go 1.26.5
 

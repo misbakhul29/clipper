@@ -8,10 +8,10 @@ import (
 	"strings"
 	"sync"
 
-	"clipping/pkg/ai"
-	"clipping/pkg/detector"
-	"clipping/pkg/downloader"
-	"clipping/pkg/transcriber"
+	"github.com/misbakhul29/clipper/pkg/ai"
+	"github.com/misbakhul29/clipper/pkg/detector"
+	"github.com/misbakhul29/clipper/pkg/downloader"
+	"github.com/misbakhul29/clipper/pkg/transcriber"
 )
 
 // Clipper orchestrates the video processing tasks.

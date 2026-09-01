@@ -10,7 +10,7 @@ import (
 	"runtime"
 	"strings"
 
-	"clipping/pkg/downloader"
+	"github.com/misbakhul29/clipper/pkg/downloader"
 )
 
 // SubtitleEntry represents a timestamped text entry from a subtitle file.

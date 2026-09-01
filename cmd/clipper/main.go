@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"clipping/pkg/clipper"
+	"github.com/misbakhul29/clipper/pkg/clipper"
 )
 
 func main() {

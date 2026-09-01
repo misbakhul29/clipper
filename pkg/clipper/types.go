@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"strings"
 
-	"clipping/pkg/ai"
+	"github.com/misbakhul29/clipper/pkg/ai"
 )
 
 func sanitizeFilename(s string) string {

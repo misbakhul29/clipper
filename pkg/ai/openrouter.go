@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"clipping/pkg/transcriber"
+	"github.com/misbakhul29/clipper/pkg/transcriber"
 )
 
 // AIHighlight represents a highlight clip recommended by the AI.
