@@ -34,6 +34,31 @@ func (c *Clipper) Process(cfg *Config) error {
 		return fmt.Errorf("configuration error: %w", err)
 	}
 
+	if cfg.CleanCache {
+		freed, count, err := downloader.CleanCache(cfg.CacheDir, cfg.CleanDays)
+		if err != nil {
+			return fmt.Errorf("failed to clean cache: %w", err)
+		}
+		fmt.Printf("Cache cleanup complete: %d items removed, %.2f MB freed\n", count, float64(freed)/(1024*1024))
+		return nil
+	}
+
+	inputs := cfg.GetBatchInputs()
+	if len(inputs) > 1 {
+		fmt.Printf("=== Batch Queue Mode Enabled: Processing %d videos ===\n", len(inputs))
+		for i, inputPath := range inputs {
+			fmt.Printf("\n>>> [Batch %d/%d] Processing video: %s <<<\n", i+1, len(inputs), inputPath)
+			subCfg := *cfg
+			subCfg.InputFile = inputPath
+			subCfg.BatchList = ""
+			if err := c.Process(&subCfg); err != nil {
+				fmt.Printf("ERROR in batch item %d (%s): %v\n", i+1, inputPath, err)
+			}
+		}
+		fmt.Println("\n=== Batch Queue Execution Completed! ===")
+		return nil
+	}
+
 	originalInput := cfg.InputFile
 
 	// Check if InputFile is a YouTube URL
@@ -134,12 +159,36 @@ func (c *Clipper) Process(cfg *Config) error {
 		outputDir = "clips"
 	}
 
+	ext := filepath.Ext(cfg.InputFile)
+	baseName := strings.TrimSuffix(filepath.Base(cfg.InputFile), ext)
+
+	if cfg.DryRun {
+		fmt.Printf("\n=== DRY-RUN MODE ENABLED (No video files will be rendered) ===\n")
+		fmt.Printf("Input File    : %s\n", cfg.InputFile)
+		fmt.Printf("Output Dir    : %s\n", outputDir)
+		fmt.Printf("Total Segments: %d\n", len(cfg.Segments))
+		fmt.Printf("Mode          : %s, Strategy: %s, Shorts: %v (style: %s)\n", cfg.Mode, cfg.Strategy, cfg.Shorts, cfg.ShortsStyle)
+		if cfg.SubFontPath != "" {
+			fmt.Printf("Custom Font   : %s\n", cfg.SubFontPath)
+		}
+		fmt.Println("--------------------------------------------------")
+		for i, seg := range cfg.Segments {
+			_, _, durSec, _ := CalculateDuration(seg.Start, seg.End)
+			outName := fmt.Sprintf("%s_clip_%03d%s", baseName, i+1, ext)
+			if seg.Title != "" {
+				outName = fmt.Sprintf("%s_%s%s", baseName, sanitizeFilename(seg.Title), ext)
+			}
+			fmt.Printf("[%d/%d] Segment: %s -> %s (Duration: %.2fs) -> %s\n",
+				i+1, len(cfg.Segments), seg.Start, seg.End, durSec, filepath.Join(outputDir, outName))
+		}
+		fmt.Println("--------------------------------------------------")
+		fmt.Println("=== DRY-RUN COMPLETED SUCCESSFULLY ===")
+		return nil
+	}
+
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
 		return fmt.Errorf("failed to create output directory '%s': %w", outputDir, err)
 	}
-
-	ext := filepath.Ext(cfg.InputFile)
-	baseName := strings.TrimSuffix(filepath.Base(cfg.InputFile), ext)
 
 	numWorkers := cfg.Concurrency
 	if numWorkers <= 0 {
@@ -209,20 +258,19 @@ func (c *Clipper) Process(cfg *Config) error {
 			return fmt.Errorf("segment %d (%s -> %s) error: %w", i+1, seg.Start, seg.End, err)
 		}
 
-		var segFileName string
-		title := strings.TrimSpace(seg.Title)
-		if title != "" {
-			title = strings.ReplaceAll(title, " ", "_")
-			segFileName = fmt.Sprintf("%s_%s%s", baseName, title, ext)
-		} else {
-			segFileName = fmt.Sprintf("%s_clip_%03d%s", baseName, i+1, ext)
-		}
-
-		segPath := filepath.Join(outputDir, segFileName)
+		var segPath string
 		isTemp := false
+
 		if cfg.Mode == ModeMerge {
-			segPath = filepath.Join(outputDir, fmt.Sprintf(".tmp_%s_clip_%03d%s", baseName, i+1, ext))
+			segPath = filepath.Join(outputDir, fmt.Sprintf(".temp_seg_%03d%s", i+1, ext))
 			isTemp = true
+		} else {
+			if seg.Title != "" {
+				cleanTitle := sanitizeFilename(seg.Title)
+				segPath = filepath.Join(outputDir, fmt.Sprintf("%s_%s%s", baseName, cleanTitle, ext))
+			} else {
+				segPath = filepath.Join(outputDir, fmt.Sprintf("%s_clip_%03d%s", baseName, i+1, ext))
+			}
 		}
 
 		jobs <- job{
@@ -235,7 +283,7 @@ func (c *Clipper) Process(cfg *Config) error {
 	}
 	close(jobs)
 
-	// Launch worker pool
+	// Worker Pool
 	var wg sync.WaitGroup
 	for w := 0; w < numWorkers; w++ {
 		wg.Add(1)
@@ -253,11 +301,15 @@ func (c *Clipper) Process(cfg *Config) error {
 							sliced = transcriber.ChunkSubtitlesToWords(sliced, 3)
 						}
 						tmpSubFile := filepath.Join(outputDir, fmt.Sprintf(".sub_%03d.ass", j.index+1))
+						fontName := ""
+						if cfg.SubFontPath != "" {
+							fontName = strings.TrimSuffix(filepath.Base(cfg.SubFontPath), filepath.Ext(cfg.SubFontPath))
+						}
 						var exportErr error
 						if cfg.SubStyle == "karaoke" {
-							exportErr = transcriber.ExportKaraokeASS(sliced, tmpSubFile, cfg.SubFontSize, cfg.Shorts)
+							exportErr = transcriber.ExportKaraokeASSWithFont(sliced, tmpSubFile, cfg.SubFontSize, cfg.Shorts, fontName)
 						} else {
-							exportErr = transcriber.ExportASS(sliced, tmpSubFile, cfg.SubFontSize, cfg.Shorts)
+							exportErr = transcriber.ExportASSWithFont(sliced, tmpSubFile, cfg.SubFontSize, cfg.Shorts, fontName)
 						}
 						if exportErr == nil {
 							subPath = tmpSubFile

@@ -2,11 +2,24 @@ package clipper
 
 import (
 	"fmt"
+	"os"
 	"runtime"
 	"strings"
 
 	"clipping/pkg/ai"
 )
+
+func sanitizeFilename(s string) string {
+	var builder strings.Builder
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-' {
+			builder.WriteRune(r)
+		} else if r == ' ' {
+			builder.WriteRune('_')
+		}
+	}
+	return builder.String()
+}
 
 // Mode specifies how the cut segments should be saved.
 type Mode string
@@ -55,17 +68,53 @@ type Config struct {
 	BurnSubtitles bool                `json:"burn_subtitles"`// Hardcode/burn-in subtitles directly onto video clips
 	SubStyle      string              `json:"sub_style"`    // Subtitle style: "karaoke" (TikTok 2-word chunks) or "standard"
 	SubFontSize   int                 `json:"sub_font_size"` // Subtitle font size for burnt-in captions (default: 48)
+	SubFontPath   string              `json:"sub_font_path"`// Path to custom font file (.ttf / .otf) for burnt-in captions
 	UseWhisper    bool                `json:"use_whisper"`   // Force local Whisper AI for speech-to-text transcription
 	AIConfig      ai.AIProviderConfig `json:"ai_config"`    // Multi-provider AI config
 	OpenRouterKey string              `json:"openrouter_key"`// OpenRouter API Key (legacy fallback)
 	AIModel       string              `json:"ai_model"`     // AI model name (legacy fallback)
+	DryRun        bool                `json:"dry_run"`      // Dry-run mode: analyze & preview commands without rendering video
+	BatchList     string              `json:"batch_list"`    // Path to text file containing list of video URLs/files (one per line)
+	CleanCache    bool                `json:"clean_cache"`   // Clean cache directory
+	CleanDays     int                 `json:"clean_days"`    // Delete cache files older than N days (0 = clean all)
 	Segments      []Segment           `json:"segments"`
+}
+
+// GetBatchInputs parses multiple input URLs or file paths from BatchList or comma-separated InputFile.
+func (c *Config) GetBatchInputs() []string {
+	var inputs []string
+	if c.BatchList != "" {
+		if data, err := os.ReadFile(c.BatchList); err == nil {
+			lines := strings.Split(string(data), "\n")
+			for _, l := range lines {
+				l = strings.TrimSpace(l)
+				if l != "" && !strings.HasPrefix(l, "#") {
+					inputs = append(inputs, l)
+				}
+			}
+		}
+	}
+	if len(inputs) == 0 && strings.Contains(c.InputFile, ",") {
+		for _, part := range strings.Split(c.InputFile, ",") {
+			p := strings.TrimSpace(part)
+			if p != "" {
+				inputs = append(inputs, p)
+			}
+		}
+	}
+	if len(inputs) == 0 && c.InputFile != "" {
+		inputs = append(inputs, c.InputFile)
+	}
+	return inputs
 }
 
 // Validate checks the configuration for missing or invalid parameters.
 func (c *Config) Validate() error {
-	if c.InputFile == "" {
-		return fmt.Errorf("input video file path is required")
+	if c.CleanCache {
+		return nil
+	}
+	if c.InputFile == "" && c.BatchList == "" {
+		return fmt.Errorf("input video file path or -batch-list is required")
 	}
 	if len(c.Segments) == 0 && c.AutoDetect == "" {
 		return fmt.Errorf("either segments or auto_detect must be provided")

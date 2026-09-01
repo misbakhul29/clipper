@@ -39,7 +39,12 @@ func main() {
 		burnSubtitles bool
 		subStyle      string
 		subFontSize   int
+		subFontPath   string
 		useWhisper    bool
+		dryRun        bool
+		batchList     string
+		cleanCache    bool
+		cleanDays     int
 		openRouterKey string
 		aiModel       string
 		segments      string
@@ -50,7 +55,7 @@ func main() {
 	flag.BoolVar(&interactive, "i", false, "Run interactive config generator wizard")
 	flag.BoolVar(&interactive, "interactive", false, "Run interactive config generator wizard")
 
-	flag.StringVar(&inputFile, "input", "", "Path to source input video file or YouTube URL")
+	flag.StringVar(&inputFile, "input", "", "Path to source input video file, YouTube URL, or comma-separated URLs")
 	flag.StringVar(&outputDir, "outdir", ".", "Output directory for cut videos")
 	flag.StringVar(&outputFile, "output", "", "Output filename (used in merge mode)")
 	flag.StringVar(&modeStr, "mode", "split", "Operation mode: 'split' (separate files) or 'merge' (combined file)")
@@ -73,7 +78,12 @@ func main() {
 	flag.BoolVar(&burnSubtitles, "subtitles", false, "Hardcode/burn-in subtitles directly onto video clips")
 	flag.StringVar(&subStyle, "sub-style", "karaoke", "Subtitle style for burnt-in captions ('karaoke' for TikTok 2-word chunks, or 'standard')")
 	flag.IntVar(&subFontSize, "sub-font-size", 48, "Subtitle font size for burnt-in captions")
+	flag.StringVar(&subFontPath, "sub-font-path", "", "Custom font file path (.ttf / .otf) for burnt-in captions")
 	flag.BoolVar(&useWhisper, "use-whisper", false, "Force local Whisper AI for speech-to-text transcription")
+	flag.BoolVar(&dryRun, "dry-run", false, "Analyze segments and preview commands without rendering video files")
+	flag.StringVar(&batchList, "batch-list", "", "Path to text file containing video URLs/files (one per line)")
+	flag.BoolVar(&cleanCache, "clean-cache", false, "Clean cache directory and exit")
+	flag.IntVar(&cleanDays, "clean-days", 0, "Retention threshold in days for cache cleanup (0 = delete all)")
 	var aiRouter, aiKey string
 	flag.StringVar(&aiRouter, "ai-router", "openrouter", "AI API Provider ('openrouter', 'gemini', 'deepseek', 'openai')")
 	flag.StringVar(&aiKey, "ai-key", "", "API Key for selected AI router (e.g. Gemini/DeepSeek/OpenAI key)")
@@ -227,8 +237,23 @@ func main() {
 	if isFlagPassed("sub-font-size") {
 		cfg.SubFontSize = subFontSize
 	}
+	if isFlagPassed("sub-font-path") {
+		cfg.SubFontPath = subFontPath
+	}
 	if isFlagPassed("use-whisper") {
 		cfg.UseWhisper = useWhisper
+	}
+	if isFlagPassed("dry-run") {
+		cfg.DryRun = dryRun
+	}
+	if isFlagPassed("batch-list") {
+		cfg.BatchList = batchList
+	}
+	if isFlagPassed("clean-cache") {
+		cfg.CleanCache = cleanCache
+	}
+	if isFlagPassed("clean-days") {
+		cfg.CleanDays = cleanDays
 	}
 	if isFlagPassed("ai-router") {
 		cfg.AIConfig.APIRouter = aiRouter
@@ -255,7 +280,7 @@ func main() {
 		cfg.Segments = append(cfg.Segments, parsedSegs...)
 	}
 
-	if cfg.InputFile == "" || (len(cfg.Segments) == 0 && cfg.AutoDetect == "") {
+	if !cfg.CleanCache && cfg.InputFile == "" && cfg.BatchList == "" {
 		flag.Usage()
 		os.Exit(1)
 	}
