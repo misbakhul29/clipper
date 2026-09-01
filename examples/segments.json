@@ -1,19 +1,45 @@
 {
-  "input": "test_video.mp4",
+  "input": "https://www.youtube.com/watch?v=xid1sE8lEec",
   "output_dir": "./output_clips",
   "output": "merged_highlight.mp4",
-  "mode": "merge",
+  "mode": "split",
   "strategy": "accurate",
+  "shorts": true,
+  "shorts_style": "blur",
+  "quality": "1080p",
+  "cache_dir": "./cache",
+  "no_cache": false,
+  "concurrency": 0,
+  "watermark": "",
+  "watermark_pos": "top-right",
+  "overlay_text": "",
+  "text_pos": "bottom-center",
+  "font_size": 32,
+  "font_color": "white",
+  "auto_detect": "ai",
+  "translate_lang": "id",
+  "burn_subtitles": true,
+  "sub_style": "karaoke",
+  "sub_font_size": 54,
+  "sub_font_path": "",
+  "use_whisper": false,
+  "dry_run": false,
+  "batch_list": "",
+  "ai_config": {
+    "api_router": "gemini",
+    "api_key": "YOUR_GEMINI_API_KEY",
+    "model": "gemini-3.6-flash"
+  },
   "segments": [
     {
-      "start": "00:00:01",
-      "end": "00:00:03",
-      "title": "intro"
+      "start": "00:00:10",
+      "end": "00:00:30",
+      "title": "Intro Highlight"
     },
     {
-      "start": "00:00:05",
-      "end": "00:00:08",
-      "title": "highlight"
+      "start": "00:01:15",
+      "end": "00:01:45",
+      "title": "Main Conversation"
     }
   ]
 }
