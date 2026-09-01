@@ -79,6 +79,8 @@ func (c *Clipper) Process(cfg *Config) error {
 		return fmt.Errorf("input file does not exist: %s", cfg.InputFile)
 	}
 
+	var cachedSubEntries []transcriber.SubtitleEntry
+
 	// Auto Detection if segments are empty
 	if len(cfg.Segments) == 0 && cfg.AutoDetect != "" {
 		fmt.Printf("Auto-detecting segments using '%s' detection mode...\n", cfg.AutoDetect)
@@ -103,6 +105,7 @@ func (c *Clipper) Process(cfg *Config) error {
 			if err != nil {
 				return fmt.Errorf("failed to fetch or transcribe subtitles: %w", err)
 			}
+			cachedSubEntries = subEntries
 			cfg.AIConfig.IsShorts = cfg.Shorts
 			fmt.Printf("Analyzing %d subtitle entries via AI (%s / %s, is_shorts: %v, target lang: %s)...\n", len(subEntries), cfg.AIConfig.APIRouter, cfg.AIConfig.Model, cfg.Shorts, lang)
 			highlights, err := ai.AnalyzeHighlightsMultiProvider(subEntries, cfg.AIConfig, lang)
@@ -201,24 +204,29 @@ func (c *Clipper) Process(cfg *Config) error {
 
 	var allSubEntries []transcriber.SubtitleEntry
 	if cfg.BurnSubtitles {
-		fmt.Printf("Fetching subtitles for burnt-in captions...\n")
-		lang := cfg.TranslateLang
-		if lang == "" {
-			lang = "id"
-		}
-		var subs []transcriber.SubtitleEntry
-		var err error
-		if cfg.UseWhisper {
-			subs, err = transcriber.TranscribeWithWhisper(cfg.InputFile, cfg.CacheDir, lang)
+		if len(cachedSubEntries) > 0 {
+			allSubEntries = cachedSubEntries
+			fmt.Printf("Reusing %d cached subtitle entries for burn-in captions!\n", len(allSubEntries))
 		} else {
-			subs, err = transcriber.FetchSubtitles(originalInput, cfg.CacheDir, lang)
-			if err != nil || len(subs) == 0 {
-				subs, err = transcriber.TranscribeWithWhisper(cfg.InputFile, cfg.CacheDir, lang)
+			fmt.Printf("Fetching subtitles for burnt-in captions...\n")
+			lang := cfg.TranslateLang
+			if lang == "" {
+				lang = "id"
 			}
-		}
-		if err == nil && len(subs) > 0 {
-			allSubEntries = subs
-			fmt.Printf("Loaded %d subtitle entries for burn-in captions!\n", len(allSubEntries))
+			var subs []transcriber.SubtitleEntry
+			var err error
+			if cfg.UseWhisper {
+				subs, err = transcriber.TranscribeWithWhisper(cfg.InputFile, cfg.CacheDir, lang)
+			} else {
+				subs, err = transcriber.FetchSubtitles(originalInput, cfg.CacheDir, lang)
+				if err != nil || len(subs) == 0 {
+					subs, err = transcriber.TranscribeWithWhisper(cfg.InputFile, cfg.CacheDir, lang)
+				}
+			}
+			if err == nil && len(subs) > 0 {
+				allSubEntries = subs
+				fmt.Printf("Loaded %d subtitle entries for burn-in captions!\n", len(allSubEntries))
+			}
 		}
 	}
 
@@ -298,6 +306,18 @@ func (c *Clipper) Process(cfg *Config) error {
 				if len(allSubEntries) > 0 {
 					sliced := transcriber.SliceSubtitles(allSubEntries, j.startSec, j.startSec+j.durationSec)
 					if len(sliced) > 0 {
+						// On-demand token-saving translation for this specific clip segment
+						if cfg.TranslateLang != "" && (cfg.AIConfig.APIKey != "" || os.Getenv("OPENROUTER_API_KEY") != "" || os.Getenv("GEMINI_API_KEY") != "" || os.Getenv("DEEPSEEK_API_KEY") != "" || os.Getenv("OPENAI_API_KEY") != "") {
+							fmt.Printf("[%d/%d] Translating %d subtitle cues to '%s' via AI (%s / %s)...\n",
+								j.index+1, len(cfg.Segments), len(sliced), cfg.TranslateLang, cfg.AIConfig.APIRouter, cfg.AIConfig.Model)
+							translated, transErr := ai.TranslateSubtitlesMultiProvider(sliced, cfg.AIConfig, cfg.TranslateLang)
+							if transErr != nil {
+								fmt.Printf("[AI WARN] Subtitle translation for segment %d failed (%v), using original subtitles.\n", j.index+1, transErr)
+							} else if len(translated) > 0 {
+								sliced = translated
+							}
+						}
+
 						if cfg.SubStyle == "karaoke" {
 							sliced = transcriber.ChunkSubtitlesToWords(sliced, 3)
 						}

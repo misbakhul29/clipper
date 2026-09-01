@@ -38,6 +38,63 @@ type GeminiError struct {
 	Status  string `json:"status"`
 }
 
+// callGeminiGenerate sends text generation prompt to Google Gemini REST API.
+func callGeminiGenerate(apiKey, model, prompt string) (string, error) {
+	reqBody := GeminiRequest{
+		Contents: []GeminiContent{
+			{
+				Parts: []GeminiPart{
+					{Text: prompt},
+				},
+			},
+		},
+	}
+
+	jsonData, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal Gemini request: %w", err)
+	}
+
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", model, apiKey)
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return "", fmt.Errorf("failed to create http request for Gemini: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 300 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("Gemini API request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read Gemini API response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("Gemini API returned HTTP status %d: %s", resp.StatusCode, string(respBytes))
+	}
+
+	var geminiResp GeminiResponse
+	if err := json.Unmarshal(respBytes, &geminiResp); err != nil {
+		return "", fmt.Errorf("failed to unmarshal Gemini response: %w", err)
+	}
+
+	if geminiResp.Error != nil && geminiResp.Error.Message != "" {
+		return "", fmt.Errorf("Gemini API error: %s", geminiResp.Error.Message)
+	}
+
+	if len(geminiResp.Candidates) == 0 || len(geminiResp.Candidates[0].Content.Parts) == 0 {
+		return "", fmt.Errorf("Gemini API returned no text candidate in response")
+	}
+
+	return geminiResp.Candidates[0].Content.Parts[0].Text, nil
+}
+
 // AnalyzeHighlightsGemini sends transcript entries to Google Gemini REST API.
 func AnalyzeHighlightsGemini(entries []transcriber.SubtitleEntry, apiKey, model, targetLang string, isShorts bool) ([]AIHighlight, error) {
 	resolvedKey, resolvedModel, err := resolveAPIKeyAndModel(apiKey, "GEMINI_API_KEY", model, "gemini-2.0-flash", "Gemini")
@@ -46,59 +103,27 @@ func AnalyzeHighlightsGemini(entries []transcriber.SubtitleEntry, apiKey, model,
 	}
 
 	systemPrompt, userPrompt := BuildHighlightPrompts(entries, targetLang, isShorts)
-
-	reqBody := GeminiRequest{
-		Contents: []GeminiContent{
-			{
-				Parts: []GeminiPart{
-					{Text: systemPrompt + "\n\n" + userPrompt},
-				},
-			},
-		},
-	}
-
-	jsonData, err := json.Marshal(reqBody)
+	aiContent, err := callGeminiGenerate(resolvedKey, resolvedModel, systemPrompt+"\n\n"+userPrompt)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal Gemini request: %w", err)
+		return nil, err
 	}
-
-	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", resolvedModel, resolvedKey)
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create http request for Gemini: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 300 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("Gemini API request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read Gemini API response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Gemini API returned HTTP status %d: %s", resp.StatusCode, string(respBytes))
-	}
-
-	var geminiResp GeminiResponse
-	if err := json.Unmarshal(respBytes, &geminiResp); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal Gemini response: %w", err)
-	}
-
-	if geminiResp.Error != nil && geminiResp.Error.Message != "" {
-		return nil, fmt.Errorf("Gemini API error: %s", geminiResp.Error.Message)
-	}
-
-	if len(geminiResp.Candidates) == 0 || len(geminiResp.Candidates[0].Content.Parts) == 0 {
-		return nil, fmt.Errorf("Gemini API returned no text candidate in response")
-	}
-
-	aiContent := geminiResp.Candidates[0].Content.Parts[0].Text
 	return ParseAIHighlightsJSON(aiContent)
+}
+
+// TranslateSubtitlesGemini translates subtitle entries into targetLang using Google Gemini API.
+func TranslateSubtitlesGemini(entries []transcriber.SubtitleEntry, apiKey, model, targetLang string) ([]transcriber.SubtitleEntry, error) {
+	if len(entries) == 0 || targetLang == "" {
+		return entries, nil
+	}
+	resolvedKey, resolvedModel, err := resolveAPIKeyAndModel(apiKey, "GEMINI_API_KEY", model, "gemini-2.0-flash", "Gemini")
+	if err != nil {
+		return entries, err
+	}
+
+	systemPrompt, userPrompt := BuildSubtitleTranslationPrompts(entries, targetLang)
+	aiContent, err := callGeminiGenerate(resolvedKey, resolvedModel, systemPrompt+"\n\n"+userPrompt)
+	if err != nil {
+		return entries, err
+	}
+	return ParseSubtitleTranslationJSON(aiContent, entries)
 }

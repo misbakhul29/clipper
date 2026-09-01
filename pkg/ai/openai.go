@@ -15,3 +15,14 @@ func AnalyzeHighlightsOpenAI(entries []transcriber.SubtitleEntry, apiKey, model,
 
 	return callOpenAICompatibleAPI(openAIEndpoint, entries, resolvedKey, resolvedModel, targetLang, isShorts)
 }
+
+// TranslateSubtitlesOpenAI translates subtitle entries via OpenAI API.
+func TranslateSubtitlesOpenAI(entries []transcriber.SubtitleEntry, apiKey, model, targetLang string) ([]transcriber.SubtitleEntry, error) {
+	resolvedKey, resolvedModel, err := resolveAPIKeyAndModel(apiKey, "OPENAI_API_KEY", model, "gpt-4o-mini", "OpenAI")
+	if err != nil {
+		return entries, err
+	}
+
+	return callOpenAICompatibleTranslation(openAIEndpoint, entries, resolvedKey, resolvedModel, targetLang)
+}
+

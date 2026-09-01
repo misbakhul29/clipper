@@ -60,6 +60,115 @@ Do NOT include any markdown codeblocks or explanation. Return ONLY the raw JSON 
 	return systemPrompt, userPrompt
 }
 
+// SubtitleCueItem is used for structured translation prompt payloads.
+type SubtitleCueItem struct {
+	ID   int    `json:"id"`
+	Text string `json:"text"`
+}
+
+// BuildSubtitleTranslationPrompts constructs prompts to translate subtitle cues to targetLang.
+func BuildSubtitleTranslationPrompts(entries []transcriber.SubtitleEntry, targetLang string) (systemPrompt string, userPrompt string) {
+	langName := targetLang
+	if targetLang == "id" || strings.HasPrefix(strings.ToLower(targetLang), "ind") {
+		langName = "Bahasa Indonesia (Indonesian)"
+	}
+
+	var items []SubtitleCueItem
+	for i, e := range entries {
+		items = append(items, SubtitleCueItem{
+			ID:   i + 1,
+			Text: e.Text,
+		})
+	}
+
+	itemsJSON, _ := json.MarshalIndent(items, "", "  ")
+
+	systemPrompt = fmt.Sprintf(`You are an expert video subtitle and closed-caption translator.
+Translate the provided video subtitle cues into %s.
+
+CRITICAL TRANSLATION RULES:
+1. Preserve the natural spoken conversational tone, humor, slang, and context of the video.
+2. Keep subtitle lines concise and easily readable for fast video playback.
+3. You MUST return EXACTLY %d translated items matching the input IDs from 1 to %d in order.
+4. Output MUST be a strict JSON array of objects with keys "id" (number) and "text" (translated string).
+Example:
+[
+  {"id": 1, "text": "Terjemahan baris 1"},
+  {"id": 2, "text": "Terjemahan baris 2"}
+]
+Do NOT include markdown formatting, codeblocks, or extra explanation. Return ONLY the raw JSON array.`, langName, len(entries), len(entries))
+
+	userPrompt = fmt.Sprintf("Here are the %d subtitle cues to translate:\n\n%s", len(entries), string(itemsJSON))
+	return systemPrompt, userPrompt
+}
+
+// ParseSubtitleTranslationJSON parses translated subtitle cues and maps them back to original entries preserving timestamps.
+func ParseSubtitleTranslationJSON(content string, originalEntries []transcriber.SubtitleEntry) ([]transcriber.SubtitleEntry, error) {
+	content = strings.TrimSpace(content)
+	if strings.HasPrefix(content, "```") {
+		idx := strings.Index(content, "\n")
+		if idx != -1 {
+			content = content[idx+1:]
+		}
+		if lastIdx := strings.LastIndex(content, "```"); lastIdx != -1 {
+			content = content[:lastIdx]
+		}
+		content = strings.TrimSpace(content)
+	}
+
+	firstIdx := strings.Index(content, "[")
+	if firstIdx != -1 {
+		depth := 0
+		endIdx := -1
+		for i := firstIdx; i < len(content); i++ {
+			if content[i] == '[' {
+				depth++
+			} else if content[i] == ']' {
+				depth--
+				if depth == 0 {
+					endIdx = i
+					break
+				}
+			}
+		}
+		if endIdx != -1 {
+			content = content[firstIdx : endIdx+1]
+		}
+	}
+
+	content = repairTruncatedJSON(content)
+
+	// Try parsing as []SubtitleCueItem
+	var cueItems []SubtitleCueItem
+	if err := json.Unmarshal([]byte(content), &cueItems); err == nil && len(cueItems) > 0 {
+		out := make([]transcriber.SubtitleEntry, len(originalEntries))
+		copy(out, originalEntries)
+
+		for _, item := range cueItems {
+			idx := item.ID - 1
+			if idx >= 0 && idx < len(out) && strings.TrimSpace(item.Text) != "" {
+				out[idx].Text = strings.TrimSpace(item.Text)
+			}
+		}
+		return out, nil
+	}
+
+	// Fallback 1: Try parsing as []string
+	var stringItems []string
+	if err := json.Unmarshal([]byte(content), &stringItems); err == nil && len(stringItems) > 0 {
+		out := make([]transcriber.SubtitleEntry, len(originalEntries))
+		copy(out, originalEntries)
+		for i, text := range stringItems {
+			if i < len(out) && strings.TrimSpace(text) != "" {
+				out[i].Text = strings.TrimSpace(text)
+			}
+		}
+		return out, nil
+	}
+
+	return originalEntries, fmt.Errorf("failed to parse subtitle translation response: %s", content)
+}
+
 // ParseAIHighlightsJSON parses raw JSON string or markdown-wrapped JSON string into []AIHighlight.
 func ParseAIHighlightsJSON(content string) ([]AIHighlight, error) {
 	content = strings.TrimSpace(content)

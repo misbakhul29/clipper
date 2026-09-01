@@ -85,3 +85,30 @@ func TestFindMatchingSubtitleFile_AvoidFalsePositiveSubstrings(t *testing.T) {
 		t.Errorf("findMatchingSubtitleFile(lang='id') = %q; want %q", matchID, idPath)
 	}
 }
+
+func TestFindAnySubtitleFile(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "clipper_any_sub_test_*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// 1. Empty dir returns empty string
+	if match := findAnySubtitleFile(tempDir); match != "" {
+		t.Errorf("findAnySubtitleFile on empty dir returned %q; want empty string", match)
+	}
+
+	// 2. Create Japanese and Korean-orig subtitle files
+	jaPath := filepath.Join(tempDir, "sub_sample.ja.vtt")
+	_ = os.WriteFile(jaPath, []byte("WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nKonnichiwa"), 0644)
+
+	koOrigPath := filepath.Join(tempDir, "sub_sample.ko-orig.vtt")
+	_ = os.WriteFile(koOrigPath, []byte("WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nAnnyeong"), 0644)
+
+	// Should prefer orig
+	match := findAnySubtitleFile(tempDir)
+	if match != koOrigPath {
+		t.Errorf("findAnySubtitleFile = %q; want orig match %q", match, koOrigPath)
+	}
+}
+

@@ -130,3 +130,52 @@ func TestResolveAPIKeyAndModel(t *testing.T) {
 		t.Error("expected error when no key or env var is present")
 	}
 }
+
+func TestBuildSubtitleTranslationPrompts(t *testing.T) {
+	entries := []transcriber.SubtitleEntry{
+		{Start: "00:00:01", End: "00:00:03", Text: "Hello world"},
+		{Start: "00:00:04", End: "00:00:07", Text: "Welcome to our coding show"},
+	}
+
+	sysPrompt, userPrompt := BuildSubtitleTranslationPrompts(entries, "id")
+	if !strings.Contains(sysPrompt, "Bahasa Indonesia") {
+		t.Errorf("expected Indonesian language instruction in sysPrompt, got: %s", sysPrompt)
+	}
+	if !strings.Contains(userPrompt, "Hello world") {
+		t.Errorf("expected subtitle text in userPrompt, got: %s", userPrompt)
+	}
+}
+
+func TestParseSubtitleTranslationJSON(t *testing.T) {
+	entries := []transcriber.SubtitleEntry{
+		{Start: "00:00:01.00", End: "00:00:03.00", Text: "Hello world"},
+		{Start: "00:00:04.00", End: "00:00:07.00", Text: "Welcome to our coding show"},
+	}
+
+	// 1. Array of objects
+	jsonOutput := `[
+		{"id": 1, "text": "Halo dunia"},
+		{"id": 2, "text": "Selamat datang di acara koding kami"}
+	]`
+	translated, err := ParseSubtitleTranslationJSON(jsonOutput, entries)
+	if err != nil {
+		t.Fatalf("unexpected error parsing translation: %v", err)
+	}
+	if len(translated) != 2 || translated[0].Text != "Halo dunia" || translated[0].Start != "00:00:01.00" {
+		t.Errorf("translation object mismatch: %+v", translated)
+	}
+
+	// 2. Array of strings fallback wrapped in markdown
+	stringArrayOutput := "```json\n" + `[
+		"Halo dunia string",
+		"Selamat datang string"
+	]` + "\n```"
+	translatedStr, err := ParseSubtitleTranslationJSON(stringArrayOutput, entries)
+	if err != nil {
+		t.Fatalf("unexpected error parsing string array translation: %v", err)
+	}
+	if len(translatedStr) != 2 || translatedStr[0].Text != "Halo dunia string" || translatedStr[1].Text != "Selamat datang string" {
+		t.Errorf("translation string array mismatch: %+v", translatedStr)
+	}
+}
+
