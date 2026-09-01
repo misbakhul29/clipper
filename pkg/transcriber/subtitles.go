@@ -257,8 +257,16 @@ func SliceSubtitles(entries []SubtitleEntry, startSec, endSec float64) []Subtitl
 
 // ExportASS exports subtitle entries into an Advanced SubStation Alpha (.ass) format file for FFmpeg burn-in.
 func ExportASS(entries []SubtitleEntry, outputPath string, fontSize int, isShorts bool) error {
+	return ExportASSWithFont(entries, outputPath, fontSize, isShorts, "Arial")
+}
+
+// ExportASSWithFont exports subtitle entries into ASS format with custom font name.
+func ExportASSWithFont(entries []SubtitleEntry, outputPath string, fontSize int, isShorts bool, fontName string) error {
 	if fontSize <= 0 {
 		fontSize = 48
+	}
+	if fontName == "" {
+		fontName = "Arial"
 	}
 
 	marginV := 160
@@ -275,7 +283,7 @@ func ExportASS(entries []SubtitleEntry, outputPath string, fontSize int, isShort
 
 	sb.WriteString("[V4+ Styles]\n")
 	sb.WriteString("Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n")
-	sb.WriteString(fmt.Sprintf("Style: Default,Arial,%d,&H00FFFFFF,&H00000000,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,4,1,2,40,40,%d,1\n\n", fontSize, marginV))
+	sb.WriteString(fmt.Sprintf("Style: Default,%s,%d,&H00FFFFFF,&H00000000,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,4,1,2,40,40,%d,1\n\n", fontName, fontSize, marginV))
 
 	sb.WriteString("[Events]\n")
 	sb.WriteString("Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")
@@ -373,8 +381,16 @@ func ChunkSubtitlesToWords(entries []SubtitleEntry, maxWords int) []SubtitleEntr
 
 // ExportKaraokeASS exports subtitle entries into TikTok-style ASS format with yellow active word styling and thick outline.
 func ExportKaraokeASS(entries []SubtitleEntry, outputPath string, fontSize int, isShorts bool) error {
+	return ExportKaraokeASSWithFont(entries, outputPath, fontSize, isShorts, "Impact")
+}
+
+// ExportKaraokeASSWithFont exports subtitle entries into TikTok-style ASS format with custom font name.
+func ExportKaraokeASSWithFont(entries []SubtitleEntry, outputPath string, fontSize int, isShorts bool, fontName string) error {
 	if fontSize <= 0 {
 		fontSize = 54
+	}
+	if fontName == "" {
+		fontName = "Impact"
 	}
 
 	marginV := 180
@@ -392,7 +408,7 @@ func ExportKaraokeASS(entries []SubtitleEntry, outputPath string, fontSize int, 
 	sb.WriteString("[V4+ Styles]\n")
 	sb.WriteString("Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n")
 	// Style: Vibrant Yellow (&H0000FFFF) text with thick black outline (&H00000000) and shadow
-	sb.WriteString(fmt.Sprintf("Style: Default,Impact,%d,&H0000FFFF,&H00000000,&H00000000,&H90000000,-1,0,0,0,105,105,1,0,1,5,2,2,40,40,%d,1\n\n", fontSize, marginV))
+	sb.WriteString(fmt.Sprintf("Style: Default,%s,%d,&H0000FFFF,&H00000000,&H00000000,&H90000000,-1,0,0,0,105,105,1,0,1,5,2,2,40,40,%d,1\n\n", fontName, fontSize, marginV))
 
 	sb.WriteString("[Events]\n")
 	sb.WriteString("Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")
