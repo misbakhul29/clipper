@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"clipping/pkg/transcriber"
+	"github.com/misbakhul29/clipper/pkg/transcriber"
 )
 
 // AnalyzeHighlightsDeepSeek sends transcript entries to DeepSeek API (OpenAI-compatible format).

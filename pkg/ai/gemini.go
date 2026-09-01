@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"clipping/pkg/transcriber"
+	"github.com/misbakhul29/clipper/pkg/transcriber"
 )
 
 type GeminiRequest struct {

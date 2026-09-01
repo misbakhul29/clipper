@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"clipping/pkg/downloader"
+	"github.com/misbakhul29/clipper/pkg/downloader"
 )
 
 // TranscribeWithWhisper uses local Whisper CLI to transcribe video/audio into []SubtitleEntry

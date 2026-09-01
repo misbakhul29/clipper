@@ -19,6 +19,23 @@ Sistem pemotong video otomatis berbasis **Go (Golang)** yang terintegrasi dengan
 
 ---
 
+## 📦 Instalasi
+
+### Install Langsung via Go (`go install`)
+```bash
+go install github.com/misbakhul29/clipper/cmd/clipper@latest
+```
+*Pastikan `$GOPATH/bin` (misal: `~/go/bin`) sudah terdaftar di environment variable `PATH` OS Anda agar perintah `clipper` dapat langsung dijalankan dari terminal manapun.*
+
+### Build dari Source Code
+```bash
+git clone https://github.com/misbakhul29/clipper.git
+cd clipper
+go build -o bin/clipper ./cmd/clipper
+```
+
+---
+
 ## 📖 Dokumentasi & Konfigurasi
 
 - 📑 **[CLI_USAGE.md](CLI_USAGE.md)**: Dokumentasi lengkap baris perintah (*CLI Flags*), opsi Multi-Provider AI, dan contoh skenario penggunaan.
