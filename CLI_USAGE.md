@@ -8,16 +8,16 @@ Dokumentasi lengkap baris perintah (*CLI Flags*), konfigurasi **Multi-Provider A
 
 ### 1. Install Langsung dari Repositori Remote GitHub
 ```bash
-go install github.com/misbakhul29/clipper/cmd/clipper@latest
+go install github.com/misbakhul29/clipper@latest
 ```
 
 ### 2. Build Lokal dari Source Code
 ```bash
 # Build biner lokal di folder proyek (./bin/clipper)
-go build -o bin/clipper ./cmd/clipper
+go build -o bin/clipper .
 
 # ATAU Install lokal ke sistem PATH (~/go/bin/clipper)
-go install ./cmd/clipper
+go install .
 ```
 
 ---
