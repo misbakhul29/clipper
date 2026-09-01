@@ -165,23 +165,61 @@ func FetchSubtitles(inputStr, outputDir, lang string) ([]SubtitleEntry, error) {
 	}
 
 	subTemplate := filepath.Join(videoCacheDir, "sub_%(id)s")
-	subLangArg := "id,id-*,en,en-*,orig,.*"
+
+	// Attempt 1: Try requested target language
 	if lang != "" {
-		subLangArg = fmt.Sprintf("%s,%s-*,id,id-*,en,en-*,orig,.*", lang, lang)
+		args := []string{
+			"--write-auto-sub",
+			"--write-sub",
+			"--sub-lang", fmt.Sprintf("%s,%s-*", lang, lang),
+			"--sub-format", "vtt",
+			"--skip-download",
+			"-o", subTemplate,
+			inputStr,
+		}
+		cmd := exec.Command(binPath, args...)
+		_ = cmd.Run()
+
+		if match := findMatchingSubtitleFile(videoCacheDir, lang); match != "" {
+			data, err := os.ReadFile(match)
+			if err == nil && len(data) > 0 {
+				return ParseVTT(string(data))
+			}
+		}
 	}
 
-	args := []string{
+	// Attempt 2: Try original video track (.*-orig, e.g. ko-orig, ja-orig, en-orig) to avoid 429 machine-translation errors
+	argsOrig := []string{
 		"--write-auto-sub",
 		"--write-sub",
-		"--sub-lang", subLangArg,
+		"--sub-lang", ".*-orig,orig",
 		"--sub-format", "vtt",
 		"--skip-download",
 		"-o", subTemplate,
 		inputStr,
 	}
+	cmdOrig := exec.Command(binPath, argsOrig...)
+	_ = cmdOrig.Run()
 
-	cmd := exec.Command(binPath, args...)
-	_ = cmd.Run()
+	if match := findAnySubtitleFile(videoCacheDir); match != "" {
+		data, err := os.ReadFile(match)
+		if err == nil && len(data) > 0 {
+			return ParseVTT(string(data))
+		}
+	}
+
+	// Attempt 3: Try English or fallback
+	argsFallback := []string{
+		"--write-auto-sub",
+		"--write-sub",
+		"--sub-lang", "en,en-*",
+		"--sub-format", "vtt",
+		"--skip-download",
+		"-o", subTemplate,
+		inputStr,
+	}
+	cmdFallback := exec.Command(binPath, argsFallback...)
+	_ = cmdFallback.Run()
 
 	match := findMatchingSubtitleFile(videoCacheDir, lang)
 	if match == "" {
