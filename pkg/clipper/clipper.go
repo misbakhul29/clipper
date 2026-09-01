@@ -78,10 +78,10 @@ func (c *Clipper) Process(cfg *Config) error {
 			if err != nil {
 				return fmt.Errorf("failed to fetch or transcribe subtitles: %w", err)
 			}
-			fmt.Printf("Analyzing %d subtitle entries via OpenRouter AI (%s, target lang: %s)...\n", len(subEntries), cfg.AIModel, lang)
-			highlights, err := ai.AnalyzeHighlights(subEntries, cfg.OpenRouterKey, cfg.AIModel, lang)
+			fmt.Printf("Analyzing %d subtitle entries via AI (%s / %s, target lang: %s)...\n", len(subEntries), cfg.AIConfig.APIRouter, cfg.AIConfig.Model, lang)
+			highlights, err := ai.AnalyzeHighlightsMultiProvider(subEntries, cfg.AIConfig, lang)
 			if err != nil {
-				return fmt.Errorf("OpenRouter AI highlight analysis failed: %w", err)
+				return fmt.Errorf("AI highlight analysis failed: %w", err)
 			}
 			for _, h := range highlights {
 				cfg.Segments = append(cfg.Segments, Segment{
@@ -156,8 +156,17 @@ func (c *Clipper) Process(cfg *Config) error {
 		if lang == "" {
 			lang = "id"
 		}
-		subs, err := transcriber.FetchSubtitles(originalInput, cfg.CacheDir, lang)
-		if err == nil {
+		var subs []transcriber.SubtitleEntry
+		var err error
+		if cfg.UseWhisper {
+			subs, err = transcriber.TranscribeWithWhisper(cfg.InputFile, cfg.CacheDir, lang)
+		} else {
+			subs, err = transcriber.FetchSubtitles(originalInput, cfg.CacheDir, lang)
+			if err != nil || len(subs) == 0 {
+				subs, err = transcriber.TranscribeWithWhisper(cfg.InputFile, cfg.CacheDir, lang)
+			}
+		}
+		if err == nil && len(subs) > 0 {
 			allSubEntries = subs
 			fmt.Printf("Loaded %d subtitle entries for burn-in captions!\n", len(allSubEntries))
 		}
@@ -252,12 +261,14 @@ func (c *Clipper) Process(cfg *Config) error {
 						}
 						if exportErr == nil {
 							subPath = tmpSubFile
-							defer os.Remove(tmpSubFile)
 						}
 					}
 				}
 
 				err := c.runner.CutSegment(cfg, j.startSec, j.durationSec, j.segPath, subPath)
+				if subPath != "" {
+					_ = os.Remove(subPath)
+				}
 				results <- jobResult{
 					index:   j.index,
 					segPath: j.segPath,

@@ -35,9 +35,11 @@ go install ./cmd/clipper
 | `-translate-lang` | `string` | `"id"` | Kode bahasa target terjemahan judul & subtitle (misal: `"id"`, `"en"`) |
 | `-use-whisper` | `bool` | `false` | Paksa transkripsi suara offline menggunakan **Whisper AI** lokal |
 | **Kecerdasan Buatan (AI) & Auto-Detect** | | | |
-| `-auto-detect` | `string` | `""` | Mode deteksi segmen otomatis: `"ai"` (OpenRouter AI highlights), `"silence"`, atau `"scene"` |
+| `-auto-detect` | `string` | `""` | Mode deteksi segmen otomatis: `"ai"` (AI highlights), `"silence"`, atau `"scene"` |
+| `-ai-router` | `string` | `"openrouter"` | Provider AI: `"openrouter"`, `"gemini"`, `"deepseek"`, `"openai"` (atau `"codex"`) |
+| `-ai-key` | `string` | `""` | API Key untuk AI Provider yang dipilih |
 | `-openrouter-key` | `string` | `""` | API Key OpenRouter (default mengambil dari env `$OPENROUTER_API_KEY`) |
-| `-ai-model` | `string` | `"openrouter/free"` | Nama model AI OpenRouter (misal: `"nvidia/nemotron-3.5-lightning:free"`, `"openrouter/free"`) |
+| `-ai-model` | `string` | `"openrouter/free"` | Nama model AI (misal: `"gemini-2.0-flash"`, `"deepseek-chat"`, `"gpt-4o-mini"`) |
 | **YouTube & Kualitas** | | | |
 | `-quality` | `string` | `"best"` | Kualitas unduhan YouTube: `"best"`, `"1080p"`, `"720p"`, `"480p"`, `"360p"`, `"worst"` |
 | `-cache-dir` | `string` | `"./cache"` | Direktori tempat menyimpan cache video & transkrip YouTube |

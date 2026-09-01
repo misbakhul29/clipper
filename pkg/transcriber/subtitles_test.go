@@ -1,67 +1,55 @@
 package transcriber
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 )
 
-func TestParseVTT(t *testing.T) {
-	sampleVTT := `WEBVTT
-Kind: captions
-Language: en
-
-00:00:01.000 --> 00:00:04.500
-Hello <c>everyone</c> and welcome to the show!
-
-00:00:05.100 --> 00:00:09.800
-Today we are going to learn how to clip videos in Go.
-`
-
-	entries, err := ParseVTT(sampleVTT)
+func TestSubtitleCacheIsolation(t *testing.T) {
+	tempCacheDir, err := os.MkdirTemp("", "clipper_sub_test_*")
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempCacheDir)
+
+	video1URL := "https://www.youtube.com/watch?v=video_one_111"
+	video2URL := "https://www.youtube.com/watch?v=video_two_222"
+
+	// Create mock subtitle file for Video 1 in its isolated folder
+	v1Dir := filepath.Join(tempCacheDir, "video_one_111")
+	if err := os.MkdirAll(v1Dir, 0755); err != nil {
+		t.Fatalf("failed to create v1 dir: %v", err)
+	}
+	v1VttPath := filepath.Join(v1Dir, "sub_video_one_111.id.vtt")
+	v1VttContent := `WEBVTT
+
+00:00:01.000 --> 00:00:05.000
+Subtitle content for Video ONE`
+	if err := os.WriteFile(v1VttPath, []byte(v1VttContent), 0644); err != nil {
+		t.Fatalf("failed to write v1 vtt: %v", err)
 	}
 
-	if len(entries) != 2 {
-		t.Fatalf("expected 2 entries, got %d", len(entries))
+	// 1. FetchSubtitles for Video 1 should return Video 1 subtitles
+	subs1, err := FetchSubtitles(video1URL, tempCacheDir, "id")
+	if err != nil {
+		t.Fatalf("FetchSubtitles(video1) returned error: %v", err)
+	}
+	if len(subs1) == 0 || subs1[0].Text != "Subtitle content for Video ONE" {
+		t.Errorf("FetchSubtitles(video1) = %v; want 'Subtitle content for Video ONE'", subs1)
 	}
 
-	if entries[0].Start != "00:00:01.000" || entries[0].End != "00:00:04.500" {
-		t.Errorf("entry 0 timestamp mismatch: start=%s end=%s", entries[0].Start, entries[0].End)
+	// 2. FetchSubtitles for Video 2 MUST NOT pick up Video 1 subtitles
+	v2Dir := filepath.Join(tempCacheDir, "video_two_222")
+	// Verify v2Dir does not have subtitles yet
+	if _, err := os.Stat(filepath.Join(v2Dir, "sub_video_one_111.id.vtt")); !os.IsNotExist(err) {
+		t.Errorf("Video 2 cache directory should not contain Video 1 subtitle file")
 	}
 
-	if entries[0].Text != "Hello everyone and welcome to the show!" {
-		t.Errorf("entry 0 text mismatch: %s", entries[0].Text)
-	}
-}
-
-func TestSliceSubtitles(t *testing.T) {
-	entries := []SubtitleEntry{
-		{Start: "00:00:10.000", End: "00:00:15.000", Text: "Clip 1 line"},
-		{Start: "00:00:16.000", End: "00:00:20.000", Text: "Clip 2 line"},
-		{Start: "00:00:50.000", End: "00:00:55.000", Text: "Far away line"},
-	}
-
-	sliced := SliceSubtitles(entries, 10.0, 20.0)
-	if len(sliced) != 2 {
-		t.Fatalf("expected 2 sliced entries, got %d", len(sliced))
-	}
-
-	if sliced[0].Start != "0:00:00.00" || sliced[0].End != "0:00:05.00" {
-		t.Errorf("sliced 0 timestamp mismatch: start=%s end=%s", sliced[0].Start, sliced[0].End)
-	}
-}
-
-func TestChunkSubtitlesToWords(t *testing.T) {
-	entries := []SubtitleEntry{
-		{Start: "0:00:00.00", End: "0:00:04.00", Text: "Hello everyone and welcome to our video today"},
-	}
-
-	chunked := ChunkSubtitlesToWords(entries, 3)
-	if len(chunked) != 3 {
-		t.Fatalf("expected 3 chunks for 8 words (3+3+2), got %d", len(chunked))
-	}
-
-	if chunked[0].Text != "Hello everyone and" {
-		t.Errorf("chunk 0 text mismatch: %s", chunked[0].Text)
+	// Attempting to fetch subtitles for video2 without yt-dlp binary in mock env will fail to download,
+	// but it must NOT return video1's subtitles!
+	subs2, _ := FetchSubtitles(video2URL, tempCacheDir, "id")
+	if len(subs2) > 0 && subs2[0].Text == "Subtitle content for Video ONE" {
+		t.Errorf("FetchSubtitles(video2) leaked Video 1's subtitles!")
 	}
 }

@@ -74,8 +74,11 @@ func main() {
 	flag.StringVar(&subStyle, "sub-style", "karaoke", "Subtitle style for burnt-in captions ('karaoke' for TikTok 2-word chunks, or 'standard')")
 	flag.IntVar(&subFontSize, "sub-font-size", 48, "Subtitle font size for burnt-in captions")
 	flag.BoolVar(&useWhisper, "use-whisper", false, "Force local Whisper AI for speech-to-text transcription")
+	var aiRouter, aiKey string
+	flag.StringVar(&aiRouter, "ai-router", "openrouter", "AI API Provider ('openrouter', 'gemini', 'deepseek', 'openai')")
+	flag.StringVar(&aiKey, "ai-key", "", "API Key for selected AI router (e.g. Gemini/DeepSeek/OpenAI key)")
 	flag.StringVar(&openRouterKey, "openrouter-key", "", "OpenRouter API Key for AI highlight detection (defaults to $OPENROUTER_API_KEY)")
-	flag.StringVar(&aiModel, "ai-model", "openrouter/free", "OpenRouter AI model name")
+	flag.StringVar(&aiModel, "ai-model", "openrouter/free", "AI model name (e.g. 'openrouter/free', 'gemini-2.0-flash', 'deepseek-chat', 'gpt-4o-mini')")
 	flag.StringVar(&segments, "segments", "", "Comma-separated segment timestamps (e.g. '00:10-00:25,01:00-01:30')")
 
 	flag.Usage = func() {
@@ -157,79 +160,88 @@ func main() {
 	}
 
 	// CLI flags override or supply missing values
-	if inputFile != "" {
+	// Override config values ONLY if flags were explicitly passed on CLI
+	if isFlagPassed("input") {
 		cfg.InputFile = inputFile
 	}
-	if outputDir != "" && cfg.OutputDir == "" {
+	if isFlagPassed("outdir") || cfg.OutputDir == "" {
 		cfg.OutputDir = outputDir
 	}
-	if outputFile != "" {
+	if isFlagPassed("output") {
 		cfg.OutputFile = outputFile
 	}
-	if modeStr != "" && cfg.Mode == "" {
+	if isFlagPassed("mode") {
 		cfg.Mode = clipper.Mode(modeStr)
 	}
-	if stratStr != "" && cfg.Strategy == "" {
+	if isFlagPassed("strategy") {
 		cfg.Strategy = clipper.CutStrategy(stratStr)
 	}
-	if isShorts {
-		cfg.Shorts = true
+	if isFlagPassed("shorts") {
+		cfg.Shorts = isShorts
 	}
-	if shortsStyle != "" {
+	if isFlagPassed("shorts-style") {
 		cfg.ShortsStyle = shortsStyle
 	}
-	if quality != "" {
+	if isFlagPassed("quality") {
 		cfg.Quality = quality
 	}
-	if cacheDir != "" && cfg.CacheDir == "" {
+	if isFlagPassed("cache-dir") {
 		cfg.CacheDir = cacheDir
 	}
-	if noCache {
-		cfg.NoCache = true
+	if isFlagPassed("no-cache") {
+		cfg.NoCache = noCache
 	}
-	if concurrency > 0 {
+	if isFlagPassed("concurrency") {
 		cfg.Concurrency = concurrency
 	}
-	if watermarkPath != "" {
+	if isFlagPassed("watermark") {
 		cfg.WatermarkPath = watermarkPath
 	}
-	if watermarkPos != "" {
+	if isFlagPassed("watermark-pos") {
 		cfg.WatermarkPos = watermarkPos
 	}
-	if overlayText != "" {
+	if isFlagPassed("text") {
 		cfg.OverlayText = overlayText
 	}
-	if textPos != "" {
+	if isFlagPassed("text-pos") {
 		cfg.TextPos = textPos
 	}
-	if fontSize > 0 {
+	if isFlagPassed("font-size") {
 		cfg.FontSize = fontSize
 	}
-	if fontColor != "" {
+	if isFlagPassed("font-color") {
 		cfg.FontColor = fontColor
 	}
-	if autoDetect != "" {
+	if isFlagPassed("auto-detect") {
 		cfg.AutoDetect = autoDetect
 	}
-	if translateLang != "" {
+	if isFlagPassed("translate-lang") {
 		cfg.TranslateLang = translateLang
 	}
-	if burnSubtitles {
-		cfg.BurnSubtitles = true
+	if isFlagPassed("burn-subtitles") || isFlagPassed("subtitles") {
+		cfg.BurnSubtitles = burnSubtitles
 	}
-	if subStyle != "" {
+	if isFlagPassed("sub-style") {
 		cfg.SubStyle = subStyle
 	}
-	if subFontSize > 0 {
+	if isFlagPassed("sub-font-size") {
 		cfg.SubFontSize = subFontSize
 	}
-	if useWhisper {
-		cfg.UseWhisper = true
+	if isFlagPassed("use-whisper") {
+		cfg.UseWhisper = useWhisper
 	}
-	if openRouterKey != "" {
+	if isFlagPassed("ai-router") {
+		cfg.AIConfig.APIRouter = aiRouter
+	}
+	if isFlagPassed("ai-key") {
+		cfg.AIConfig.APIKey = aiKey
+	}
+	if isFlagPassed("openrouter-key") {
+		cfg.AIConfig.APIKey = openRouterKey
 		cfg.OpenRouterKey = openRouterKey
 	}
-	if aiModel != "" {
+	if isFlagPassed("ai-model") {
+		cfg.AIConfig.Model = aiModel
 		cfg.AIModel = aiModel
 	}
 
@@ -414,4 +426,14 @@ func saveConfig(filePath string, cfg clipper.Config) error {
 	}
 
 	return os.WriteFile(filePath, data, 0644)
+}
+
+func isFlagPassed(name string) bool {
+	found := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			found = true
+		}
+	})
+	return found
 }

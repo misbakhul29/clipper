@@ -73,9 +73,12 @@ func (f *FFmpegRunner) CutSegment(cfg *Config, startSec, durationSec float64, ou
 		}
 	}
 
+	vEncArgs := selectVideoEncoderArgs(f.FFmpegPath)
+	args = append(args, vEncArgs...)
 	args = append(args,
-		"-c:v", "mpeg4",
 		"-c:a", "aac",
+		"-b:a", "320k",
+		"-ar", "48000",
 		"-avoid_negative_ts", "make_zero",
 		outputPath,
 	)
@@ -83,28 +86,91 @@ func (f *FFmpegRunner) CutSegment(cfg *Config, startSec, durationSec float64, ou
 	return f.runFFmpeg(args)
 }
 
+func isEncoderWorking(ffmpegPath, encoder string) bool {
+	cmd := exec.Command(ffmpegPath, "-f", "lavfi", "-i", "color=c=black:s=16x16:d=0.1", "-c:v", encoder, "-f", "null", "-")
+	return cmd.Run() == nil
+}
+
+func selectVideoEncoderArgs(ffmpegPath string) []string {
+	if isEncoderWorking(ffmpegPath, "libx264") {
+		return []string{
+			"-c:v", "libx264",
+			"-crf", "16",
+			"-preset", "slow",
+			"-pix_fmt", "yuv420p",
+			"-movflags", "+faststart",
+		}
+	}
+	if isEncoderWorking(ffmpegPath, "h264_nvenc") {
+		return []string{
+			"-c:v", "h264_nvenc",
+			"-cq", "16",
+			"-preset", "p6",
+			"-pix_fmt", "yuv420p",
+			"-movflags", "+faststart",
+		}
+	}
+	if isEncoderWorking(ffmpegPath, "libopenh264") {
+		return []string{
+			"-c:v", "libopenh264",
+			"-b:v", "20M",
+			"-pix_fmt", "yuv420p",
+			"-movflags", "+faststart",
+		}
+	}
+	// Fallback to MPEG-4 Ultra-HD Quality Scale (-q:v 1, -b:v 25M, -mbd rd -flags +mv4+aic)
+	return []string{
+		"-c:v", "mpeg4",
+		"-q:v", "1",
+		"-b:v", "25M",
+		"-mbd", "rd",
+		"-flags", "+mv4+aic",
+		"-cmp", "2",
+		"-subcmp", "2",
+		"-movflags", "+faststart",
+	}
+}
+
 func buildFilterGraph(cfg *Config, hasWatermark, hasOverlayText bool, subPath string) string {
 	var filters []string
 
-	// 1. Shorts Aspect Ratio Filter
+	// 1. Shorts Aspect Ratio Filter (High Quality Lanczos Resampling)
 	if cfg.Shorts {
 		if cfg.ShortsStyle == "blur" {
-			bgFilter := "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=20:5[bg];[0:v]scale=1080:1920:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2"
+			graph := "[0:v]scale=1080:1920:force_original_aspect_ratio=increase:flags=lanczos,crop=1080:1920,boxblur=20:5[bg];[0:v]scale=1080:1920:force_original_aspect_ratio=decrease:flags=lanczos[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2"
+
 			if subPath != "" {
 				escapedSub := strings.ReplaceAll(subPath, "\\", "/")
 				escapedSub = strings.ReplaceAll(escapedSub, ":", "\\:")
-				bgFilter = fmt.Sprintf("%s[vsub];[vsub]subtitles='%s'", bgFilter, escapedSub)
+				graph = fmt.Sprintf("%s,subtitles='%s'", graph, escapedSub)
 			}
+
+			if hasOverlayText {
+				textPos := getTextPosition(cfg.TextPos)
+				fontColor := cfg.FontColor
+				if fontColor == "" {
+					fontColor = "white"
+				}
+				fontSize := cfg.FontSize
+				if fontSize <= 0 {
+					fontSize = 32
+				}
+				escapedText := strings.ReplaceAll(cfg.OverlayText, "'", "'\\''")
+				drawtext := fmt.Sprintf("drawtext=text='%s':%s:fontsize=%d:fontcolor=%s:box=1:boxcolor=black@0.5:boxborderw=5",
+					escapedText, textPos, fontSize, fontColor)
+				graph = fmt.Sprintf("%s,%s", graph, drawtext)
+			}
+
 			if hasWatermark {
 				watermarkOverlay := getWatermarkPosition(cfg.WatermarkPos)
-				return fmt.Sprintf("%s[base];[1:v]scale=150:-1[wm];[base][wm]%s", bgFilter, watermarkOverlay)
+				graph = fmt.Sprintf("%s[vbase];[1:v]scale=150:-1[wm];[vbase][wm]%s", graph, watermarkOverlay)
 			}
-			return bgFilter
+			return graph
 		} else if cfg.ShortsStyle == "smart-crop" {
 			// Smart Subject Motion Auto-Crop
-			filters = append(filters, "crop=w='ih*(9/16)':h='ih':x='(iw-ow)/2':y=0,scale=1080:1920")
+			filters = append(filters, "crop=w='ih*(9/16)':h='ih':x='(iw-ow)/2':y=0,scale=1080:1920:flags=lanczos")
 		} else {
-			filters = append(filters, "crop=ih*(9/16):ih,scale=1080:1920")
+			filters = append(filters, "crop=ih*(9/16):ih,scale=1080:1920:flags=lanczos")
 		}
 	}
 
@@ -115,7 +181,7 @@ func buildFilterGraph(cfg *Config, hasWatermark, hasOverlayText bool, subPath st
 		filters = append(filters, fmt.Sprintf("subtitles='%s'", escapedSub))
 	}
 
-	// 2. Overlay Text (drawtext)
+	// 3. Overlay Text (drawtext)
 	if hasOverlayText {
 		textPos := getTextPosition(cfg.TextPos)
 		fontColor := cfg.FontColor
@@ -141,7 +207,7 @@ func buildFilterGraph(cfg *Config, hasWatermark, hasOverlayText bool, subPath st
 		if simpleChain != "" {
 			return fmt.Sprintf("[0:v]%s[v0];[1:v]scale=150:-1[wm];[v0][wm]%s", simpleChain, wmOverlay)
 		}
-		return fmt.Sprintf("[0:v][1:v]scale=150:-1[wm];[0:v][wm]%s", wmOverlay)
+		return fmt.Sprintf("[1:v]scale=150:-1[wm];[0:v][wm]%s", wmOverlay)
 	}
 
 	return simpleChain
