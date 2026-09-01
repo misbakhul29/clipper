@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+
+	"clipping/pkg/downloader"
 )
 
 // SubtitleEntry represents a timestamped text entry from a subtitle file.
@@ -25,50 +27,37 @@ func ParseVTT(content string) ([]SubtitleEntry, error) {
 	lines := strings.Split(content, "\n")
 	var entries []SubtitleEntry
 
-	var currentStart, currentEnd string
-	var currentText []string
+	for i := 0; i < len(lines); i++ {
+		line := strings.TrimSpace(lines[i])
+		if line == "" || line == "WEBVTT" || strings.HasPrefix(line, "NOTE") || isNumeric(line) {
+			continue
+		}
 
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
+		matches := vttTimeRegex.FindStringSubmatch(line)
+		if len(matches) == 3 {
+			start := normalizeTimestamp(matches[1])
+			end := normalizeTimestamp(matches[2])
 
-		// Check for timestamp line
-		if match := vttTimeRegex.FindStringSubmatch(line); len(match) > 2 {
-			// Save previous entry if exists
-			if currentStart != "" && len(currentText) > 0 {
-				fullText := strings.TrimSpace(strings.Join(currentText, " "))
-				if fullText != "" {
-					entries = append(entries, SubtitleEntry{
-						Start: normalizeTimestamp(currentStart),
-						End:   normalizeTimestamp(currentEnd),
-						Text:  cleanSubtitleText(fullText),
-					})
+			// Read sub text until empty line or next timestamp
+			var textLines []string
+			for j := i + 1; j < len(lines); j++ {
+				subLine := strings.TrimSpace(lines[j])
+				if subLine == "" || vttTimeRegex.MatchString(subLine) {
+					i = j - 1
+					break
 				}
-				currentText = nil
+				textLines = append(textLines, subLine)
+				i = j
 			}
 
-			currentStart = match[1]
-			currentEnd = match[2]
-			continue
-		}
-
-		if line == "" || strings.HasPrefix(line, "WEBVTT") || strings.HasPrefix(line, "NOTE") || isNumeric(line) {
-			continue
-		}
-
-		if currentStart != "" {
-			currentText = append(currentText, line)
-		}
-	}
-
-	// Save last entry
-	if currentStart != "" && len(currentText) > 0 {
-		fullText := strings.TrimSpace(strings.Join(currentText, " "))
-		if fullText != "" {
-			entries = append(entries, SubtitleEntry{
-				Start: normalizeTimestamp(currentStart),
-				End:   normalizeTimestamp(currentEnd),
-				Text:  cleanSubtitleText(fullText),
-			})
+			fullText := cleanSubtitleText(strings.Join(textLines, " "))
+			if fullText != "" {
+				entries = append(entries, SubtitleEntry{
+					Start: start,
+					End:   end,
+					Text:  fullText,
+				})
+			}
 		}
 	}
 
@@ -82,7 +71,7 @@ func ParseVTT(content string) ([]SubtitleEntry, error) {
 // FetchSubtitles attempts to retrieve subtitles for a YouTube URL or local file path.
 func FetchSubtitles(inputStr, outputDir, lang string) ([]SubtitleEntry, error) {
 	if outputDir == "" {
-		outputDir = "."
+		outputDir = "./cache"
 	}
 
 	// Case 1: Input is already a local .vtt or .srt file
@@ -94,22 +83,23 @@ func FetchSubtitles(inputStr, outputDir, lang string) ([]SubtitleEntry, error) {
 		return ParseVTT(string(data))
 	}
 
+	videoCacheDir := downloader.GetVideoCacheDir(outputDir, inputStr)
+	if err := os.MkdirAll(videoCacheDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create subtitle cache dir: %w", err)
+	}
+
 	// Case 2: YouTube URL download subtitles via yt-dlp
+	var cachedMatches []string
 	if lang != "" {
-		matches, _ := filepath.Glob(filepath.Join(outputDir, fmt.Sprintf("*%s*.vtt", lang)))
-		if len(matches) > 0 {
-			data, err := os.ReadFile(matches[0])
-			if err == nil && len(data) > 0 {
-				return ParseVTT(string(data))
-			}
-		}
-	} else {
-		matches, _ := filepath.Glob(filepath.Join(outputDir, "sub_*.vtt"))
-		if len(matches) > 0 {
-			data, err := os.ReadFile(matches[0])
-			if err == nil && len(data) > 0 {
-				return ParseVTT(string(data))
-			}
+		cachedMatches, _ = filepath.Glob(filepath.Join(videoCacheDir, fmt.Sprintf("*%s*.vtt", lang)))
+	}
+	if len(cachedMatches) == 0 {
+		cachedMatches, _ = filepath.Glob(filepath.Join(videoCacheDir, "*.vtt"))
+	}
+	if len(cachedMatches) > 0 {
+		data, err := os.ReadFile(cachedMatches[0])
+		if err == nil && len(data) > 0 {
+			return ParseVTT(string(data))
 		}
 	}
 
@@ -118,7 +108,7 @@ func FetchSubtitles(inputStr, outputDir, lang string) ([]SubtitleEntry, error) {
 		return nil, fmt.Errorf("yt-dlp binary required to fetch YouTube subtitles")
 	}
 
-	subTemplate := filepath.Join(outputDir, "sub_%(id)s")
+	subTemplate := filepath.Join(videoCacheDir, "sub_%(id)s")
 	subLangArg := "id,en,ko,all"
 	if lang != "" {
 		subLangArg = fmt.Sprintf("%s,id,en,ko,all", lang)
@@ -139,10 +129,10 @@ func FetchSubtitles(inputStr, outputDir, lang string) ([]SubtitleEntry, error) {
 
 	var matches []string
 	if lang != "" {
-		matches, _ = filepath.Glob(filepath.Join(outputDir, fmt.Sprintf("*%s*.vtt", lang)))
+		matches, _ = filepath.Glob(filepath.Join(videoCacheDir, fmt.Sprintf("*%s*.vtt", lang)))
 	}
 	if len(matches) == 0 {
-		matches, _ = filepath.Glob(filepath.Join(outputDir, "sub_*.vtt"))
+		matches, _ = filepath.Glob(filepath.Join(videoCacheDir, "*.vtt"))
 	}
 
 	if len(matches) == 0 {

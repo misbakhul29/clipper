@@ -156,8 +156,17 @@ func (c *Clipper) Process(cfg *Config) error {
 		if lang == "" {
 			lang = "id"
 		}
-		subs, err := transcriber.FetchSubtitles(originalInput, cfg.CacheDir, lang)
-		if err == nil {
+		var subs []transcriber.SubtitleEntry
+		var err error
+		if cfg.UseWhisper {
+			subs, err = transcriber.TranscribeWithWhisper(cfg.InputFile, cfg.CacheDir, lang)
+		} else {
+			subs, err = transcriber.FetchSubtitles(originalInput, cfg.CacheDir, lang)
+			if err != nil || len(subs) == 0 {
+				subs, err = transcriber.TranscribeWithWhisper(cfg.InputFile, cfg.CacheDir, lang)
+			}
+		}
+		if err == nil && len(subs) > 0 {
 			allSubEntries = subs
 			fmt.Printf("Loaded %d subtitle entries for burn-in captions!\n", len(allSubEntries))
 		}

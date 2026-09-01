@@ -20,8 +20,30 @@ func IsYouTubeURL(url string) bool {
 		strings.Contains(u, "youtube.com/") || strings.Contains(u, "youtu.be/")
 }
 
+// GetVideoCacheDir returns a per-video cache directory under baseCacheDir.
+// For YouTube URLs, it uses the video ID (e.g. ./cache/v12345).
+// For local files, it uses the sanitized video file title (e.g. ./cache/video_name).
+func GetVideoCacheDir(baseCacheDir, inputStr string) string {
+	if baseCacheDir == "" {
+		baseCacheDir = "./cache"
+	}
+	inputStr = strings.TrimSpace(inputStr)
+	if IsYouTubeURL(inputStr) {
+		if videoID := ExtractVideoID(inputStr); videoID != "" {
+			return filepath.Join(baseCacheDir, videoID)
+		}
+	} else if inputStr != "" && !strings.HasSuffix(inputStr, ".vtt") && !strings.HasSuffix(inputStr, ".srt") {
+		baseName := strings.TrimSuffix(filepath.Base(inputStr), filepath.Ext(inputStr))
+		cleanName := sanitizeFilename(baseName)
+		if cleanName != "" {
+			return filepath.Join(baseCacheDir, cleanName)
+		}
+	}
+	return baseCacheDir
+}
+
 // DownloadYouTubeVideo downloads a YouTube video given its URL to outputDir with requested quality.
-// If noCache is false, it looks for a cached file in outputDir matching the YouTube video ID.
+// If noCache is false, it looks for a cached file in per-video subfolder matching the YouTube video ID.
 func DownloadYouTubeVideo(urlStr, outputDir, quality string, noCache bool) (string, error) {
 	urlStr = strings.TrimSpace(urlStr)
 	if !IsYouTubeURL(urlStr) {
@@ -34,19 +56,30 @@ func DownloadYouTubeVideo(urlStr, outputDir, quality string, noCache bool) (stri
 	if quality == "" {
 		quality = "best"
 	}
-	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		return "", fmt.Errorf("failed to create directory '%s': %w", outputDir, err)
+
+	videoCacheDir := GetVideoCacheDir(outputDir, urlStr)
+	if err := os.MkdirAll(videoCacheDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create cache directory '%s': %w", videoCacheDir, err)
 	}
 
 	videoID := ExtractVideoID(urlStr)
 
 	// Step 0: Check cache if noCache is false
-	if !noCache && videoID != "" {
-		matches, _ := filepath.Glob(filepath.Join(outputDir, "*"+videoID+"*.mp4"))
+	if !noCache {
+		matches, _ := filepath.Glob(filepath.Join(videoCacheDir, "*.mp4"))
 		for _, m := range matches {
 			if info, err := os.Stat(m); err == nil && info.Size() > 0 {
 				fmt.Printf("[CACHE HIT] Found cached video (%s): %s\n", videoID, m)
 				return filepath.Abs(m)
+			}
+		}
+		if videoID != "" {
+			matchesRoot, _ := filepath.Glob(filepath.Join(outputDir, "*"+videoID+"*.mp4"))
+			for _, m := range matchesRoot {
+				if info, err := os.Stat(m); err == nil && info.Size() > 0 {
+					fmt.Printf("[CACHE HIT] Found legacy cached video (%s): %s\n", videoID, m)
+					return filepath.Abs(m)
+				}
 			}
 		}
 	}
@@ -55,7 +88,7 @@ func DownloadYouTubeVideo(urlStr, outputDir, quality string, noCache bool) (stri
 	binPath, err := ensureYtDlpBinary()
 	if err == nil && binPath != "" {
 		fmt.Printf("Downloading YouTube video via yt-dlp (quality: %s)...\n", quality)
-		file, err := downloadWithYtDlp(binPath, urlStr, outputDir, quality, videoID)
+		file, err := downloadWithYtDlp(binPath, urlStr, videoCacheDir, quality, videoID)
 		if err == nil {
 			return file, nil
 		}
@@ -63,7 +96,7 @@ func DownloadYouTubeVideo(urlStr, outputDir, quality string, noCache bool) (stri
 	}
 
 	// Step 2: Fallback to pure Go youtube library
-	return downloadWithGoLibrary(urlStr, outputDir)
+	return downloadWithGoLibrary(urlStr, videoCacheDir)
 }
 
 // ExtractVideoID extracts the YouTube video ID string from various URL formats.

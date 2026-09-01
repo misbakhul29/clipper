@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"clipping/pkg/downloader"
 )
 
 // TranscribeWithWhisper uses local Whisper CLI to transcribe video/audio into []SubtitleEntry
@@ -18,17 +20,21 @@ func TranscribeWithWhisper(videoPath, cacheDir, lang string) ([]SubtitleEntry, e
 		}
 	}
 
-	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+	videoCacheDir := downloader.GetVideoCacheDir(cacheDir, videoPath)
+	if err := os.MkdirAll(videoCacheDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create cache dir: %w", err)
 	}
 
 	baseName := strings.TrimSuffix(filepath.Base(videoPath), filepath.Ext(videoPath))
-	wavPath := filepath.Join(cacheDir, fmt.Sprintf("%s_whisper.wav", baseName))
-	vttPath := filepath.Join(cacheDir, fmt.Sprintf("%s_whisper.vtt", baseName))
+	wavPath := filepath.Join(videoCacheDir, fmt.Sprintf("%s_whisper.wav", baseName))
+	vttPath := filepath.Join(videoCacheDir, fmt.Sprintf("%s_whisper.vtt", baseName))
 
 	if fileExists(vttPath) {
 		fmt.Printf("[CACHE HIT] Found cached Whisper VTT subtitle: %s\n", vttPath)
-		return ParseVTT(vttPath)
+		data, err := os.ReadFile(vttPath)
+		if err == nil {
+			return ParseVTT(string(data))
+		}
 	}
 
 	// 1. Extract 16kHz Mono WAV using FFmpeg
@@ -49,7 +55,7 @@ func TranscribeWithWhisper(videoPath, cacheDir, lang string) ([]SubtitleEntry, e
 	args := []string{
 		wavPath,
 		"--output_format", "vtt",
-		"--output_dir", cacheDir,
+		"--output_dir", videoCacheDir,
 	}
 	if lang != "" {
 		args = append(args, "--language", lang)
@@ -61,10 +67,10 @@ func TranscribeWithWhisper(videoPath, cacheDir, lang string) ([]SubtitleEntry, e
 	}
 
 	// Rename output .vtt if needed
-	producedVTT := filepath.Join(cacheDir, fmt.Sprintf("%s_whisper.vtt", baseName))
+	producedVTT := filepath.Join(videoCacheDir, fmt.Sprintf("%s_whisper.vtt", baseName))
 	if !fileExists(producedVTT) {
-		// Look for any .vtt produced in cacheDir matching baseName
-		matches, _ := filepath.Glob(filepath.Join(cacheDir, "*.vtt"))
+		// Look for any .vtt produced in videoCacheDir matching baseName
+		matches, _ := filepath.Glob(filepath.Join(videoCacheDir, "*.vtt"))
 		if len(matches) > 0 {
 			producedVTT = matches[0]
 		} else {
@@ -72,5 +78,9 @@ func TranscribeWithWhisper(videoPath, cacheDir, lang string) ([]SubtitleEntry, e
 		}
 	}
 
-	return ParseVTT(producedVTT)
+	data, err := os.ReadFile(producedVTT)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read produced VTT file: %w", err)
+	}
+	return ParseVTT(string(data))
 }
