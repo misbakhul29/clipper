@@ -1,6 +1,6 @@
 # Binaries & Executables
-./clipper
-./genconfig
+/clipper
+/genconfig
 bin/
 *.exe
 *.exe~
