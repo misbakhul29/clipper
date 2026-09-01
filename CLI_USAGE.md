@@ -1,6 +1,6 @@
 # 📖 CLI Command Reference - `clipper`
 
-Dokumentasi lengkap baris perintah (*CLI Flags*) dan contoh penggunaan aplikasi **Clipper** (Automated Video Clipper & Shorts Engine).
+Dokumentasi lengkap baris perintah (*CLI Flags*), konfigurasi **Multi-Provider AI**, dan contoh penggunaan aplikasi **Clipper** (Automated Video Clipper & Shorts Engine).
 
 ---
 
@@ -37,10 +37,10 @@ go install ./cmd/clipper
 | `-use-whisper` | `bool` | `false` | Paksa transkripsi suara offline menggunakan **Whisper AI** lokal |
 | **Kecerdasan Buatan (AI) & Auto-Detect** | | | |
 | `-auto-detect` | `string` | `""` | Mode deteksi segmen otomatis: `"ai"` (AI highlights), `"silence"`, atau `"scene"` |
-| `-ai-router` | `string` | `"openrouter"` | Provider AI: `"openrouter"`, `"gemini"`, `"deepseek"`, `"openai"` |
-| `-ai-key` | `string` | `""` | API Key untuk AI Provider yang dipilih |
-| `-openrouter-key` | `string` | `""` | API Key OpenRouter (default mengambil dari env `$OPENROUTER_API_KEY`) |
-| `-ai-model` | `string` | `"openrouter/free"` | Nama model AI (misal: `"gemini-2.0-flash"`, `"deepseek-chat"`, `"gpt-4o-mini"`) |
+| `-ai-router` | `string` | `"openrouter"` | Provider AI: `"gemini"`, `"deepseek"`, `"openai"`, atau `"openrouter"` |
+| `-ai-key` | `string` | `""` | API Key untuk AI Provider yang dipilih (atau via Environment Variables) |
+| `-openrouter-key` | `string` | `""` | API Key OpenRouter (fallback legacy dari env `$OPENROUTER_API_KEY`) |
+| `-ai-model` | `string` | `"openrouter/free"` | Nama model AI (misal: `"gemini-3.6-flash"`, `"deepseek-chat"`, `"gpt-4o-mini"`) |
 | **Pembersihan Cache & Batch Processing** | | | |
 | `-clean-cache` | `bool` | `false` | Bersihkan direktori cache dan keluar |
 | `-clean-days` | `int` | `0` | Ambang batas umur cache dalam hari (`0` = hapus seluruh cache) |
@@ -66,9 +66,94 @@ go install ./cmd/clipper
 
 ---
 
+## 🤖 Konfigurasi Multi-Provider AI & Auto-Detect
+
+Clipper mendukung integrasi **Multi-Provider AI Router** yang dapat disesuaikan dengan kebutuhan Anda. Anda dapat memasukkan API Key melalui flag `-ai-key` atau menggunakan **Environment Variable** OS.
+
+| Provider (`-ai-router`) | Environment Variable Fallback | Model Default | Contoh Model Populer |
+| :--- | :--- | :--- | :--- |
+| `gemini` | `GEMINI_API_KEY` | `gemini-2.0-flash` | `gemini-3.6-flash`, `gemini-1.5-pro` |
+| `deepseek` | `DEEPSEEK_API_KEY` | `deepseek-chat` | `deepseek-chat`, `deepseek-reasoner` |
+| `openai` | `OPENAI_API_KEY` | `gpt-4o-mini` | `gpt-4o-mini`, `gpt-4o` |
+| `openrouter` | `OPENROUTER_API_KEY` | `openrouter/free` | `openrouter/free`, `anthropic/claude-3.5-sonnet` |
+
+---
+
+### Contoh Konfigurasi Provider AI
+
+#### 1. Google Gemini (Rekomendasi Utama 🚀)
+```bash
+# Perintah CLI
+clipper -input "https://www.youtube.com/watch?v=xxx" \
+  -auto-detect ai \
+  -ai-router gemini \
+  -ai-key "AIzaSyC-np-3N_..." \
+  -ai-model "gemini-3.6-flash" \
+  -shorts -burn-subtitles -sub-style karaoke
+```
+
+*Contoh `config.json`:*
+```json
+{
+  "auto_detect": "ai",
+  "ai_config": {
+    "api_router": "gemini",
+    "api_key": "AIzaSyC-np-3N_...",
+    "model": "gemini-3.6-flash"
+  }
+}
+```
+
+#### 2. DeepSeek AI
+```bash
+# Perintah CLI
+export DEEPSEEK_API_KEY="sk-..."
+clipper -input "https://www.youtube.com/watch?v=xxx" \
+  -auto-detect ai \
+  -ai-router deepseek \
+  -ai-model "deepseek-chat" \
+  -shorts -burn-subtitles
+```
+
+*Contoh `config.json`:*
+```json
+{
+  "auto_detect": "ai",
+  "ai_config": {
+    "api_router": "deepseek",
+    "api_key": "sk-...",
+    "model": "deepseek-chat"
+  }
+}
+```
+
+#### 3. OpenAI (GPT-4o / GPT-4o-mini)
+```bash
+# Perintah CLI
+export OPENAI_API_KEY="sk-proj-..."
+clipper -input "https://www.youtube.com/watch?v=xxx" \
+  -auto-detect ai \
+  -ai-router openai \
+  -ai-model "gpt-4o-mini" \
+  -shorts -burn-subtitles
+```
+
+#### 4. OpenRouter (Multi-LLM Aggregator)
+```bash
+# Perintah CLI
+export OPENROUTER_API_KEY="sk-or-v1-..."
+clipper -input "https://www.youtube.com/watch?v=xxx" \
+  -auto-detect ai \
+  -ai-router openrouter \
+  -ai-model "openrouter/free" \
+  -shorts -burn-subtitles
+```
+
+---
+
 ## 💡 Contoh Penggunaan Skenario Nyata
 
-### 1. Generasi Viral Shorts 9:16 Blur + TikTok Karaoke Subtitles (Rekomendasi Utama 🏆)
+### 1. Generasi Viral Shorts 9:16 Blur + TikTok Karaoke Subtitles (Google Gemini)
 ```bash
 clipper -input "https://www.youtube.com/watch?v=t7xtO3KqsmM" \
   -auto-detect ai \
