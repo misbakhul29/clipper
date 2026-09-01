@@ -19,9 +19,10 @@ Sistem pemotong video otomatis berbasis **Go (Golang)** yang terintegrasi dengan
 
 ---
 
-## 📖 Dokumentasi Lengkap Baris Perintah (CLI Flags)
+## 📖 Dokumentasi & Konfigurasi
 
-Daftar lengkap flag, parameter, dan contoh penggunaan dapat dilihat di **[CLI_USAGE.md](CLI_USAGE.md)**.
+- 📑 **[CLI_USAGE.md](CLI_USAGE.md)**: Dokumentasi lengkap baris perintah (*CLI Flags*), opsi Multi-Provider AI, dan contoh skenario penggunaan.
+- ⚙️ **[EXAMPLE_CONFIG.md](EXAMPLE_CONFIG.md)**: Contoh lengkap berkas konfigurasi `config.json` dan kamus referensi parameter JSON.
 
 ---
 
