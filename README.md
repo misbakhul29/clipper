@@ -1,17 +1,21 @@
 # Automated Video Clipping System (Golang + FFmpeg)
 
-Sistem pemotong video otomatis berbasis **Go (Golang)** yang terintegrasi dengan **FFmpeg**, **OpenRouter AI**, dan **Local Whisper AI**. Sistem ini mendukung:
+Sistem pemotong video otomatis berbasis **Go (Golang)** yang terintegrasi dengan **FFmpeg**, **Multi-Provider AI (Google Gemini, DeepSeek, OpenAI, OpenRouter)**, dan **Local Whisper AI**. Sistem ini dirancang untuk memotong video, mendeteksi klip paling menarik/viral secara otomatis, merender format vertikal 9:16 (Shorts/Reels/TikTok), dan menempelkan subtitle animasi interaktif.
 
-- 🎤 **TikTok & Instagram Reels Karaoke Subtitles (`-sub-style karaoke`)** (Subtitle animasi cepat per 2–3 kata berlatar kuning menyala + font Impact tebal yang viral di media sosial).
-- 🎙️ **Local Whisper Speech-to-Text (`-use-whisper`)** (Ekstraksi subtitle AI secara otomatis dan offline dari audio video menggunakan Whisper AI).
-- 👤 **Smart Subject Motion Auto-Crop (`-shorts-style smart-crop`)** (Pemotongan vertikal 9:16 yang memfokuskan kamera ke subjek bergerak).
-- 💬 **Burnt-In Subtitles & Auto Translation (`-burn-subtitles`)** (Menempelkan subtitle terjemahan secara otomatis dan permanen pada video klip/Shorts dengan kustomisasi `-sub-font-size`).
-- 🤖 **AI Transcript Highlights (`openrouter/free`)** (Deteksi otomatis klip paling menarik/viral dari transkrip subtitle menggunakan LLM via OpenRouter API).
-- 🎙️ **Smart Silence & Scene Auto-Detection** (Deteksi otomatis bagian percakapan/suara atau perpindahan adegan tanpa timestamp manual).
-- ⚡ **Parallel Concurrency Engine** (Render banyak klip sekaligus secara paralel via Goroutines).
-- 🎨 **Watermark Image & Text Overlay** (Penambahan logo watermark PNG & caption teks otomatis).
-- 📱 **YouTube Shorts / TikTok / Reels (9:16)** (Format vertikal dengan style *center crop*, *smart crop*, atau *blurred background*).
-- 💾 **Smart Caching System** (`./cache` auto-reuse video YouTube & transkrip Whisper).
+## 🚀 Fitur Utama
+
+- 🎤 **TikTok & Instagram Reels Karaoke Subtitles (`-sub-style karaoke`)**: Subtitle animasi cepat per 2–3 kata berlatar kuning menyala + font Impact tebal atau font kustom (`-sub-font-path`).
+- 📂 **Per-Video Cache Isolation & Auto-Cleanup (`-clean-cache`)**: Struktur cache berbasis subfolder per video (`./cache/<video_id>/`) untuk mencegah bentrok subtitle, dilengkapi pembersih cache berdasar umur retensi (`-clean-days N`).
+- 📑 **Batch Processing Queue (`-batch-list urls.txt`)**: Pemrosesan banyak video sekaligus dari daftar URL/file secara otomatis dalam satu antrean.
+- 🔍 **Dry-Run Preview Mode (`-dry-run`)**: Mode simulasi untuk mengecek kalkulasi segmen, hasil auto-detection AI, dan perintah FFmpeg tanpa merender video.
+- 🤖 **Multi-Provider AI Highlight Detection**: Dukungan provider AI ganda (**Google Gemini**, **DeepSeek**, **OpenAI**, **OpenRouter**) untuk analisis klip paling viral dari transkrip video.
+- 🎙️ **Local Whisper Speech-to-Text (`-use-whisper`)**: Ekstraksi subtitle AI secara otomatis dan offline dari audio video menggunakan Whisper AI.
+- 👤 **Smart Subject Motion Auto-Crop (`-shorts-style smart-crop`)**: Pemotongan vertikal 9:16 yang memfokuskan kamera ke subjek bergerak.
+- 💬 **Burnt-In Subtitles & Auto Translation (`-burn-subtitles`)**: Menempelkan subtitle terjemahan secara otomatis dan permanen pada video klip/Shorts.
+- 🎙️ **Smart Silence & Scene Auto-Detection**: Deteksi otomatis bagian percakapan/suara (`-auto-detect silence`) atau perpindahan adegan (`-auto-detect scene`).
+- ⚡ **Parallel Concurrency Engine**: Render banyak klip sekaligus secara paralel via Goroutines worker pool.
+- 🎨 **Watermark Image & Text Overlay**: Penambahan logo watermark PNG & caption teks otomatis pada klip.
+- 📱 **YouTube Shorts / TikTok / Reels (9:16)**: Format vertikal dengan style *center crop*, *smart crop*, atau *blurred background*.
 
 ---
 
@@ -21,28 +25,40 @@ Daftar lengkap flag, parameter, dan contoh penggunaan dapat dilihat di **[CLI_US
 
 ---
 
-## 🎤 TikTok Karaoke Subtitles (`-sub-style karaoke`)
+## ⚡ Contoh Perintah Cepat
 
+### 1. Render Shorts 9:16 Blur + TikTok Karaoke Subtitles
 ```bash
-# Render Shorts (9:16 Blur) + AI Auto-Detect + TikTok Animated Karaoke Subtitles (Kuning Menyala, 54pt)
-go run ./cmd/clipper -input "https://www.youtube.com/watch?v=xxx" -auto-detect ai -shorts -shorts-style blur -burn-subtitles -sub-style karaoke -sub-font-size 54 -translate-lang id -outdir ./yt_karaoke_shorts
+clipper -input "https://www.youtube.com/watch?v=xxx" \
+  -auto-detect ai \
+  -shorts -shorts-style blur \
+  -burn-subtitles -sub-style karaoke -sub-font-size 54 \
+  -translate-lang id \
+  -ai-router gemini -ai-key "YOUR_GEMINI_API_KEY" \
+  -outdir ./yt_karaoke_shorts
 ```
 
----
-
-## 🎙️ Local Whisper Speech-to-Text (`-use-whisper`)
-
-Jika video lokal / YouTube tidak memiliki subtitle CC bawaan, gunakan `-use-whisper` untuk transkripsi offline otomatis:
-
+### 2. Dry-Run Simulation (Pratinjau Segmen Tanpa Render Video)
 ```bash
-go run ./cmd/clipper -input "my_local_video.mp4" -auto-detect ai -use-whisper -shorts -burn-subtitles -sub-style karaoke
+clipper -input "https://www.youtube.com/watch?v=xxx" -auto-detect silence -shorts -dry-run
 ```
 
----
-
-## ⚙️ Generate Konfigurasi JSON (`-init-config` / `-i`)
-
+### 3. Pemrosesan Antrean Banyak Video (Batch Queue)
 ```bash
-# Mode Interaktif Wizard
-go run ./cmd/clipper -i
+clipper -batch-list my_urls.txt -auto-detect ai -shorts -burn-subtitles -sub-style karaoke
+```
+
+### 4. Bersihkan Cache yang Berumur Lebih dari 7 Hari
+```bash
+clipper -clean-cache -clean-days 7
+```
+
+### 5. Local Whisper Speech-to-Text Offline
+```bash
+clipper -input "my_local_video.mp4" -auto-detect ai -use-whisper -shorts -burn-subtitles -sub-style karaoke
+```
+
+### 6. Mode Interaktif Wizard
+```bash
+clipper -i
 ```
