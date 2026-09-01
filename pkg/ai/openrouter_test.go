@@ -1,7 +1,11 @@
 package ai
 
 import (
+	"os"
+	"strings"
 	"testing"
+
+	"github.com/misbakhul29/clipper/pkg/transcriber"
 )
 
 func TestParseAIHighlightsJSON(t *testing.T) {
@@ -65,5 +69,64 @@ func TestParseAIHighlightsJSON_NoisyTags(t *testing.T) {
 
 	if len(highlights) != 1 {
 		t.Fatalf("expected 1 highlight, got %d", len(highlights))
+	}
+}
+
+func TestBuildHighlightPrompts_Shorts(t *testing.T) {
+	entries := []transcriber.SubtitleEntry{
+		{Start: "00:00:01", End: "00:00:05", Text: "Halo semuanya"},
+		{Start: "00:00:06", End: "00:00:10", Text: "selamat datang di video ini"},
+	}
+
+	sysPrompt, userPrompt := BuildHighlightPrompts(entries, "id", true)
+	if !strings.Contains(sysPrompt, "YouTube Shorts & TikTok") {
+		t.Errorf("expected YouTube Shorts & TikTok in sysPrompt, got: %s", sysPrompt)
+	}
+	if !strings.Contains(sysPrompt, "between 20 seconds and 60 seconds") {
+		t.Errorf("expected shorts duration rule in sysPrompt, got: %s", sysPrompt)
+	}
+	if !strings.Contains(sysPrompt, "Bahasa Indonesia") {
+		t.Errorf("expected Indonesian language instruction in sysPrompt, got: %s", sysPrompt)
+	}
+	if !strings.Contains(userPrompt, "Halo semuanya") {
+		t.Errorf("expected transcript text in userPrompt, got: %s", userPrompt)
+	}
+}
+
+func TestBuildHighlightPrompts_NonShorts(t *testing.T) {
+	entries := []transcriber.SubtitleEntry{
+		{Start: "00:00:01", End: "00:00:05", Text: "Halo semuanya"},
+		{Start: "00:00:06", End: "00:00:10", Text: "selamat datang di video ini"},
+	}
+
+	sysPrompt, _ := BuildHighlightPrompts(entries, "en", false)
+	if !strings.Contains(sysPrompt, "YouTube video highlights and compilations") {
+		t.Errorf("expected long-form highlights in sysPrompt, got: %s", sysPrompt)
+	}
+	if !strings.Contains(sysPrompt, "between 1 minute (60 seconds) and 5 minutes (300 seconds)") {
+		t.Errorf("expected 1 to 5 min duration rule in sysPrompt, got: %s", sysPrompt)
+	}
+}
+
+func TestResolveAPIKeyAndModel(t *testing.T) {
+	// 1. Direct key provided
+	key, model, err := resolveAPIKeyAndModel("my-key", "CUSTOM_ENV_TEST", "", "default-model", "TestProvider")
+	if err != nil || key != "my-key" || model != "default-model" {
+		t.Errorf("expected direct key and default model, got key=%s, model=%s, err=%v", key, model, err)
+	}
+
+	// 2. Env var fallback
+	os.Setenv("CUSTOM_ENV_TEST", "env-secret-key")
+	defer os.Unsetenv("CUSTOM_ENV_TEST")
+
+	key, model, err = resolveAPIKeyAndModel("", "CUSTOM_ENV_TEST", "custom-model", "default-model", "TestProvider")
+	if err != nil || key != "env-secret-key" || model != "custom-model" {
+		t.Errorf("expected env key and custom model, got key=%s, model=%s, err=%v", key, model, err)
+	}
+
+	// 3. Missing key error
+	_, _, err = resolveAPIKeyAndModel("", "NON_EXISTENT_ENV_KEY", "", "default-model", "TestProvider")
+	if err == nil {
+		t.Error("expected error when no key or env var is present")
 	}
 }

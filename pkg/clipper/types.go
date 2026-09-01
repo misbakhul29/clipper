@@ -169,6 +169,7 @@ func (c *Config) Validate() error {
 	// Sync back flat fields for compatibility
 	c.OpenRouterKey = c.AIConfig.APIKey
 	c.AIModel = c.AIConfig.Model
+	c.AIConfig.IsShorts = c.Shorts
 	if c.Concurrency <= 0 {
 		c.Concurrency = runtime.NumCPU()
 	}

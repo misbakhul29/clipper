@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
-	"strings"
 	"time"
 
 	"github.com/misbakhul29/clipper/pkg/transcriber"
@@ -41,45 +39,13 @@ type GeminiError struct {
 }
 
 // AnalyzeHighlightsGemini sends transcript entries to Google Gemini REST API.
-func AnalyzeHighlightsGemini(entries []transcriber.SubtitleEntry, apiKey, model, targetLang string) ([]AIHighlight, error) {
-	if apiKey == "" {
-		apiKey = os.Getenv("GEMINI_API_KEY")
-	}
-	if apiKey == "" {
-		return nil, fmt.Errorf("Gemini API key required. Set GEMINI_API_KEY env var or set ai_config.api_key")
+func AnalyzeHighlightsGemini(entries []transcriber.SubtitleEntry, apiKey, model, targetLang string, isShorts bool) ([]AIHighlight, error) {
+	resolvedKey, resolvedModel, err := resolveAPIKeyAndModel(apiKey, "GEMINI_API_KEY", model, "gemini-2.0-flash", "Gemini")
+	if err != nil {
+		return nil, err
 	}
 
-	if model == "" {
-		model = "gemini-2.0-flash"
-	}
-
-	groupedEntries := groupSubtitleEntries(entries, 15.0)
-
-	var sb strings.Builder
-	for _, entry := range groupedEntries {
-		sb.WriteString(fmt.Sprintf("[%s -> %s] %s\n", entry.Start, entry.End, entry.Text))
-	}
-
-	langInstruction := ""
-	if targetLang == "id" || strings.HasPrefix(strings.ToLower(targetLang), "ind") {
-		langInstruction = "The 'title' field MUST be written in Bahasa Indonesia (Indonesian)."
-	} else if targetLang != "" {
-		langInstruction = fmt.Sprintf("The 'title' field MUST be written in %s language.", targetLang)
-	}
-
-	systemPrompt := fmt.Sprintf(`You are an expert video editor AI for YouTube Shorts & TikTok.
-Analyze the provided timestamped video transcript and identify 2 to 5 most engaging, funny, viral, or key highlight moments.
-
-CRITICAL RULES FOR CLIP DURATION & FORMAT:
-1. Each clip MUST be between 20 seconds and 60 seconds long.
-2. NEVER output clips shorter than 15 seconds. Ensure the start and end timestamps cover a full, complete conversation or funny scene.
-3. The "start" and "end" timestamps must be exact strings formatted as "HH:MM:SS" or "MM:SS".
-%s
-
-Your output MUST be a strict JSON array of objects with keys: "start", "end", and "title" (short descriptive label).
-Do NOT include any markdown codeblocks or explanation. Return ONLY the raw JSON array.`, langInstruction)
-
-	userPrompt := fmt.Sprintf("Here is the timestamped transcript:\n\n%s", sb.String())
+	systemPrompt, userPrompt := BuildHighlightPrompts(entries, targetLang, isShorts)
 
 	reqBody := GeminiRequest{
 		Contents: []GeminiContent{
@@ -96,7 +62,7 @@ Do NOT include any markdown codeblocks or explanation. Return ONLY the raw JSON 
 		return nil, fmt.Errorf("failed to marshal Gemini request: %w", err)
 	}
 
-	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", model, apiKey)
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", resolvedModel, resolvedKey)
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create http request for Gemini: %w", err)
