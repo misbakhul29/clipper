@@ -45,10 +45,8 @@ type AIError struct {
 type OpenRouterRequest = OpenAICompatibleRequest
 type OpenRouterResponse = OpenAICompatibleResponse
 
-// callOpenAICompatibleAPI sends highlight detection prompts to any OpenAI-compatible completions endpoint.
-func callOpenAICompatibleAPI(endpoint string, entries []transcriber.SubtitleEntry, apiKey, model, targetLang string, isShorts bool) ([]AIHighlight, error) {
-	systemPrompt, userPrompt := BuildHighlightPrompts(entries, targetLang, isShorts)
-
+// callOpenAICompatibleCompletions sends chat messages to any OpenAI-compatible completions endpoint.
+func callOpenAICompatibleCompletions(endpoint string, apiKey, model, systemPrompt, userPrompt string) (string, error) {
 	reqBody := OpenAICompatibleRequest{
 		Model: model,
 		Messages: []Message{
@@ -59,12 +57,12 @@ func callOpenAICompatibleAPI(endpoint string, entries []transcriber.SubtitleEntr
 
 	jsonData, err := json.Marshal(reqBody)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
+		return "", fmt.Errorf("failed to marshal request: %w", err)
 	}
 
 	req, err := http.NewRequest("POST", endpoint, bytes.NewBuffer(jsonData))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create http request: %w", err)
+		return "", fmt.Errorf("failed to create http request: %w", err)
 	}
 
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
@@ -73,34 +71,56 @@ func callOpenAICompatibleAPI(endpoint string, entries []transcriber.SubtitleEntr
 	client := &http.Client{Timeout: 300 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("API request to %s failed: %w", endpoint, err)
+		return "", fmt.Errorf("API request to %s failed: %w", endpoint, err)
 	}
 	defer resp.Body.Close()
 
 	respBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read API response from %s: %w", endpoint, err)
+		return "", fmt.Errorf("failed to read API response from %s: %w", endpoint, err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API (%s) returned HTTP %d: %s", endpoint, resp.StatusCode, string(respBytes))
+		return "", fmt.Errorf("API (%s) returned HTTP %d: %s", endpoint, resp.StatusCode, string(respBytes))
 	}
 
 	var chatResp OpenAICompatibleResponse
 	if err := json.Unmarshal(respBytes, &chatResp); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal API response: %w", err)
+		return "", fmt.Errorf("failed to unmarshal API response: %w", err)
 	}
 
 	if chatResp.Error != nil && chatResp.Error.Message != "" {
-		return nil, fmt.Errorf("API error (%s): %s", endpoint, chatResp.Error.Message)
+		return "", fmt.Errorf("API error (%s): %s", endpoint, chatResp.Error.Message)
 	}
 
 	if len(chatResp.Choices) == 0 {
-		return nil, fmt.Errorf("API (%s) returned no choices in response", endpoint)
+		return "", fmt.Errorf("API (%s) returned no choices in response", endpoint)
 	}
 
-	aiContent := chatResp.Choices[0].Message.Content
+	return chatResp.Choices[0].Message.Content, nil
+}
+
+// callOpenAICompatibleAPI sends highlight detection prompts to any OpenAI-compatible completions endpoint.
+func callOpenAICompatibleAPI(endpoint string, entries []transcriber.SubtitleEntry, apiKey, model, targetLang string, isShorts bool) ([]AIHighlight, error) {
+	systemPrompt, userPrompt := BuildHighlightPrompts(entries, targetLang, isShorts)
+	aiContent, err := callOpenAICompatibleCompletions(endpoint, apiKey, model, systemPrompt, userPrompt)
+	if err != nil {
+		return nil, err
+	}
 	return ParseAIHighlightsJSON(aiContent)
+}
+
+// callOpenAICompatibleTranslation translates subtitle entries via OpenAI-compatible endpoint.
+func callOpenAICompatibleTranslation(endpoint string, entries []transcriber.SubtitleEntry, apiKey, model, targetLang string) ([]transcriber.SubtitleEntry, error) {
+	if len(entries) == 0 || targetLang == "" {
+		return entries, nil
+	}
+	systemPrompt, userPrompt := BuildSubtitleTranslationPrompts(entries, targetLang)
+	aiContent, err := callOpenAICompatibleCompletions(endpoint, apiKey, model, systemPrompt, userPrompt)
+	if err != nil {
+		return entries, err
+	}
+	return ParseSubtitleTranslationJSON(aiContent, entries)
 }
 
 // resolveAPIKeyAndModel resolves API key from argument or environment variable, and applies default model if empty.

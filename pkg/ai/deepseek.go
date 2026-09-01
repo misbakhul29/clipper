@@ -15,3 +15,14 @@ func AnalyzeHighlightsDeepSeek(entries []transcriber.SubtitleEntry, apiKey, mode
 
 	return callOpenAICompatibleAPI(deepSeekEndpoint, entries, resolvedKey, resolvedModel, targetLang, isShorts)
 }
+
+// TranslateSubtitlesDeepSeek translates subtitle entries via DeepSeek API.
+func TranslateSubtitlesDeepSeek(entries []transcriber.SubtitleEntry, apiKey, model, targetLang string) ([]transcriber.SubtitleEntry, error) {
+	resolvedKey, resolvedModel, err := resolveAPIKeyAndModel(apiKey, "DEEPSEEK_API_KEY", model, "deepseek-chat", "DeepSeek")
+	if err != nil {
+		return entries, err
+	}
+
+	return callOpenAICompatibleTranslation(deepSeekEndpoint, entries, resolvedKey, resolvedModel, targetLang)
+}
+

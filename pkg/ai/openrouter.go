@@ -22,3 +22,19 @@ func AnalyzeHighlights(entries []transcriber.SubtitleEntry, apiKey, model, targe
 	}
 	return highlights, err
 }
+
+// TranslateSubtitlesOpenRouter translates subtitle entries via OpenRouter API.
+func TranslateSubtitlesOpenRouter(entries []transcriber.SubtitleEntry, apiKey, model, targetLang string) ([]transcriber.SubtitleEntry, error) {
+	resolvedKey, resolvedModel, err := resolveAPIKeyAndModel(apiKey, "OPENROUTER_API_KEY", model, "openrouter/free", "OpenRouter")
+	if err != nil {
+		return entries, err
+	}
+
+	translated, err := callOpenAICompatibleTranslation(openRouterEndpoint, entries, resolvedKey, resolvedModel, targetLang)
+	if err != nil && resolvedModel != "openrouter/free" {
+		fmt.Printf("[AI WARN] Translation model '%s' failed: %v. Retrying with fallback model 'openrouter/free'...\n", resolvedModel, err)
+		return callOpenAICompatibleTranslation(openRouterEndpoint, entries, resolvedKey, "openrouter/free", targetLang)
+	}
+	return translated, err
+}
+

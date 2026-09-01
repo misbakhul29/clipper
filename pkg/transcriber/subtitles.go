@@ -109,6 +109,22 @@ func findMatchingSubtitleFile(dir, lang string) string {
 	return ""
 }
 
+// findAnySubtitleFile returns the first available .vtt subtitle file found in dir.
+func findAnySubtitleFile(dir string) string {
+	matches, err := filepath.Glob(filepath.Join(dir, "*.vtt"))
+	if err != nil || len(matches) == 0 {
+		return ""
+	}
+	// Prefer orig or base language if available
+	for _, m := range matches {
+		base := strings.ToLower(filepath.Base(m))
+		if strings.Contains(base, "-orig.") || strings.Contains(base, ".orig.") {
+			return m
+		}
+	}
+	return matches[0]
+}
+
 // FetchSubtitles attempts to retrieve subtitles for a YouTube URL or local file path.
 func FetchSubtitles(inputStr, outputDir, lang string) ([]SubtitleEntry, error) {
 	if outputDir == "" {
@@ -129,8 +145,14 @@ func FetchSubtitles(inputStr, outputDir, lang string) ([]SubtitleEntry, error) {
 		return nil, fmt.Errorf("failed to create subtitle cache dir: %w", err)
 	}
 
-	// Case 2: Check cache for existing matching subtitle file
+	// Case 2: Check cache for existing matching subtitle file (exact, en fallback, or any cached sub)
 	if match := findMatchingSubtitleFile(videoCacheDir, lang); match != "" {
+		data, err := os.ReadFile(match)
+		if err == nil && len(data) > 0 {
+			return ParseVTT(string(data))
+		}
+	}
+	if match := findAnySubtitleFile(videoCacheDir); match != "" {
 		data, err := os.ReadFile(match)
 		if err == nil && len(data) > 0 {
 			return ParseVTT(string(data))
@@ -143,9 +165,9 @@ func FetchSubtitles(inputStr, outputDir, lang string) ([]SubtitleEntry, error) {
 	}
 
 	subTemplate := filepath.Join(videoCacheDir, "sub_%(id)s")
-	subLangArg := "id,id-*,en,en-*"
+	subLangArg := "id,id-*,en,en-*,orig,.*"
 	if lang != "" {
-		subLangArg = fmt.Sprintf("%s,%s-*,id,id-*,en,en-*", lang, lang)
+		subLangArg = fmt.Sprintf("%s,%s-*,id,id-*,en,en-*,orig,.*", lang, lang)
 	}
 
 	args := []string{
@@ -162,6 +184,9 @@ func FetchSubtitles(inputStr, outputDir, lang string) ([]SubtitleEntry, error) {
 	_ = cmd.Run()
 
 	match := findMatchingSubtitleFile(videoCacheDir, lang)
+	if match == "" {
+		match = findAnySubtitleFile(videoCacheDir)
+	}
 	if match == "" {
 		return nil, fmt.Errorf("no matching subtitle file found for language '%s' (input: %s)", lang, inputStr)
 	}
