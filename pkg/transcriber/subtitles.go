@@ -68,6 +68,47 @@ func ParseVTT(content string) ([]SubtitleEntry, error) {
 	return entries, nil
 }
 
+// findMatchingSubtitleFile searches dir for a .vtt file matching target language code precisely.
+// It avoids false positive substring matches (e.g. video ID 'xid1sE8lEec' matching '*id*.vtt' for Russian '.ru.vtt').
+func findMatchingSubtitleFile(dir, lang string) string {
+	matches, err := filepath.Glob(filepath.Join(dir, "*.vtt"))
+	if err != nil || len(matches) == 0 {
+		return ""
+	}
+
+	targetLang := strings.ToLower(strings.TrimSpace(lang))
+
+	// 1. Precise check for requested language (e.g. .id.vtt, .id-orig.vtt, .id-auto.vtt)
+	if targetLang != "" {
+		for _, m := range matches {
+			base := strings.ToLower(filepath.Base(m))
+			parts := strings.Split(base, ".")
+			if len(parts) >= 3 {
+				fileLang := parts[len(parts)-2]
+				if fileLang == targetLang || strings.HasPrefix(fileLang, targetLang+"-") || strings.HasPrefix(fileLang, targetLang+"_") {
+					return m
+				}
+			}
+		}
+	}
+
+	// 2. Fallback check for English if requested language was not found
+	if targetLang != "en" {
+		for _, m := range matches {
+			base := strings.ToLower(filepath.Base(m))
+			parts := strings.Split(base, ".")
+			if len(parts) >= 3 {
+				fileLang := parts[len(parts)-2]
+				if fileLang == "en" || strings.HasPrefix(fileLang, "en-") || strings.HasPrefix(fileLang, "en_") {
+					return m
+				}
+			}
+		}
+	}
+
+	return ""
+}
+
 // FetchSubtitles attempts to retrieve subtitles for a YouTube URL or local file path.
 func FetchSubtitles(inputStr, outputDir, lang string) ([]SubtitleEntry, error) {
 	if outputDir == "" {
@@ -88,16 +129,9 @@ func FetchSubtitles(inputStr, outputDir, lang string) ([]SubtitleEntry, error) {
 		return nil, fmt.Errorf("failed to create subtitle cache dir: %w", err)
 	}
 
-	// Case 2: YouTube URL download subtitles via yt-dlp
-	var cachedMatches []string
-	if lang != "" {
-		cachedMatches, _ = filepath.Glob(filepath.Join(videoCacheDir, fmt.Sprintf("*%s*.vtt", lang)))
-	}
-	if len(cachedMatches) == 0 {
-		cachedMatches, _ = filepath.Glob(filepath.Join(videoCacheDir, "*.vtt"))
-	}
-	if len(cachedMatches) > 0 {
-		data, err := os.ReadFile(cachedMatches[0])
+	// Case 2: Check cache for existing matching subtitle file
+	if match := findMatchingSubtitleFile(videoCacheDir, lang); match != "" {
+		data, err := os.ReadFile(match)
 		if err == nil && len(data) > 0 {
 			return ParseVTT(string(data))
 		}
@@ -109,9 +143,9 @@ func FetchSubtitles(inputStr, outputDir, lang string) ([]SubtitleEntry, error) {
 	}
 
 	subTemplate := filepath.Join(videoCacheDir, "sub_%(id)s")
-	subLangArg := "id,en,ko,all"
+	subLangArg := "id,id-*,en,en-*"
 	if lang != "" {
-		subLangArg = fmt.Sprintf("%s,id,en,ko,all", lang)
+		subLangArg = fmt.Sprintf("%s,%s-*,id,id-*,en,en-*", lang, lang)
 	}
 
 	args := []string{
@@ -127,22 +161,14 @@ func FetchSubtitles(inputStr, outputDir, lang string) ([]SubtitleEntry, error) {
 	cmd := exec.Command(binPath, args...)
 	_ = cmd.Run()
 
-	var matches []string
-	if lang != "" {
-		matches, _ = filepath.Glob(filepath.Join(videoCacheDir, fmt.Sprintf("*%s*.vtt", lang)))
-	}
-	if len(matches) == 0 {
-		matches, _ = filepath.Glob(filepath.Join(videoCacheDir, "*.vtt"))
+	match := findMatchingSubtitleFile(videoCacheDir, lang)
+	if match == "" {
+		return nil, fmt.Errorf("no matching subtitle file found for language '%s' (input: %s)", lang, inputStr)
 	}
 
-	if len(matches) == 0 {
-		return nil, fmt.Errorf("failed to download subtitles from YouTube input: %s", inputStr)
-	}
-
-	// Use first match
-	data, err := os.ReadFile(matches[0])
+	data, err := os.ReadFile(match)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read downloaded subtitle file '%s': %w", matches[0], err)
+		return nil, fmt.Errorf("failed to read downloaded subtitle file '%s': %w", match, err)
 	}
 
 	return ParseVTT(string(data))

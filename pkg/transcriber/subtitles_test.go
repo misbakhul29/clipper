@@ -53,3 +53,35 @@ Subtitle content for Video ONE`
 		t.Errorf("FetchSubtitles(video2) leaked Video 1's subtitles!")
 	}
 }
+
+func TestFindMatchingSubtitleFile_AvoidFalsePositiveSubstrings(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "clipper_sub_lang_test_*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Create sub_xid1sE8lEec.ru.vtt (Russian subtitle file for video ID containing 'id')
+	ruPath := filepath.Join(tempDir, "sub_xid1sE8lEec.ru.vtt")
+	if err := os.WriteFile(ruPath, []byte("WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nПривет"), 0644); err != nil {
+		t.Fatalf("failed to write ru vtt: %v", err)
+	}
+
+	// 1. Searching for 'id' should NOT match sub_xid1sE8lEec.ru.vtt
+	matchID := findMatchingSubtitleFile(tempDir, "id")
+	if matchID != "" {
+		t.Errorf("findMatchingSubtitleFile(lang='id') returned %q; want empty string because file is Russian (.ru.vtt)", matchID)
+	}
+
+	// 2. Create sub_xid1sE8lEec.id.vtt (Indonesian subtitle file)
+	idPath := filepath.Join(tempDir, "sub_xid1sE8lEec.id.vtt")
+	if err := os.WriteFile(idPath, []byte("WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nHalo"), 0644); err != nil {
+		t.Fatalf("failed to write id vtt: %v", err)
+	}
+
+	// 3. Searching for 'id' should now match sub_xid1sE8lEec.id.vtt
+	matchID = findMatchingSubtitleFile(tempDir, "id")
+	if matchID != idPath {
+		t.Errorf("findMatchingSubtitleFile(lang='id') = %q; want %q", matchID, idPath)
+	}
+}
