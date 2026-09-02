@@ -309,7 +309,12 @@ func findYtDlpBinary() string {
 }
 
 func normalizeTimestamp(ts string) string {
-	return strings.ReplaceAll(ts, ",", ".")
+	ts = strings.ReplaceAll(ts, ",", ".")
+	parts := strings.Split(ts, ":")
+	if len(parts) == 2 {
+		return "00:" + ts
+	}
+	return ts
 }
 
 func cleanSubtitleText(text string) string {
@@ -402,7 +407,9 @@ func ExportASSWithFont(entries []SubtitleEntry, outputPath string, fontSize int,
 
 	for _, entry := range entries {
 		cleanText := strings.ReplaceAll(entry.Text, "\n", "\\N")
-		sb.WriteString(fmt.Sprintf("Dialogue: 0,%s,%s,Default,,0,0,0,,%s\n", entry.Start, entry.End, cleanText))
+		startSec := parseTimestampToSec(entry.Start)
+		endSec := parseTimestampToSec(entry.End)
+		sb.WriteString(fmt.Sprintf("Dialogue: 0,%s,%s,Default,,0,0,0,,%s\n", formatASSTime(startSec), formatASSTime(endSec), cleanText))
 	}
 
 	dir := filepath.Dir(outputPath)
@@ -457,7 +464,13 @@ func ChunkSubtitlesToWords(entries []SubtitleEntry, maxWords int) []SubtitleEntr
 	for _, entry := range entries {
 		words := strings.Fields(entry.Text)
 		if len(words) <= maxWords {
-			chunked = append(chunked, entry)
+			startSec := parseTimestampToSec(entry.Start)
+			endSec := parseTimestampToSec(entry.End)
+			chunked = append(chunked, SubtitleEntry{
+				Start: formatASSTime(startSec),
+				End:   formatASSTime(endSec),
+				Text:  entry.Text,
+			})
 			continue
 		}
 
@@ -755,7 +768,10 @@ func ExportPresetASS(entries []SubtitleEntry, outputPath string, presetName stri
 	for _, sdh := range sdhEntries {
 		cleanText := strings.TrimSpace(sdh.Text)
 		cleanText = strings.ReplaceAll(cleanText, "\n", " ")
-		sb.WriteString(fmt.Sprintf("Dialogue: 0,%s,%s,Narrator,,0,0,0,,[%s]\n", sdh.Start, sdh.End, cleanText))
+		startSec := parseTimestampToSec(sdh.Start)
+		endSec := parseTimestampToSec(sdh.End)
+		sb.WriteString(fmt.Sprintf("Dialogue: 0,%s,%s,Narrator,,0,0,0,,[%s]\n",
+			formatASSTime(startSec), formatASSTime(endSec), cleanText))
 	}
 
 	// Write spoken dialogue cues
@@ -770,7 +786,10 @@ func ExportPresetASS(entries []SubtitleEntry, outputPath string, presetName stri
 			text = preset.TransformTag + text
 		}
 
-		sb.WriteString(fmt.Sprintf("Dialogue: 0,%s,%s,Default,,0,0,0,,%s\n", entry.Start, entry.End, text))
+		startSec := parseTimestampToSec(entry.Start)
+		endSec := parseTimestampToSec(entry.End)
+		sb.WriteString(fmt.Sprintf("Dialogue: 0,%s,%s,Default,,0,0,0,,%s\n",
+			formatASSTime(startSec), formatASSTime(endSec), text))
 	}
 
 	dir := filepath.Dir(outputPath)

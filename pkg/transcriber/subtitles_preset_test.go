@@ -142,7 +142,7 @@ Third cue with SRT style comma
 	if entries[0].Text != "First cue without hours" {
 		t.Errorf("entry 0 text mismatch: %s", entries[0].Text)
 	}
-	if entries[0].Start != "00:01.500" || entries[0].End != "00:03.200" {
+	if entries[0].Start != "00:00:01.500" || entries[0].End != "00:00:03.200" {
 		t.Errorf("entry 0 timestamp mismatch: %+v", entries[0])
 	}
 
@@ -317,5 +317,33 @@ func TestExportPresetASS_EmptyEntriesError(t *testing.T) {
 	err = ExportPresetASS(entries, outFile, "hormozi", 54, true, "", "strip")
 	if err == nil {
 		t.Errorf("expected error when all entries are stripped SDH, got nil")
+	}
+}
+
+func TestExportPresetASS_TimestampFormatting(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "clipper_ts_format_*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	entries := []SubtitleEntry{
+		{Start: "01:23.456", End: "01:25.123", Text: "Single short word"},
+	}
+
+	outFile := filepath.Join(tmpDir, "formatted.ass")
+	if err := ExportPresetASS(entries, outFile, "minimal", 40, false, "", "keep"); err != nil {
+		t.Fatalf("ExportPresetASS failed: %v", err)
+	}
+
+	data, err := os.ReadFile(outFile)
+	if err != nil {
+		t.Fatalf("failed to read output: %v", err)
+	}
+	content := string(data)
+
+	// Must be standard ASS format H:MM:SS.CC (e.g. 0:01:23.46)
+	if !strings.Contains(content, "Dialogue: 0,0:01:23.46,0:01:25.12,Default,,0,0,0,,Single short word") {
+		t.Errorf("expected normalized ASS timestamps 0:01:23.46, got: %s", content)
 	}
 }
