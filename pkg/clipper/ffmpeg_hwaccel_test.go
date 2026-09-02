@@ -50,3 +50,12 @@ func TestDetectHardwareEncoder(t *testing.T) {
 		}
 	})
 }
+
+func TestEscapeDrawtext(t *testing.T) {
+	input := "Episode 1: 50% Off 'Special' \\ Limited"
+	got := escapeDrawtext(input)
+	expected := "Episode 1\\: 50％ Off '\\''Special'\\'' / Limited"
+	if got != expected {
+		t.Errorf("escapeDrawtext(%q) = %q, want %q", input, got, expected)
+	}
+}

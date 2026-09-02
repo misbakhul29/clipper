@@ -335,7 +335,7 @@ func buildFilterGraph(cfg *Config, hasWatermark, hasOverlayText bool, subPath st
 				if fontSize <= 0 {
 					fontSize = 32
 				}
-				escapedText := strings.ReplaceAll(cfg.OverlayText, "'", "'\\''")
+				escapedText := escapeDrawtext(cfg.OverlayText)
 				drawtext := fmt.Sprintf("drawtext=text='%s':%s:fontsize=%d:fontcolor=%s:box=1:boxcolor=black@0.5:boxborderw=5",
 					escapedText, textPos, fontSize, fontColor)
 				graph = fmt.Sprintf("%s,%s", graph, drawtext)
@@ -376,8 +376,7 @@ func buildFilterGraph(cfg *Config, hasWatermark, hasOverlayText bool, subPath st
 		if fontSize <= 0 {
 			fontSize = 32
 		}
-		// Escape single quotes for drawtext
-		escapedText := strings.ReplaceAll(cfg.OverlayText, "'", "'\\''")
+		escapedText := escapeDrawtext(cfg.OverlayText)
 		drawtext := fmt.Sprintf("drawtext=text='%s':%s:fontsize=%d:fontcolor=%s:box=1:boxcolor=black@0.5:boxborderw=5",
 			escapedText, textPos, fontSize, fontColor)
 		filters = append(filters, drawtext)
@@ -540,4 +539,12 @@ func (f *FFmpegRunner) ApplyJumpCut(inputFile string, startSec, durationSec floa
 	)
 
 	return f.runFFmpeg(args)
+}
+
+func escapeDrawtext(text string) string {
+	text = strings.ReplaceAll(text, "\\", "/")
+	text = strings.ReplaceAll(text, "'", "'\\''")
+	text = strings.ReplaceAll(text, ":", "\\:")
+	text = strings.ReplaceAll(text, "%", "％")
+	return text
 }
