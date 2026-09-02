@@ -99,4 +99,19 @@ func TestExportPresetASS(t *testing.T) {
 	if !strings.Contains(content, "HELLO THIS") {
 		t.Errorf("expected 2-word chunk 'HELLO THIS', content: %s", content)
 	}
+	// Check PlayRes for shorts (1080x1920)
+	if !strings.Contains(content, "PlayResX: 1080") || !strings.Contains(content, "PlayResY: 1920") {
+		t.Errorf("expected 1080x1920 for shorts canvas, content: %s", content)
+	}
+
+	// Test non-shorts canvas (1920x1080)
+	outLandscape := filepath.Join(tmpDir, "landscape.ass")
+	if err := ExportPresetASS(entries, outLandscape, "minimal", 40, false, ""); err != nil {
+		t.Fatalf("ExportPresetASS landscape failed: %v", err)
+	}
+	dataLand, _ := os.ReadFile(outLandscape)
+	contentLand := string(dataLand)
+	if !strings.Contains(contentLand, "PlayResX: 1920") || !strings.Contains(contentLand, "PlayResY: 1080") {
+		t.Errorf("expected 1920x1080 for landscape canvas, content: %s", contentLand)
+	}
 }

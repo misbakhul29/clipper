@@ -339,10 +339,14 @@ func ExportASSWithFont(entries []SubtitleEntry, outputPath string, fontSize int,
 	}
 
 	var sb strings.Builder
-	sb.WriteString("[Script Info]\n")
-	sb.WriteString("ScriptType: v4.00+\n")
-	sb.WriteString("PlayResX: 1080\n")
-	sb.WriteString("PlayResY: 1920\n")
+	playResX := 1920
+	playResY := 1080
+	if isShorts {
+		playResX = 1080
+		playResY = 1920
+	}
+	sb.WriteString(fmt.Sprintf("PlayResX: %d\n", playResX))
+	sb.WriteString(fmt.Sprintf("PlayResY: %d\n", playResY))
 	sb.WriteString("ScaledBorderAndShadow: yes\n\n")
 
 	sb.WriteString("[V4+ Styles]\n")
@@ -607,10 +611,16 @@ func ExportPresetASS(entries []SubtitleEntry, outputPath string, presetName stri
 	}
 
 	var sb strings.Builder
+	playResX := 1920
+	playResY := 1080
+	if isShorts {
+		playResX = 1080
+		playResY = 1920
+	}
 	sb.WriteString("[Script Info]\n")
 	sb.WriteString("ScriptType: v4.00+\n")
-	sb.WriteString("PlayResX: 1080\n")
-	sb.WriteString("PlayResY: 1920\n")
+	sb.WriteString(fmt.Sprintf("PlayResX: %d\n", playResX))
+	sb.WriteString(fmt.Sprintf("PlayResY: %d\n", playResY))
 	sb.WriteString("ScaledBorderAndShadow: yes\n\n")
 
 	sb.WriteString("[V4+ Styles]\n")
