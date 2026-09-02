@@ -279,3 +279,43 @@ func TestExportPresetASS_SDHTopBox(t *testing.T) {
 		t.Errorf("expected Default dialogue line for speech, got: %s", content)
 	}
 }
+
+func TestFilterSDHEntries(t *testing.T) {
+	entries := []SubtitleEntry{
+		{Start: "0:00:01.00", End: "0:00:03.00", Text: "Bukan cuma merenggut akal sehat\n[Laboratorium berlumuran darah]"},
+		{Start: "0:00:03.50", End: "0:00:06.00", Text: "[Suara lonceng kencang]"},
+	}
+
+	// Strip mode should clean entry 0 and drop entry 1
+	stripped := FilterSDHEntries(entries, "strip")
+	if len(stripped) != 1 {
+		t.Fatalf("expected 1 entry after strip, got %d", len(stripped))
+	}
+	if stripped[0].Text != "Bukan cuma merenggut akal sehat" {
+		t.Errorf("unexpected stripped text: %s", stripped[0].Text)
+	}
+
+	// Top-box or keep should preserve all entries
+	topBox := FilterSDHEntries(entries, "top-box")
+	if len(topBox) != 2 {
+		t.Fatalf("expected 2 entries for top-box, got %d", len(topBox))
+	}
+}
+
+func TestExportPresetASS_EmptyEntriesError(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "clipper_sdh_empty_*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	entries := []SubtitleEntry{
+		{Start: "0:00:01.00", End: "0:00:03.00", Text: "[Hanya suara musik tegang]"},
+	}
+
+	outFile := filepath.Join(tmpDir, "empty.ass")
+	err = ExportPresetASS(entries, outFile, "hormozi", 54, true, "", "strip")
+	if err == nil {
+		t.Errorf("expected error when all entries are stripped SDH, got nil")
+	}
+}

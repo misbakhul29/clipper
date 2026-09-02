@@ -50,6 +50,23 @@ func ExtractSDHAndSpeech(text string) (speechText string, sdhText string) {
 	return speech, sdhText
 }
 
+// FilterSDHEntries filters or cleans subtitle entries according to sdhMode ("strip", "top-box", "keep").
+// In "strip" mode, it removes [...] brackets and drops any cues that become empty.
+func FilterSDHEntries(entries []SubtitleEntry, sdhMode string) []SubtitleEntry {
+	if sdhMode != "strip" {
+		return entries
+	}
+	var cleaned []SubtitleEntry
+	for _, entry := range entries {
+		speech, _ := ExtractSDHAndSpeech(entry.Text)
+		if speech != "" {
+			entry.Text = speech
+			cleaned = append(cleaned, entry)
+		}
+	}
+	return cleaned
+}
+
 // ParseVTT parses VTT or SRT subtitle file content into a slice of SubtitleEntry.
 func ParseVTT(content string) ([]SubtitleEntry, error) {
 	lines := strings.Split(content, "\n")
@@ -677,6 +694,10 @@ func ExportPresetASS(entries []SubtitleEntry, outputPath string, presetName stri
 		formattedSpeech = ChunkSubtitlesToWords(speechEntries, preset.MaxWords)
 	} else {
 		formattedSpeech = speechEntries
+	}
+
+	if len(formattedSpeech) == 0 && len(sdhEntries) == 0 {
+		return fmt.Errorf("no dialogue or narrator entries to render")
 	}
 
 	var sb strings.Builder

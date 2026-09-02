@@ -399,6 +399,11 @@ func (c *Clipper) Process(cfg *Config) error {
 					if len(removedGaps) > 0 {
 						sliced = transcriber.AdjustSubtitlesForJumpCuts(sliced, removedGaps)
 					}
+					sdhMode := cfg.SubSDHMode
+					if sdhMode == "" {
+						sdhMode = "strip"
+					}
+					sliced = transcriber.FilterSDHEntries(sliced, sdhMode)
 					if len(sliced) > 0 {
 						// On-demand token-saving translation for this specific clip segment
 						if cfg.TranslateLang != "" && (cfg.AIConfig.APIKey != "" || os.Getenv("OPENROUTER_API_KEY") != "" || os.Getenv("GEMINI_API_KEY") != "" || os.Getenv("DEEPSEEK_API_KEY") != "" || os.Getenv("OPENAI_API_KEY") != "") {
