@@ -471,7 +471,13 @@ func (c *Clipper) Process(cfg *Config) error {
 
 				segCfg := *cfg
 				segCfg.InputFile = effectiveInput
+				if numWorkers > 1 {
+					segCfg.ShowProgress = false
+				}
 				err := c.runner.CutSegment(&segCfg, effectiveStart, effectiveDuration, j.segPath, subPath)
+				if numWorkers > 1 && err == nil {
+					fmt.Printf("[%d/%d] Finished rendering: %s\n", j.index+1, len(cfg.Segments), j.segPath)
+				}
 				if jumpCutTemp != "" {
 					_ = os.Remove(jumpCutTemp)
 				}

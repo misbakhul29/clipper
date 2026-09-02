@@ -108,11 +108,21 @@ func (p *ProgressBar) Finish(message string) {
 		message = "Done!"
 	}
 
+	isFailure := strings.Contains(strings.ToLower(message), "fail") || strings.Contains(strings.ToLower(message), "error")
+
 	if p.IsTTY {
-		bar := strings.Repeat("=", p.Width)
-		fmt.Printf("\r\033[K%s: [%s] 100%% %s\n", p.Title, bar, message)
+		if isFailure {
+			fmt.Printf("\r\033[K%s: %s\n", p.Title, message)
+		} else {
+			bar := strings.Repeat("=", p.Width)
+			fmt.Printf("\r\033[K%s: [%s] 100%% %s\n", p.Title, bar, message)
+		}
 	} else {
-		fmt.Printf("%s: 100%% %s\n", p.Title, message)
+		if isFailure {
+			fmt.Printf("%s: %s\n", p.Title, message)
+		} else {
+			fmt.Printf("%s: 100%% %s\n", p.Title, message)
+		}
 	}
 }
 
