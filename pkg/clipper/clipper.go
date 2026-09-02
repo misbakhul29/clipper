@@ -637,16 +637,47 @@ func (c *Clipper) DetectSegmentsWithSubs(cfg *Config, originalInput string) ([]S
 		} else {
 			subEntries, err = transcriber.FetchSubtitles(originalInput, cfg.CacheDir, lang)
 			if err != nil || len(subEntries) == 0 {
+				subEntries, err = transcriber.FetchSubtitles(originalInput, cfg.CacheDir, "en")
+			}
+			if err != nil || len(subEntries) == 0 {
 				subEntries, err = transcriber.TranscribeWithWhisper(cfg.InputFile, cfg.CacheDir, lang)
 			}
 		}
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to fetch or transcribe subtitles: %w", err)
+
+		// Graceful Fallback: If subtitles/transcripts are unavailable (no captions and no Whisper on system),
+		// gracefully fall back to Audio Silence Voice Detection so segments are still produced without crashing!
+		if err != nil || len(subEntries) == 0 {
+			fmt.Printf("Subtitles unavailable (%v). Gracefully falling back to audio Silence Voice Detection...\n", err)
+			detected, sErr := detector.DetectSilence(c.runner.FFmpegPath, cfg.InputFile, -30, 0.5)
+			if sErr != nil {
+				return nil, nil, fmt.Errorf("failed to detect speech segments: %w", sErr)
+			}
+			for _, d := range detected {
+				segments = append(segments, Segment{
+					Start: d.Start,
+					End:   d.End,
+					Title: d.Title,
+				})
+			}
+			return segments, nil, nil
 		}
+
 		cachedSubs = subEntries
 		cfg.AIConfig.IsShorts = cfg.Shorts
 		highlights, err := ai.AnalyzeHighlightsMultiProvider(subEntries, cfg.AIConfig, lang)
 		if err != nil {
+			fmt.Printf("AI highlight analysis returned error (%v). Falling back to audio Silence Voice Detection...\n", err)
+			detected, sErr := detector.DetectSilence(c.runner.FFmpegPath, cfg.InputFile, -30, 0.5)
+			if sErr == nil && len(detected) > 0 {
+				for _, d := range detected {
+					segments = append(segments, Segment{
+						Start: d.Start,
+						End:   d.End,
+						Title: d.Title,
+					})
+				}
+				return segments, cachedSubs, nil
+			}
 			return nil, nil, fmt.Errorf("AI highlight analysis failed: %w", err)
 		}
 		for _, h := range highlights {

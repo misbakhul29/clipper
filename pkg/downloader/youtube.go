@@ -89,14 +89,10 @@ func DownloadYouTubeVideo(urlStr, outputDir, quality string, noCache bool) (stri
 	}
 
 	// Step 1: Find yt-dlp binary (system PATH, ./bin/yt-dlp, or auto-install)
-	binPath, err := ensureYtDlpBinary()
-	if err == nil && binPath != "" {
-		fmt.Printf("Downloading YouTube video via yt-dlp (quality: %s)...\n", quality)
-		file, err := downloadWithYtDlp(binPath, urlStr, videoCacheDir, quality, videoID)
-		if err == nil {
-			return file, nil
-		}
-		fmt.Printf("yt-dlp download failed: %v. Falling back to Go internal downloader...\n", err)
+	binPath, err := EnsureYtDlpBinary()
+	if err == nil {
+		fmt.Printf("Using yt-dlp binary: %s\n", binPath)
+		return downloadWithYtDlp(binPath, urlStr, videoCacheDir, quality, videoID)
 	}
 
 	// Step 2: Fallback to pure Go youtube library
@@ -130,7 +126,8 @@ func ExtractVideoID(urlStr string) string {
 	return ""
 }
 
-func ensureYtDlpBinary() (string, error) {
+// EnsureYtDlpBinary verifies or automatically acquires yt-dlp binary.
+func EnsureYtDlpBinary() (string, error) {
 	// 1. Check system PATH
 	if path, err := exec.LookPath("yt-dlp"); err == nil {
 		return path, nil

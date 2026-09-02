@@ -261,6 +261,7 @@ async function runAutoDetect() {
     segments = segments.concat(data.segments);
     renderSegments();
     switchTab('queue');
+    alert(`Generated ${data.count} segment(s) into queue! Review or edit timestamps, then click 'Render Clips' below when ready.`);
   } catch (err) {
     alert('Network error during auto-detection: ' + err);
   } finally {
@@ -403,12 +404,8 @@ async function startClippingJob() {
     return;
   }
   if (segments.length === 0) {
-    if (confirm("No segments are in the queue. Would you like to automatically generate segments using AI / Auto-Detect now?")) {
-      await runAutoDetect();
-      if (segments.length === 0) return;
-    } else {
-      return;
-    }
+    alert('Queue is empty. Please add segments manually or click "Generate with AI" / "Detect Silence" first before rendering clips.');
+    return;
   }
 
   const payload = {

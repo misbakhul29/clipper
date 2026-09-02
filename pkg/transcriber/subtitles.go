@@ -298,6 +298,9 @@ func FetchSubtitles(inputStr, outputDir, lang string) ([]SubtitleEntry, error) {
 }
 
 func findYtDlpBinary() string {
+	if bin, err := downloader.EnsureYtDlpBinary(); err == nil && bin != "" {
+		return bin
+	}
 	if path, err := exec.LookPath("yt-dlp"); err == nil {
 		return path
 	}
