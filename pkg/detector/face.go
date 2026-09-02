@@ -228,7 +228,7 @@ func (ft *FaceTracker) PlanCameraTransitions(dets []FaceDetection, totalDuration
 
 	baseX := dets[0].NormX
 	currentX := baseX
-	lastTransitionTime := 0.0
+	lastTransitionTime := dets[0].TimeSec
 
 	var transitions []CameraTransition
 

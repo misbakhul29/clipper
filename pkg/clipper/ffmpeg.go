@@ -67,7 +67,7 @@ func (f *FFmpegRunner) CutSegment(cfg *Config, startSec, durationSec float64, ou
 	args = append(args, "-t", durStr)
 
 	dynamicCropFilter := ""
-	if cfg.Shorts && cfg.ShortsStyle == "smart-crop" {
+	if cfg.Shorts && cfg.ShortsStyle == "smart-crop" && cfg.FaceTracking {
 		ft := detector.NewFaceTracker(f.FFmpegPath)
 		if cfg.PanDuration > 0 {
 			ft.PanDuration = cfg.PanDuration

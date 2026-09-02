@@ -56,6 +56,17 @@ func TestPlanCameraTransitions(t *testing.T) {
 	if transitions[1].StartTimeSec != 4.0 || math.Abs(transitions[1].DeltaX-(-0.45)) > 1e-4 {
 		t.Errorf("transition 1 unexpected: %+v", transitions[1])
 	}
+
+	// Test case: Delayed first detection respects MinHoldDuration
+	delayedDets := []FaceDetection{
+		{TimeSec: 2.0, NormX: 0.50},
+		{TimeSec: 2.5, NormX: 0.80}, // only 0.5s elapsed from first face -> ignored
+		{TimeSec: 4.0, NormX: 0.80}, // 2.0s elapsed -> allowed
+	}
+	delayedTrans, _ := ft.PlanCameraTransitions(delayedDets, 5.0)
+	if len(delayedTrans) != 1 || delayedTrans[0].StartTimeSec != 4.0 {
+		t.Errorf("unexpected delayed transitions: %+v", delayedTrans)
+	}
 }
 
 func TestBuildDynamicCropFilter(t *testing.T) {

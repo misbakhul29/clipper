@@ -301,7 +301,7 @@ func (c *Clipper) Process(cfg *Config) error {
 			for j := range jobs {
 				fmt.Printf("[%d/%d] Cutting segment: %.2fs -> duration %.2fs -> %s\n",
 					j.index+1, len(cfg.Segments), j.startSec, j.durationSec, j.segPath)
-				if cfg.Shorts && cfg.ShortsStyle == "smart-crop" {
+				if cfg.Shorts && cfg.ShortsStyle == "smart-crop" && cfg.FaceTracking {
 					fmt.Printf("[%d/%d] Analyzing active speaker & face tracking for smart-crop auto-framing...\n", j.index+1, len(cfg.Segments))
 				}
 
