@@ -78,36 +78,47 @@ var (
 // ParseSilenceGaps extracts SilenceGap intervals from FFmpeg silencedetect stderr output.
 func ParseSilenceGaps(output string, totalDuration, minSilence float64) ([]SilenceGap, error) {
 	lines := strings.Split(output, "\n")
-	var starts []float64
-	var ends []float64
+	var gaps []SilenceGap
+
+	inSilence := false
+	currentStart := 0.0
 
 	for _, line := range lines {
 		if m := silStartRe.FindStringSubmatch(line); len(m) > 1 {
 			if val, err := strconv.ParseFloat(m[1], 64); err == nil {
-				starts = append(starts, val)
+				currentStart = val
+				inSilence = true
 			}
-		}
-		if m := silEndRe.FindStringSubmatch(line); len(m) > 1 {
+		} else if m := silEndRe.FindStringSubmatch(line); len(m) > 1 {
 			if val, err := strconv.ParseFloat(m[1], 64); err == nil {
-				ends = append(ends, val)
+				en := val
+				if en > totalDuration {
+					en = totalDuration
+				}
+				st := currentStart
+				if !inSilence {
+					// Audio started in silence without a preceding silence_start log
+					st = 0.0
+				}
+				dur := en - st
+				if dur >= minSilence && en > st {
+					gaps = append(gaps, SilenceGap{
+						StartSec: st,
+						EndSec:   en,
+					})
+				}
+				inSilence = false
 			}
 		}
 	}
 
-	var gaps []SilenceGap
-	for i := 0; i < len(starts); i++ {
-		st := starts[i]
+	// If audio ended while still in silence
+	if inSilence {
 		en := totalDuration
-		if i < len(ends) {
-			en = ends[i]
-		}
-		if en > totalDuration {
-			en = totalDuration
-		}
-		dur := en - st
-		if dur >= minSilence && en > st {
+		dur := en - currentStart
+		if dur >= minSilence && en > currentStart {
 			gaps = append(gaps, SilenceGap{
-				StartSec: st,
+				StartSec: currentStart,
 				EndSec:   en,
 			})
 		}

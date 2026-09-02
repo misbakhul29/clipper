@@ -28,6 +28,45 @@ func TestParseSilenceGaps(t *testing.T) {
 	}
 }
 
+func TestParseSilenceGaps_LeadingSilenceWithoutStart(t *testing.T) {
+	sampleOutput := `
+[silencedetect @ 0x55ac4638f340] silence_end: 2.500 | silence_duration: 2.500
+[silencedetect @ 0x55ac4638f340] silence_start: 6.000
+[silencedetect @ 0x55ac4638f340] silence_end: 9.000 | silence_duration: 3.000
+`
+	gaps, err := ParseSilenceGaps(sampleOutput, 10.0, 1.0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(gaps) != 2 {
+		t.Fatalf("expected 2 gaps, got %d", len(gaps))
+	}
+	if math.Abs(gaps[0].StartSec-0.0) > 1e-3 || math.Abs(gaps[0].EndSec-2.5) > 1e-3 {
+		t.Errorf("gap 0 mismatch: %+v", gaps[0])
+	}
+	if math.Abs(gaps[1].StartSec-6.0) > 1e-3 || math.Abs(gaps[1].EndSec-9.0) > 1e-3 {
+		t.Errorf("gap 1 mismatch: %+v", gaps[1])
+	}
+}
+
+func TestParseSilenceGaps_TrailingSilenceWithoutEnd(t *testing.T) {
+	sampleOutput := `
+[silencedetect @ 0x55ac4638f340] silence_start: 7.000
+`
+	gaps, err := ParseSilenceGaps(sampleOutput, 10.0, 1.0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(gaps) != 1 {
+		t.Fatalf("expected 1 gap, got %d", len(gaps))
+	}
+	if math.Abs(gaps[0].StartSec-7.0) > 1e-3 || math.Abs(gaps[0].EndSec-10.0) > 1e-3 {
+		t.Errorf("gap mismatch: %+v", gaps[0])
+	}
+}
+
 func TestCalculateJumpCutIntervals(t *testing.T) {
 	t.Run("Silence in the middle with margin", func(t *testing.T) {
 		gaps := []SilenceGap{
