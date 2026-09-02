@@ -158,6 +158,10 @@ func CalculateJumpCutIntervals(totalDuration float64, gaps []SilenceGap, marginS
 			cutEnd = totalDuration
 		}
 
+		if cutStart < currentPos {
+			cutStart = currentPos
+		}
+
 		if cutEnd > cutStart {
 			// There is an actual gap to remove after subtracting speech margin
 			if cutStart > currentPos {
