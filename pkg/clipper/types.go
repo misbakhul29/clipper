@@ -1,6 +1,7 @@
 package clipper
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"runtime"
@@ -96,6 +97,33 @@ type Config struct {
 	JumpCutMargin float64             `json:"jump_cut_margin"` // Padding margin around speech in seconds (default: 0.2)
 	JumpCutNoise  float64             `json:"jump_cut_noise"`  // Silence noise gate threshold in dB (default: -30.0)
 	Segments      []Segment           `json:"segments"`
+}
+
+// UnmarshalJSON implements custom unmarshaling to support "subtitles", "subtitle", "burn_subtitles", and "burn_subtitle" config keys.
+func (c *Config) UnmarshalJSON(data []byte) error {
+	type Alias Config
+	aux := &struct {
+		Subtitles    *bool `json:"subtitles"`
+		Subtitle     *bool `json:"subtitle"`
+		BurnSubtitle *bool `json:"burn_subtitle"`
+		*Alias
+	}{
+		Alias: (*Alias)(c),
+	}
+
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+
+	if aux.Subtitles != nil {
+		c.BurnSubtitles = *aux.Subtitles
+	} else if aux.Subtitle != nil {
+		c.BurnSubtitles = *aux.Subtitle
+	} else if aux.BurnSubtitle != nil {
+		c.BurnSubtitles = *aux.BurnSubtitle
+	}
+
+	return nil
 }
 
 // GetBatchInputs parses multiple input URLs or file paths from BatchList or comma-separated InputFile.

@@ -413,6 +413,7 @@ async function startClippingJob() {
     segments: segments,
     shorts: document.getElementById('cfgShorts').checked,
     shorts_style: document.getElementById('cfgShortsStyle').value,
+    subtitles: document.getElementById('cfgBurnSubs').checked,
     burn_subtitles: document.getElementById('cfgBurnSubs').checked,
     sub_preset: document.getElementById('cfgSubPreset').value,
     sub_emoji: true,

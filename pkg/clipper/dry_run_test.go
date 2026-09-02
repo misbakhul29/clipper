@@ -1,6 +1,7 @@
 package clipper
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -83,4 +84,39 @@ func TestDryRunExecution(t *testing.T) {
 	if len(clips) > 0 {
 		t.Errorf("DryRun should not generate output clip files, found: %v", clips)
 	}
+}
+
+func TestConfigSubtitlesJSONParsing(t *testing.T) {
+	t.Run("subtitles true", func(t *testing.T) {
+		jsonData := []byte(`{"input_file":"video.mp4","subtitles":true}`)
+		var cfg Config
+		if err := json.Unmarshal(jsonData, &cfg); err != nil {
+			t.Fatalf("failed unmarshaling: %v", err)
+		}
+		if !cfg.BurnSubtitles {
+			t.Errorf("expected BurnSubtitles to be true, got false")
+		}
+	})
+
+	t.Run("subtitles false", func(t *testing.T) {
+		jsonData := []byte(`{"input_file":"video.mp4","subtitles":false}`)
+		var cfg Config
+		if err := json.Unmarshal(jsonData, &cfg); err != nil {
+			t.Fatalf("failed unmarshaling: %v", err)
+		}
+		if cfg.BurnSubtitles {
+			t.Errorf("expected BurnSubtitles to be false, got true")
+		}
+	})
+
+	t.Run("burn_subtitles true", func(t *testing.T) {
+		jsonData := []byte(`{"input_file":"video.mp4","burn_subtitles":true}`)
+		var cfg Config
+		if err := json.Unmarshal(jsonData, &cfg); err != nil {
+			t.Fatalf("failed unmarshaling: %v", err)
+		}
+		if !cfg.BurnSubtitles {
+			t.Errorf("expected BurnSubtitles to be true, got false")
+		}
+	})
 }

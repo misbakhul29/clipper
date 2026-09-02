@@ -98,6 +98,7 @@ func main() {
 	flag.StringVar(&translateLang, "translate-lang", "id", "Target language for AI titles and subtitle translation ('id', 'en', etc.)")
 	flag.BoolVar(&burnSubtitles, "burn-subtitles", false, "Hardcode/burn-in subtitles directly onto video clips")
 	flag.BoolVar(&burnSubtitles, "subtitles", false, "Hardcode/burn-in subtitles directly onto video clips")
+	flag.BoolVar(&burnSubtitles, "subtitle", false, "Hardcode/burn-in subtitles directly onto video clips")
 	flag.StringVar(&subStyle, "sub-style", "karaoke", "Subtitle style for burnt-in captions ('karaoke' for TikTok 2-word chunks, or 'standard')")
 	flag.StringVar(&subPreset, "sub-preset", "hormozi", "Viral subtitle theme preset ('hormozi', 'minimal', 'devon', 'neon', 'cinematic')")
 	flag.StringVar(&subSDHMode, "sub-sdh-mode", "strip", "Handling for silent narrator & SDH brackets: 'strip' (clean speech), 'top-box' (dual-layer top banner), 'keep'")
@@ -287,7 +288,7 @@ func main() {
 	if isFlagPassed("translate-lang") {
 		cfg.TranslateLang = translateLang
 	}
-	if isFlagPassed("burn-subtitles") || isFlagPassed("subtitles") {
+	if isFlagPassed("burn-subtitles") || isFlagPassed("subtitles") || isFlagPassed("subtitle") {
 		cfg.BurnSubtitles = burnSubtitles
 	}
 	if isFlagPassed("sub-style") {

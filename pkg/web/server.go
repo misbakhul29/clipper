@@ -310,7 +310,8 @@ type clipRequestPayload struct {
 	AIModel          string            `json:"ai_model"`
 	Shorts           bool              `json:"shorts"`
 	ShortsStyle      string            `json:"shorts_style"`
-	BurnSubtitles    bool              `json:"burn_subtitles"`
+	Subtitles        *bool             `json:"subtitles,omitempty"`
+	BurnSubtitles    *bool             `json:"burn_subtitles,omitempty"`
 	SubPreset        string            `json:"sub_preset"`
 	SubEmoji         bool              `json:"sub_emoji"`
 	Loudnorm         bool              `json:"loudnorm"`
@@ -455,7 +456,11 @@ func (s *Server) handleClip(w http.ResponseWriter, r *http.Request) {
 	if req.ShortsStyle != "" {
 		cfg.ShortsStyle = req.ShortsStyle
 	}
-	cfg.BurnSubtitles = req.BurnSubtitles
+	if req.Subtitles != nil {
+		cfg.BurnSubtitles = *req.Subtitles
+	} else if req.BurnSubtitles != nil {
+		cfg.BurnSubtitles = *req.BurnSubtitles
+	}
 	if req.SubPreset != "" {
 		cfg.SubPreset = req.SubPreset
 	}
