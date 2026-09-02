@@ -32,6 +32,7 @@ go install .
 | `-mode` | `string` | `"split"` | Mode operasi: `"split"` (berkas terpisah) atau `"merge"` (gabung 1 berkas) |
 | `-strategy` | `string` | `"fast"` | Strategi pemotongan: `"fast"` (stream copy w/o re-encode) atau `"accurate"` (re-encode presisi) |
 | `-hwaccel` | `string` | `"auto"` | Akselerasi hardware GPU: `"auto"`, `"nvenc"` (NVIDIA), `"videotoolbox"` (Apple), `"qsv"` (Intel), `"vaapi"` (Linux), `"amf"` (AMD), atau `"cpu"` |
+| `-progress` | `bool` | `true` | Tampilkan progress bar interaktif dinamis (*percentage, speed, ETA*) saat download & rendering |
 | **Shorts (9:16) & Face Tracking** | | | |
 | `-shorts` | `bool` | `false` | Konversi klip ke format vertikal 9:16 (Shorts/Reels/TikTok) |
 | `-shorts-style` | `string` | `"crop"` | Gaya rasio 9:16: `"crop"` (center crop), `"blur"` (latar blur), atau `"smart-crop"` (pelacak wajah aktif) |

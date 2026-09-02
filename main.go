@@ -66,6 +66,7 @@ func main() {
 		extractThumb  bool
 		thumbCount    int
 		hwaccel       string
+		showProgress  bool
 	)
 
 	flag.StringVar(&configFile, "config", "", "Path to JSON configuration file")
@@ -106,6 +107,7 @@ func main() {
 	flag.BoolVar(&extractThumb, "thumb", false, "Extract high-resolution cover thumbnail and hook frames (.jpg)")
 	flag.IntVar(&thumbCount, "thumb-count", 1, "Number of candidate thumbnails to extract (1 to 3, default: 1)")
 	flag.StringVar(&hwaccel, "hwaccel", "auto", "Hardware acceleration mode ('auto', 'nvenc', 'videotoolbox', 'qsv', 'vaapi', 'amf', 'cpu')")
+	flag.BoolVar(&showProgress, "progress", true, "Show dynamic terminal progress bar during rendering (default: true)")
 	flag.BoolVar(&dryRun, "dry-run", false, "Analyze segments and preview commands without rendering video files")
 	flag.StringVar(&batchList, "batch-list", "", "Path to text file containing video URLs/files (one per line)")
 	flag.BoolVar(&cleanCache, "clean-cache", false, "Clean cache directory and exit")
@@ -198,6 +200,7 @@ func main() {
 			ExtractThumbnail: extractThumb,
 			ThumbnailCount:   thumbCount,
 			HWAccel:          hwaccel,
+			ShowProgress:     showProgress,
 			Segments:         parsedSegs,
 		}
 		if err := saveConfig(initConfig, genCfg); err != nil {
@@ -316,6 +319,9 @@ func main() {
 	}
 	if isFlagPassed("hwaccel") {
 		cfg.HWAccel = hwaccel
+	}
+	if isFlagPassed("progress") {
+		cfg.ShowProgress = showProgress
 	}
 	if isFlagPassed("dry-run") {
 		cfg.DryRun = dryRun
@@ -598,6 +604,7 @@ func runInteractiveWizard(defaultFile string) {
 		ExtractThumbnail: extractThumbnails,
 		ThumbnailCount:   1,
 		HWAccel:          hwChoice,
+		ShowProgress:     true,
 		FaceTracking:     true,
 		Segments:         segments,
 	}

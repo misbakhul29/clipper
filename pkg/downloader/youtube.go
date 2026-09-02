@@ -1,16 +1,20 @@
 package downloader
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/kkdai/youtube/v2"
+	"github.com/misbakhul29/clipper/pkg/ui"
 )
 
 // IsYouTubeURL checks whether a string is a YouTube video URL.
@@ -199,6 +203,8 @@ func GetYtDlpCachePath() string {
 	return filepath.Join(appBinDir, binName)
 }
 
+var dlRegex = regexp.MustCompile(`\[download\]\s+([\d\.]+)%.*?\sat\s+([^\s]+)\s+ETA\s+([^\s]+)`)
+
 func downloadWithYtDlp(binPath, urlStr, outputDir, quality, videoID string) (string, error) {
 	outTemplate := filepath.Join(outputDir, "%(title)s_%(id)s.%(ext)s")
 	formatSpec := getYtDlpFormatSpec(quality)
@@ -206,25 +212,73 @@ func downloadWithYtDlp(binPath, urlStr, outputDir, quality, videoID string) (str
 	args := []string{
 		"-f", formatSpec,
 		"--merge-output-format", "mp4",
+		"--newline",
+		"--progress",
 		"-o", outTemplate,
 		"--print", "after_move:filepath",
 		urlStr,
 	}
 
 	cmd := exec.Command(binPath, args...)
-	output, err := cmd.CombinedOutput()
+	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
-		return "", fmt.Errorf("yt-dlp download failed: %w\nOutput: %s", err, string(output))
+		return "", err
+	}
+	cmd.Stderr = cmd.Stdout // merge stderr to capture progress and error lines
+
+	if err := cmd.Start(); err != nil {
+		return "", fmt.Errorf("failed starting yt-dlp: %w", err)
 	}
 
-	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
-	if len(lines) == 0 {
+	bar := ui.NewProgressBar("Downloading YouTube", 100.0)
+
+	var downloadedFile string
+	var allOutput []string
+
+	scanner := bufio.NewScanner(stdoutPipe)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		allOutput = append(allOutput, line)
+
+		if m := dlRegex.FindStringSubmatch(line); len(m) >= 4 {
+			if pct, pErr := strconv.ParseFloat(m[1], 64); pErr == nil {
+				bar.Update(pct, m[2], m[3])
+			}
+		} else if strings.Contains(line, "[download] 100%") {
+			bar.Update(100.0, "", "00:00")
+		}
+
+		// Check if line looks like a valid filepath on disk
+		if strings.HasSuffix(line, ".mp4") || strings.HasSuffix(line, ".mkv") || strings.HasSuffix(line, ".webm") {
+			if fi, sErr := os.Stat(line); sErr == nil && !fi.IsDir() {
+				downloadedFile = line
+			}
+		}
+	}
+
+	if err := cmd.Wait(); err != nil {
+		bar.Finish("Failed")
+		return "", fmt.Errorf("yt-dlp download failed: %w\nOutput: %s", err, strings.Join(allOutput, "\n"))
+	}
+
+	bar.Finish("Completed!")
+
+	if downloadedFile == "" {
+		// Fallback: check last line
+		for i := len(allOutput) - 1; i >= 0; i-- {
+			candidate := allOutput[i]
+			if fi, sErr := os.Stat(candidate); sErr == nil && !fi.IsDir() {
+				downloadedFile = candidate
+				break
+			}
+		}
+	}
+
+	if downloadedFile == "" {
 		return "", fmt.Errorf("yt-dlp did not return output filepath")
-	}
-
-	downloadedFile := strings.TrimSpace(lines[len(lines)-1])
-	if _, err := os.Stat(downloadedFile); err != nil {
-		return "", fmt.Errorf("downloaded file not found at: %s", downloadedFile)
 	}
 
 	return downloadedFile, nil

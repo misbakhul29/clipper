@@ -1,15 +1,18 @@
 package clipper
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/misbakhul29/clipper/pkg/detector"
+	"github.com/misbakhul29/clipper/pkg/ui"
 )
 
 // FFmpegRunner handles invoking the ffmpeg executable.
@@ -102,6 +105,10 @@ func (f *FFmpegRunner) CutSegment(cfg *Config, startSec, durationSec float64, ou
 		outputPath,
 	)
 
+	if cfg.ShowProgress {
+		title := fmt.Sprintf("Rendering %s", filepath.Base(outputPath))
+		return f.runFFmpegWithProgress(args, title, durationSec)
+	}
 	return f.runFFmpeg(args)
 }
 
@@ -439,6 +446,72 @@ func (f *FFmpegRunner) runFFmpeg(args []string) error {
 		return fmt.Errorf("ffmpeg execution failed: %w\nOutput: %s", err, stderr.String())
 	}
 	return nil
+}
+
+func (f *FFmpegRunner) runFFmpegWithProgress(args []string, title string, durationSec float64) error {
+	if len(args) == 0 {
+		return fmt.Errorf("empty ffmpeg args")
+	}
+
+	progressArgs := make([]string, 0, len(args)+2)
+	progressArgs = append(progressArgs, args[:len(args)-1]...)
+	progressArgs = append(progressArgs, "-progress", "pipe:1", args[len(args)-1])
+
+	cmd := exec.Command(f.FFmpegPath, progressArgs...)
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		return f.runFFmpeg(args)
+	}
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed starting ffmpeg: %w", err)
+	}
+
+	bar := ui.NewProgressBar(title, durationSec)
+	scanner := bufio.NewScanner(stdoutPipe)
+
+	var currentOutSec float64
+	var currentSpeed string
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if strings.HasPrefix(line, "out_time_us=") {
+			usStr := strings.TrimPrefix(line, "out_time_us=")
+			if us, err := strconv.ParseFloat(usStr, 64); err == nil {
+				currentOutSec = us / 1000000.0
+				etaStr := computeETA(currentOutSec, durationSec, currentSpeed)
+				bar.Update(currentOutSec, currentSpeed, etaStr)
+			}
+		} else if strings.HasPrefix(line, "speed=") {
+			currentSpeed = strings.TrimPrefix(line, "speed=")
+		} else if line == "progress=end" {
+			bar.Update(durationSec, currentSpeed, "00:00")
+		}
+	}
+
+	if err := cmd.Wait(); err != nil {
+		bar.Finish("Failed")
+		return fmt.Errorf("ffmpeg execution failed: %w\nOutput: %s", err, stderr.String())
+	}
+
+	bar.Finish("Done!")
+	return nil
+}
+
+func computeETA(currentSec, totalSec float64, speedStr string) string {
+	if totalSec <= currentSec {
+		return "00:00"
+	}
+	speedStr = strings.TrimSuffix(strings.TrimSpace(speedStr), "x")
+	sp, err := strconv.ParseFloat(speedStr, 64)
+	if err != nil || sp <= 0.05 {
+		return "--:--"
+	}
+	remainSec := (totalSec - currentSec) / sp
+	return ui.FormatDuration(remainSec)
 }
 
 // MergeSegments concatenates multiple video files into a single outputFile using FFmpeg concat demuxer.
