@@ -37,7 +37,7 @@ func (f *FFmpegRunner) CutSegment(cfg *Config, startSec, durationSec float64, ou
 	hasWatermark := cfg.WatermarkPath != ""
 	hasOverlayText := cfg.OverlayText != ""
 	hasSubtitles := subPath != ""
-	needsReencode := cfg.Shorts || hasWatermark || hasOverlayText || hasSubtitles || cfg.Strategy == StrategyAccurate
+	needsReencode := cfg.Shorts || hasWatermark || hasOverlayText || hasSubtitles || cfg.Strategy == StrategyAccurate || cfg.Loudnorm
 
 	if !needsReencode {
 		// Fast copy mode without re-encoding
@@ -88,6 +88,11 @@ func (f *FFmpegRunner) CutSegment(cfg *Config, startSec, durationSec float64, ou
 
 	vEncArgs := selectVideoEncoderArgs(f.FFmpegPath)
 	args = append(args, vEncArgs...)
+
+	if cfg.Loudnorm {
+		args = append(args, "-af", BuildLoudnormFilter(cfg))
+	}
+
 	args = append(args,
 		"-c:a", "aac",
 		"-b:a", "320k",
@@ -324,4 +329,21 @@ func (f *FFmpegRunner) MergeSegments(segmentFiles []string, outputFile string) e
 	}
 
 	return nil
+}
+
+// BuildLoudnormFilter constructs the FFmpeg loudnorm audio filter string.
+func BuildLoudnormFilter(cfg *Config) string {
+	targetI := cfg.LoudnormI
+	if targetI == 0 {
+		targetI = -14.0
+	}
+	targetLRA := cfg.LoudnormLRA
+	if targetLRA == 0 {
+		targetLRA = 7.0
+	}
+	targetTP := cfg.LoudnormTP
+	if targetTP == 0 {
+		targetTP = -2.0
+	}
+	return fmt.Sprintf("loudnorm=I=%.1f:LRA=%.1f:TP=%.1f", targetI, targetLRA, targetTP)
 }

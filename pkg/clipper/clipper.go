@@ -241,6 +241,13 @@ func (c *Clipper) Process(cfg *Config) error {
 	if cfg.BurnSubtitles {
 		fmt.Printf("Burnt-in Subtitles: Enabled\n")
 	}
+	if cfg.Loudnorm {
+		targetI := cfg.LoudnormI
+		if targetI == 0 {
+			targetI = -14.0
+		}
+		fmt.Printf("Audio Normalization: EBU R128 (Target: %.1f LUFS)\n", targetI)
+	}
 
 	type job struct {
 		index       int

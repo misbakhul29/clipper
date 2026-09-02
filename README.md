@@ -11,7 +11,7 @@ Sistem pemotong video otomatis berbasis **Go (Golang)** yang terintegrasi dengan
 - 🤖 **Multi-Provider AI Highlight Detection**: Dukungan provider AI ganda (**Google Gemini**, **DeepSeek**, **OpenAI**, **OpenRouter**) untuk analisis klip paling viral dari transkrip video.
 - 🎙️ **Local Whisper Speech-to-Text (`-use-whisper`)**: Ekstraksi subtitle AI secara otomatis dan offline dari audio video menggunakan Whisper AI.
 - 👤 **Dynamic Speaker Auto-Framing & Face Tracking (`-shorts-style smart-crop`)**: Pemotongan vertikal 9:16 otomatis yang melacak wajah pembicara aktif (*Active Speaker Tracking*) berbasis pure Go AI detector (`pigo`) dengan transisi pergerakan kamera halus (*temporal camera easing & deadband*).
-- 💬 **Burnt-In Subtitles & Auto Translation (`-burn-subtitles`)**: Menempelkan subtitle terjemahan secara otomatis dan permanen pada video klip/Shorts.
+- 🔊 **Auto Audio Normalization (`-loudnorm`)**: Penyetaraan volume suara standar industri EBU R128 (-14 LUFS target Shorts/TikTok/Reels) otomatis tanpa distorsi (*True Peak -2 dBTP*).
 - 🎙️ **Smart Silence & Scene Auto-Detection**: Deteksi otomatis bagian percakapan/suara (`-auto-detect silence`) atau perpindahan adegan (`-auto-detect scene`).
 - ⚡ **Parallel Concurrency Engine**: Render banyak klip sekaligus secara paralel via Goroutines worker pool.
 - 🎨 **Watermark Image & Text Overlay**: Penambahan logo watermark PNG & caption teks otomatis pada klip.

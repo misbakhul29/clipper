@@ -79,6 +79,10 @@ type Config struct {
 	CleanDays     int                 `json:"clean_days"`    // Delete cache files older than N days (0 = clean all)
 	FaceTracking  bool                `json:"face_tracking"` // Dynamic active speaker / face tracking for smart-crop
 	PanDuration   float64             `json:"pan_duration"`  // Duration of camera pan interpolation in seconds (default: 0.8)
+	Loudnorm      bool                `json:"loudnorm"`      // EBU R128 audio normalization (-af loudnorm)
+	LoudnormI     float64             `json:"loudnorm_i"`    // Integrated loudness target in LUFS (default: -14)
+	LoudnormLRA   float64             `json:"loudnorm_lra"`  // Loudness range target in LU (default: 7)
+	LoudnormTP    float64             `json:"loudnorm_tp"`   // Maximum true peak in dBTP (default: -2)
 	Segments      []Segment           `json:"segments"`
 }
 

@@ -51,6 +51,10 @@ func main() {
 		segments      string
 		faceTracking  bool
 		panDuration   float64
+		loudnorm      bool
+		loudnormI     float64
+		loudnormLRA   float64
+		loudnormTP    float64
 	)
 
 	flag.StringVar(&configFile, "config", "", "Path to JSON configuration file")
@@ -95,6 +99,10 @@ func main() {
 	flag.StringVar(&segments, "segments", "", "Comma-separated segment timestamps (e.g. '00:10-00:25,01:00-01:30')")
 	flag.BoolVar(&faceTracking, "face-tracking", true, "Enable dynamic active speaker / face tracking for smart-crop shorts")
 	flag.Float64Var(&panDuration, "pan-duration", 0.8, "Camera pan transition duration in seconds (default: 0.8s)")
+	flag.BoolVar(&loudnorm, "loudnorm", false, "Normalize audio loudness to EBU R128 standard (-af loudnorm=I=-14:LRA=7:TP=-2)")
+	flag.Float64Var(&loudnormI, "loudnorm-i", -14.0, "Integrated loudness target in LUFS (default: -14.0)")
+	flag.Float64Var(&loudnormLRA, "loudnorm-lra", 7.0, "Loudness range target in LU (default: 7.0)")
+	flag.Float64Var(&loudnormTP, "loudnorm-tp", -2.0, "Maximum true peak in dBTP (default: -2.0)")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
@@ -152,6 +160,10 @@ func main() {
 			AutoDetect:    autoDetect,
 			FaceTracking:  faceTracking,
 			PanDuration:   panDuration,
+			Loudnorm:      loudnorm,
+			LoudnormI:     loudnormI,
+			LoudnormLRA:   loudnormLRA,
+			LoudnormTP:    loudnormTP,
 			Segments:      parsedSegs,
 		}
 		if err := saveConfig(initConfig, genCfg); err != nil {
@@ -283,6 +295,21 @@ func main() {
 	}
 	if isFlagPassed("pan-duration") {
 		cfg.PanDuration = panDuration
+	}
+	if isFlagPassed("loudnorm") {
+		cfg.Loudnorm = loudnorm
+	} else if cfg.Shorts {
+		// Automatically enable EBU R128 audio normalization for vertical shorts
+		cfg.Loudnorm = true
+	}
+	if isFlagPassed("loudnorm-i") {
+		cfg.LoudnormI = loudnormI
+	}
+	if isFlagPassed("loudnorm-lra") {
+		cfg.LoudnormLRA = loudnormLRA
+	}
+	if isFlagPassed("loudnorm-tp") {
+		cfg.LoudnormTP = loudnormTP
 	}
 
 	// Parse CLI segments string if provided

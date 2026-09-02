@@ -66,6 +66,11 @@ go install .
 | `-text-pos` | `string` | `"bottom-center"` | Posisi teks overlay: `"bottom-center"`, `"top-center"`, `"center"` |
 | `-font-size` | `int` | `32` | Ukuran font teks overlay caption |
 | `-font-color` | `string` | `"white"` | Warna font teks overlay (`"white"`, `"yellow"`, `"cyan"`, `"red"`) |
+| **Normalisasi Audio (EBU R128 / Loudnorm)** | | | |
+| `-loudnorm` | `bool` | `false` | Standarisasi volume audio ke standar EBU R128 (-14 LUFS, auto-aktif pada `-shorts`) |
+| `-loudnorm-i` | `float` | `-14.0` | Target Integrated Loudness dalam LUFS (standar YouTube/TikTok: `-14.0`) |
+| `-loudnorm-lra` | `float` | `7.0` | Target rentang loudness (Loudness Range) dalam LU |
+| `-loudnorm-tp` | `float` | `-2.0` | Batas maksimum True Peak dalam dBTP untuk mencegah distorsi |
 | **Manual Timestamps & Config** | | | |
 | `-segments` | `string` | `""` | Timestamp segmen manual dipisahkan koma (misal: `'00:10-00:25,01:00-01:30'`) |
 | `-config` | `string` | `""` | Path ke berkas konfigurasi JSON |
@@ -218,4 +223,12 @@ clipper -input "https://www.youtube.com/watch?v=xxx" \
   -pan-duration 0.8 \
   -burn-subtitles -sub-style karaoke \
   -outdir ./smart_crop_shorts
+```
+
+### 8. Auto Audio Normalization (EBU R128 -14 LUFS)
+```bash
+clipper -input "podcast.mp4" \
+  -segments "00:10-00:40" \
+  -loudnorm -loudnorm-i -14 \
+  -outdir ./normalized_clips
 ```
