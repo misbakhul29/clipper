@@ -2,6 +2,7 @@ package transcriber
 
 import (
 	"fmt"
+	"html"
 	"math"
 	"os"
 	"os/exec"
@@ -23,6 +24,7 @@ type SubtitleEntry struct {
 
 var vttTimeRegex = regexp.MustCompile(`((?:\d{1,2}:)?\d{2}:\d{2}[\.\,]\d{3})\s*-->\s*((?:\d{1,2}:)?\d{2}:\d{2}[\.\,]\d{3})`)
 var sdhBracketRegex = regexp.MustCompile(`(?s)\[(.*?)\]`)
+var htmlTagRegex = regexp.MustCompile(`<[^>]*>`)
 
 // ExtractSDHAndSpeech separates silent narrator context / sound effect descriptions inside brackets [...]
 // from actual spoken dialogue text.
@@ -318,9 +320,18 @@ func normalizeTimestamp(ts string) string {
 }
 
 func cleanSubtitleText(text string) string {
-	// Strip HTML tags like <c>, </c>, <b>, etc.
-	re := regexp.MustCompile(`<[^>]*>`)
-	return re.ReplaceAllString(text, "")
+	// Strip HTML tags like <c>, </c>, <b>, inline timestamps, etc.
+	text = htmlTagRegex.ReplaceAllString(text, "")
+	// Unescape HTML entities (&amp;, &quot;, &#39;, &lt;, &gt;, etc.)
+	text = html.UnescapeString(text)
+	// Replace non-breaking spaces (\u00a0) with regular space to prevent missing glyph boxes in fonts
+	text = strings.ReplaceAll(text, "\u00a0", " ")
+	// Normalize multiple whitespace
+	text = strings.TrimSpace(text)
+	for strings.Contains(text, "  ") {
+		text = strings.ReplaceAll(text, "  ", " ")
+	}
+	return text
 }
 
 func isNumeric(s string) bool {
@@ -421,6 +432,7 @@ func ExportASSWithFont(entries []SubtitleEntry, outputPath string, fontSize int,
 }
 
 func parseTimestampToSec(ts string) float64 {
+	ts = strings.TrimSpace(ts)
 	ts = strings.ReplaceAll(ts, ",", ".")
 	parts := strings.Split(ts, ":")
 	if len(parts) == 3 {

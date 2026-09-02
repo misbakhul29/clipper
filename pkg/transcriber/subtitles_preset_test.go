@@ -347,3 +347,34 @@ func TestExportPresetASS_TimestampFormatting(t *testing.T) {
 		t.Errorf("expected normalized ASS timestamps 0:01:23.46, got: %s", content)
 	}
 }
+
+func TestCleanSubtitleText(t *testing.T) {
+	cases := []struct {
+		input    string
+		expected string
+	}{
+		{
+			input:    `<c.colorE5E5E5>bukan cuma merenggut akal sehat &amp; nalar</c>`,
+			expected: `bukan cuma merenggut akal sehat & nalar`,
+		},
+		{
+			input:    `&quot;don&#39;t worry&quot; &lt;everyone&gt;`,
+			expected: `"don't worry" <everyone>`,
+		},
+		{
+			input:    "kata\u00a0pertama   kata\u00a0kedua",
+			expected: "kata pertama kata kedua",
+		},
+		{
+			input:    `<00:00:01.500><c>halo</c> <00:00:02.000><c>dunia</c>`,
+			expected: `halo dunia`,
+		},
+	}
+
+	for _, c := range cases {
+		got := cleanSubtitleText(c.input)
+		if got != c.expected {
+			t.Errorf("cleanSubtitleText(%q) = %q, want %q", c.input, got, c.expected)
+		}
+	}
+}
