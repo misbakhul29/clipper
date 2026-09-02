@@ -132,6 +132,15 @@
                 <option value="scene">Scene Transition Detection</option>
               </select>
             </div>
+            <div class="field-group" style="width:130px;">
+              <select id="autoDetectDuration" class="select-box" title="Target Clip Duration">
+                <option value="0" selected>Auto Duration</option>
+                <option value="30">~30s (Shorts)</option>
+                <option value="60">~60s (1 Min)</option>
+                <option value="120">~2 Mins</option>
+                <option value="300">~5 Mins</option>
+              </select>
+            </div>
             <button class="btn btn-secondary" id="autoDetectBtn" onclick="runAutoDetect()">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
               <span id="autoDetectBtnText">Generate with AI</span>

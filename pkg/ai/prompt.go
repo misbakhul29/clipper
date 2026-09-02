@@ -307,7 +307,7 @@ func containsText(slice []string, text string) bool {
 }
 
 // BuildMetadataHighlightPrompts constructs system and user prompts to generate video segments from metadata and duration without subtitles.
-func BuildMetadataHighlightPrompts(videoTitle string, durationSec float64, targetLang string, isShorts bool) (systemPrompt string, userPrompt string) {
+func BuildMetadataHighlightPrompts(videoTitle string, durationSec float64, targetDuration float64, targetLang string, isShorts bool) (systemPrompt string, userPrompt string) {
 	durStr := FormatSecondsToTime(durationSec)
 	langInstruction := ""
 	if targetLang == "id" || strings.HasPrefix(strings.ToLower(targetLang), "ind") {
@@ -316,9 +316,13 @@ func BuildMetadataHighlightPrompts(videoTitle string, durationSec float64, targe
 		langInstruction = fmt.Sprintf("The 'title' field MUST be written in %s language.", targetLang)
 	}
 
-	clipRules := "Each clip should be between 20 seconds and 50 seconds long, optimized for Shorts/Reels/TikTok."
-	if !isShorts {
-		clipRules = "Each clip should be between 1 minute and 3 minutes long, optimized for YouTube highlights."
+	var clipRules string
+	if targetDuration > 0 {
+		clipRules = fmt.Sprintf("Each clip should be approximately %.0f seconds long (±15 seconds).", targetDuration)
+	} else if isShorts {
+		clipRules = "Each clip should be between 25 seconds and 55 seconds long, optimized for Shorts/Reels/TikTok."
+	} else {
+		clipRules = "Each clip should be between 1 minute and 4 minutes long, optimized for YouTube video highlights."
 	}
 
 	systemPrompt = fmt.Sprintf(`You are an expert video editor and social media viral content strategist.
@@ -338,17 +342,30 @@ No markdown, no explanation, only raw JSON.`, clipRules, durStr, langInstruction
 }
 
 // GenerateHeuristicHighlights produces intelligently spaced segment intervals across a video's duration without requiring subtitles.
-func GenerateHeuristicHighlights(durationSec float64, isShorts bool, targetLang string) []AIHighlight {
+func GenerateHeuristicHighlights(durationSec float64, isShorts bool, targetDuration float64, targetLang string) []AIHighlight {
 	if durationSec <= 10 {
 		return []AIHighlight{
 			{Start: "00:00", End: FormatSecondsToTime(durationSec), Title: "Full Video Highlight"},
 		}
 	}
 
-	clipLength := 35.0
-	if !isShorts {
-		clipLength = 90.0
+	clipLength := targetDuration
+	if clipLength <= 0 {
+		if isShorts {
+			clipLength = 35.0
+		} else {
+			if durationSec <= 180 {
+				clipLength = 45.0
+			} else if durationSec <= 600 {
+				clipLength = 90.0 // 1.5 min
+			} else if durationSec <= 1800 {
+				clipLength = 150.0 // 2.5 min
+			} else {
+				clipLength = 240.0 // 4 min
+			}
+		}
 	}
+
 	if durationSec < clipLength {
 		return []AIHighlight{
 			{Start: "00:00", End: FormatSecondsToTime(durationSec), Title: "Opening Highlight"},

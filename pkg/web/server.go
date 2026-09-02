@@ -323,13 +323,14 @@ type clipRequestPayload struct {
 }
 
 type autoDetectRequestPayload struct {
-	InputFile  string `json:"input_file"`
-	Mode       string `json:"mode"` // "ai", "silence", "scene"
-	AIRouter   string `json:"ai_router"`
-	APIKey     string `json:"api_key"`
-	Model      string `json:"model"`
-	UseWhisper bool   `json:"use_whisper"`
-	Shorts     bool   `json:"shorts"`
+	InputFile      string  `json:"input_file"`
+	Mode           string  `json:"mode"` // "ai", "silence", "scene"
+	AIRouter       string  `json:"ai_router"`
+	APIKey         string  `json:"api_key"`
+	Model          string  `json:"model"`
+	UseWhisper     bool    `json:"use_whisper"`
+	Shorts         bool    `json:"shorts"`
+	TargetDuration float64 `json:"target_duration"`
 }
 
 type autoDetectResponse struct {
@@ -368,6 +369,7 @@ func (s *Server) handleAutoDetect(w http.ResponseWriter, r *http.Request) {
 	}
 	cfg.Shorts = req.Shorts
 	cfg.UseWhisper = req.UseWhisper
+	cfg.AIConfig.TargetDuration = req.TargetDuration
 
 	if req.AIRouter != "" {
 		cfg.AIConfig.APIRouter = req.AIRouter

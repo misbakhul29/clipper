@@ -230,13 +230,15 @@ async function runAutoDetect() {
     if (sub) sub.textContent = 'Scanning video stream for visual camera shot cuts.';
   }
 
+  const durVal = parseFloat(document.getElementById('autoDetectDuration')?.value || '0');
   const payload = {
     input_file: src,
     mode: mode,
     ai_router: document.getElementById('aiRouter').value,
     model: document.getElementById('aiModel').value.trim(),
     api_key: document.getElementById('aiApiKey').value.trim(),
-    shorts: document.getElementById('cfgShorts').checked
+    shorts: document.getElementById('cfgShorts').checked,
+    target_duration: durVal
   };
 
   try {

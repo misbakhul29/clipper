@@ -8,10 +8,11 @@ import (
 )
 
 type AIProviderConfig struct {
-	APIRouter string `json:"api_router"` // "openrouter", "gemini", "deepseek", "openai" (or "codex")
-	APIKey    string `json:"api_key"`
-	Model     string `json:"model"`
-	IsShorts  bool   `json:"is_shorts"`
+	APIRouter      string  `json:"api_router"` // "openrouter", "gemini", "deepseek", "openai" (or "codex")
+	APIKey         string  `json:"api_key"`
+	Model          string  `json:"model"`
+	IsShorts       bool    `json:"is_shorts"`
+	TargetDuration float64 `json:"target_duration"` // Desired clip duration in seconds (0 = auto)
 }
 
 // AnalyzeHighlightsMultiProvider analyzes timestamped transcript entries using the configured AI provider.
@@ -49,7 +50,7 @@ func TranslateSubtitlesMultiProvider(entries []transcriber.SubtitleEntry, aiCfg 
 
 // AnalyzeHighlightsWithoutSubtitles generates video highlight segments from title and duration without needing subtitles.
 func AnalyzeHighlightsWithoutSubtitles(videoTitle string, durationSec float64, aiCfg AIProviderConfig, targetLang string) ([]AIHighlight, error) {
-	sysPrompt, userPrompt := BuildMetadataHighlightPrompts(videoTitle, durationSec, targetLang, aiCfg.IsShorts)
+	sysPrompt, userPrompt := BuildMetadataHighlightPrompts(videoTitle, durationSec, aiCfg.TargetDuration, targetLang, aiCfg.IsShorts)
 
 	router := strings.ToLower(strings.TrimSpace(aiCfg.APIRouter))
 	var content string
@@ -89,6 +90,6 @@ func AnalyzeHighlightsWithoutSubtitles(videoTitle string, durationSec float64, a
 	}
 
 	// Graceful fallback: smartly distributed highlights across the video's actual duration (always succeeds!)
-	return GenerateHeuristicHighlights(durationSec, aiCfg.IsShorts, targetLang), nil
+	return GenerateHeuristicHighlights(durationSec, aiCfg.IsShorts, aiCfg.TargetDuration, targetLang), nil
 }
 
