@@ -145,3 +145,36 @@ func TestBuildJumpCutFilter(t *testing.T) {
 		t.Errorf("filter missing concat: %s", filter)
 	}
 }
+
+func TestBuildJumpCutFilter_SingleInterval(t *testing.T) {
+	intervals := []KeptInterval{
+		{StartSec: 2.5, EndSec: 10.0},
+	}
+
+	filter := BuildJumpCutFilter(intervals)
+	if !strings.Contains(filter, "trim=start=2.500:end=10.000,setpts=PTS-STARTPTS[vout]") {
+		t.Errorf("filter missing single vout: %s", filter)
+	}
+	if !strings.Contains(filter, "atrim=start=2.500:end=10.000,asetpts=PTS-STARTPTS[aout]") {
+		t.Errorf("filter missing single aout: %s", filter)
+	}
+	if strings.Contains(filter, "concat") {
+		t.Errorf("single interval should not have concat filter: %s", filter)
+	}
+}
+
+func TestCalculateJumpCutIntervals_AllSilence(t *testing.T) {
+	// Entire clip is silence (0.0 to 10.0)
+	gaps := []SilenceGap{
+		{StartSec: 0.0, EndSec: 10.0},
+	}
+	kept, removed := CalculateJumpCutIntervals(10.0, gaps, 0.2)
+
+	// Should not remove the entire clip, but preserve it
+	if len(kept) != 1 || kept[0].EndSec != 10.0 {
+		t.Errorf("expected entire clip to be kept, got: %+v", kept)
+	}
+	if len(removed) != 0 {
+		t.Errorf("expected 0 removed when whole video is silence, got: %+v", removed)
+	}
+}

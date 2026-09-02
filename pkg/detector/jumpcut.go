@@ -186,17 +186,22 @@ func CalculateJumpCutIntervals(totalDuration float64, gaps []SilenceGap, marginS
 	}
 
 	if len(kept) == 0 {
-		kept = append(kept, KeptInterval{StartSec: 0.0, EndSec: totalDuration})
+		return []KeptInterval{{StartSec: 0.0, EndSec: totalDuration}}, nil
 	}
 
 	return kept, removed
 }
 
-// BuildJumpCutFilter generates an FFmpeg filter_complex chain of trim/atrim + concat
+// BuildJumpCutFilter generates an FFmpeg filter_complex chain of trim/atrim (+ optional concat)
 // that joins the kept speech intervals seamlessly.
 func BuildJumpCutFilter(intervals []KeptInterval) string {
-	if len(intervals) <= 1 {
+	if len(intervals) == 0 {
 		return ""
+	}
+
+	if len(intervals) == 1 {
+		return fmt.Sprintf("[0:v]trim=start=%.3f:end=%.3f,setpts=PTS-STARTPTS[vout];[0:a]atrim=start=%.3f:end=%.3f,asetpts=PTS-STARTPTS[aout]",
+			intervals[0].StartSec, intervals[0].EndSec, intervals[0].StartSec, intervals[0].EndSec)
 	}
 
 	var parts []string

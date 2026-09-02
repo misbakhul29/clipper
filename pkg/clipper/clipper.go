@@ -356,7 +356,7 @@ func (c *Clipper) Process(cfg *Config) error {
 					rawGaps, _ := detector.DetectSilenceGaps(c.runner.FFmpegPath, cfg.InputFile, j.startSec, j.durationSec, noise, minSil)
 					keptIntervals, actualRemoved := detector.CalculateJumpCutIntervals(j.durationSec, rawGaps, margin)
 
-					if len(actualRemoved) > 0 && len(keptIntervals) > 1 {
+					if len(actualRemoved) > 0 && len(keptIntervals) >= 1 {
 						var totalRemoved float64
 						for _, r := range actualRemoved {
 							totalRemoved += r.Duration()
