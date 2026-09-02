@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/misbakhul29/clipper/pkg/detector"
 )
 
 // FFmpegRunner handles invoking the ffmpeg executable.
@@ -64,7 +66,18 @@ func (f *FFmpegRunner) CutSegment(cfg *Config, startSec, durationSec float64, ou
 
 	args = append(args, "-t", durStr)
 
-	filterGraph := buildFilterGraph(cfg, hasWatermark, hasOverlayText, subPath)
+	dynamicCropFilter := ""
+	if cfg.Shorts && cfg.ShortsStyle == "smart-crop" {
+		ft := detector.NewFaceTracker(f.FFmpegPath)
+		if cfg.PanDuration > 0 {
+			ft.PanDuration = cfg.PanDuration
+		}
+		if cropFilter, err := ft.TrackFacesInSegment(cfg.InputFile, startSec, durationSec); err == nil && cropFilter != "" {
+			dynamicCropFilter = cropFilter
+		}
+	}
+
+	filterGraph := buildFilterGraph(cfg, hasWatermark, hasOverlayText, subPath, dynamicCropFilter)
 	if filterGraph != "" {
 		if hasWatermark || cfg.ShortsStyle == "blur" {
 			args = append(args, "-filter_complex", filterGraph)
@@ -131,7 +144,7 @@ func selectVideoEncoderArgs(ffmpegPath string) []string {
 	}
 }
 
-func buildFilterGraph(cfg *Config, hasWatermark, hasOverlayText bool, subPath string) string {
+func buildFilterGraph(cfg *Config, hasWatermark, hasOverlayText bool, subPath string, dynamicCropFilter string) string {
 	var filters []string
 
 	// 1. Shorts Aspect Ratio Filter (High Quality Lanczos Resampling)
@@ -167,8 +180,12 @@ func buildFilterGraph(cfg *Config, hasWatermark, hasOverlayText bool, subPath st
 			}
 			return graph
 		} else if cfg.ShortsStyle == "smart-crop" {
-			// Smart Subject Motion Auto-Crop
-			filters = append(filters, "crop=w='ih*(9/16)':h='ih':x='(iw-ow)/2':y=0,scale=1080:1920:flags=lanczos")
+			// Smart Subject Motion Auto-Crop with Face & Speaker Tracking
+			if dynamicCropFilter != "" {
+				filters = append(filters, dynamicCropFilter)
+			} else {
+				filters = append(filters, detector.DefaultCenterCropFilter())
+			}
 		} else {
 			filters = append(filters, "crop=ih*(9/16):ih,scale=1080:1920:flags=lanczos")
 		}

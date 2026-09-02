@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/misbakhul29/clipper/pkg/clipper"
@@ -48,6 +49,8 @@ func main() {
 		openRouterKey string
 		aiModel       string
 		segments      string
+		faceTracking  bool
+		panDuration   float64
 	)
 
 	flag.StringVar(&configFile, "config", "", "Path to JSON configuration file")
@@ -90,6 +93,8 @@ func main() {
 	flag.StringVar(&openRouterKey, "openrouter-key", "", "OpenRouter API Key for AI highlight detection (defaults to $OPENROUTER_API_KEY)")
 	flag.StringVar(&aiModel, "ai-model", "openrouter/free", "AI model name (e.g. 'openrouter/free', 'gemini-2.0-flash', 'deepseek-chat', 'gpt-4o-mini')")
 	flag.StringVar(&segments, "segments", "", "Comma-separated segment timestamps (e.g. '00:10-00:25,01:00-01:30')")
+	flag.BoolVar(&faceTracking, "face-tracking", true, "Enable dynamic active speaker / face tracking for smart-crop shorts")
+	flag.Float64Var(&panDuration, "pan-duration", 0.8, "Camera pan transition duration in seconds (default: 0.8s)")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
@@ -145,6 +150,8 @@ func main() {
 			FontSize:      fontSize,
 			FontColor:     fontColor,
 			AutoDetect:    autoDetect,
+			FaceTracking:  faceTracking,
+			PanDuration:   panDuration,
 			Segments:      parsedSegs,
 		}
 		if err := saveConfig(initConfig, genCfg); err != nil {
@@ -269,6 +276,14 @@ func main() {
 		cfg.AIConfig.Model = aiModel
 		cfg.AIModel = aiModel
 	}
+	if isFlagPassed("face-tracking") {
+		cfg.FaceTracking = faceTracking
+	} else if cfg.ShortsStyle == "smart-crop" {
+		cfg.FaceTracking = true
+	}
+	if isFlagPassed("pan-duration") {
+		cfg.PanDuration = panDuration
+	}
 
 	// Parse CLI segments string if provided
 	if segments != "" {
@@ -310,10 +325,18 @@ func parseCLISegments(raw string) ([]clipper.Segment, error) {
 
 		title := ""
 		timePart := pair
-		if strings.Contains(pair, ":") && (strings.Count(pair, ":") > 4 || strings.LastIndex(pair, ":") > strings.LastIndex(pair, "-")) {
-			idx := strings.LastIndex(pair, ":")
-			timePart = pair[:idx]
-			title = pair[idx+1:]
+		dashIdx := strings.Index(pair, "-")
+		if dashIdx != -1 {
+			rest := pair[dashIdx+1:]
+			lastColon := strings.LastIndex(rest, ":")
+			if lastColon != -1 {
+				candidateTitle := strings.TrimSpace(rest[lastColon+1:])
+				// If candidateTitle is not numeric, it's a title! (e.g. 00:00-00:10:My Title)
+				if _, err := strconv.ParseFloat(candidateTitle, 64); err != nil && candidateTitle != "" {
+					title = candidateTitle
+					timePart = pair[:dashIdx+1+lastColon]
+				}
+			}
 		}
 
 		parts := strings.Split(timePart, "-")

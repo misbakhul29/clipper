@@ -77,6 +77,8 @@ type Config struct {
 	BatchList     string              `json:"batch_list"`    // Path to text file containing list of video URLs/files (one per line)
 	CleanCache    bool                `json:"clean_cache"`   // Clean cache directory
 	CleanDays     int                 `json:"clean_days"`    // Delete cache files older than N days (0 = clean all)
+	FaceTracking  bool                `json:"face_tracking"` // Dynamic active speaker / face tracking for smart-crop
+	PanDuration   float64             `json:"pan_duration"`  // Duration of camera pan interpolation in seconds (default: 0.8)
 	Segments      []Segment           `json:"segments"`
 }
 

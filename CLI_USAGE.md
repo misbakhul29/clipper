@@ -31,9 +31,11 @@ go install .
 | `-output` | `string` | `""` | Nama berkas keluaran (digunakan pada mode `merge`) |
 | `-mode` | `string` | `"split"` | Mode operasi: `"split"` (berkas terpisah) atau `"merge"` (gabung 1 berkas) |
 | `-strategy` | `string` | `"fast"` | Strategi pemotongan: `"fast"` (stream copy w/o re-encode) atau `"accurate"` (re-encode presisi) |
-| **Shorts (9:16)** | | | |
+| **Shorts (9:16) & Face Tracking** | | | |
 | `-shorts` | `bool` | `false` | Konversi klip ke format vertikal 9:16 (Shorts/Reels/TikTok) |
-| `-shorts-style` | `string` | `"crop"` | Gaya rasio 9:16: `"crop"` (center crop), `"blur"` (latar blurred background), atau `"smart-crop"` (subjek bergerak) |
+| `-shorts-style` | `string` | `"crop"` | Gaya rasio 9:16: `"crop"` (center crop), `"blur"` (latar blur), atau `"smart-crop"` (pelacak wajah aktif) |
+| `-face-tracking` | `bool` | `true` | Aktifkan dynamic active speaker / face tracking auto-framing pada mode `smart-crop` |
+| `-pan-duration` | `float` | `0.8` | Durasi transisi pergerakan kamera halus (*camera pan easing*) dalam detik |
 | **Subtitle & Terjemahan** | | | |
 | `-burn-subtitles` / `-subtitles` | `bool` | `false` | Menempelkan (*hardcode*) subtitle terjemahan secara permanen pada video |
 | `-sub-style` | `string` | `"karaoke"` | Gaya subtitle: `"karaoke"` (animasi 2-3 kata kuning TikTok) atau `"standard"` (2 baris) |
@@ -206,4 +208,14 @@ clipper -input "./my_recording.mp4" \
 ### 6. Mode Interaktif Wizard
 ```bash
 clipper -i
+```
+
+### 7. Vertical Shorts dengan Dynamic Speaker Auto-Framing (Face Tracking)
+```bash
+clipper -input "https://www.youtube.com/watch?v=xxx" \
+  -auto-detect ai \
+  -shorts -shorts-style smart-crop \
+  -pan-duration 0.8 \
+  -burn-subtitles -sub-style karaoke \
+  -outdir ./smart_crop_shorts
 ```
