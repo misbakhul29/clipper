@@ -74,7 +74,7 @@ func TestExportPresetASS(t *testing.T) {
 	}
 
 	outHormozi := filepath.Join(tmpDir, "hormozi.ass")
-	if err := ExportPresetASS(entries, outHormozi, "hormozi", 60, true, "Montserrat-Bold"); err != nil {
+	if err := ExportPresetASS(entries, outHormozi, "hormozi", 60, true, "Montserrat-Bold", "strip"); err != nil {
 		t.Fatalf("ExportPresetASS hormozi failed: %v", err)
 	}
 
@@ -106,7 +106,7 @@ func TestExportPresetASS(t *testing.T) {
 
 	// Test non-shorts canvas (1920x1080)
 	outLandscape := filepath.Join(tmpDir, "landscape.ass")
-	if err := ExportPresetASS(entries, outLandscape, "minimal", 40, false, ""); err != nil {
+	if err := ExportPresetASS(entries, outLandscape, "minimal", 40, false, "", "strip"); err != nil {
 		t.Fatalf("ExportPresetASS landscape failed: %v", err)
 	}
 	dataLand, _ := os.ReadFile(outLandscape)
@@ -155,5 +155,127 @@ Third cue with SRT style comma
 	}
 	if entries[2].Start != "00:00:10.200" || entries[2].End != "00:00:12.800" {
 		t.Errorf("entry 2 timestamp mismatch: %+v", entries[2])
+	}
+}
+
+func TestExtractSDHAndSpeech(t *testing.T) {
+	t.Run("Mixed speech and silent narrator", func(t *testing.T) {
+		input := "bukan cuma merenggut akal sehat tapi juga nalar.\n[Laboratorium berlumuran darah akibat serangan zombi]"
+		speech, sdh := ExtractSDHAndSpeech(input)
+
+		expectedSpeech := "bukan cuma merenggut akal sehat tapi juga nalar."
+		expectedSDH := "Laboratorium berlumuran darah akibat serangan zombi"
+
+		if speech != expectedSpeech {
+			t.Errorf("speech mismatch, got: '%s', want: '%s'", speech, expectedSpeech)
+		}
+		if sdh != expectedSDH {
+			t.Errorf("sdh mismatch, got: '%s', want: '%s'", sdh, expectedSDH)
+		}
+	})
+
+	t.Run("100% silent narrator", func(t *testing.T) {
+		input := "[Lima peneliti yang terjebak di dalamnya]"
+		speech, sdh := ExtractSDHAndSpeech(input)
+
+		if speech != "" {
+			t.Errorf("expected empty speech, got: '%s'", speech)
+		}
+		if sdh != "Lima peneliti yang terjebak di dalamnya" {
+			t.Errorf("unexpected sdh: '%s'", sdh)
+		}
+	})
+
+	t.Run("Clean speech without brackets", func(t *testing.T) {
+		input := "Ini adalah murni ucapan narator aktif."
+		speech, sdh := ExtractSDHAndSpeech(input)
+
+		if speech != input {
+			t.Errorf("speech mismatch: '%s'", speech)
+		}
+		if sdh != "" {
+			t.Errorf("expected empty sdh, got: '%s'", sdh)
+		}
+	})
+}
+
+func TestExportPresetASS_SDHStrip(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "clipper_sdh_strip_*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	entries := []SubtitleEntry{
+		{Start: "0:00:01.00", End: "0:00:03.00", Text: "Mereka yang terinfeksi\n[Laboratorium berlumuran darah]"},
+		{Start: "0:00:04.00", End: "0:00:07.00", Text: "[Lima peneliti yang terjebak]"},
+	}
+
+	outFile := filepath.Join(tmpDir, "strip.ass")
+	if err := ExportPresetASS(entries, outFile, "hormozi", 54, true, "", "strip"); err != nil {
+		t.Fatalf("ExportPresetASS strip failed: %v", err)
+	}
+
+	data, err := os.ReadFile(outFile)
+	if err != nil {
+		t.Fatalf("failed to read output: %v", err)
+	}
+	content := string(data)
+
+	// Should contain spoken dialogue
+	if !strings.Contains(content, "MEREKA YANG") || !strings.Contains(content, "TERINFEKSI") {
+		t.Errorf("expected speech words in output, got: %s", content)
+	}
+	// Should NOT contain bracketed text
+	if strings.Contains(content, "Laboratorium") || strings.Contains(content, "peneliti") {
+		t.Errorf("expected SDH to be stripped, got: %s", content)
+	}
+	// Pure SDH cue should be completely discarded (entry 0 has 3 words chunked into 2 dialogue lines with maxWords=2)
+	if strings.Count(content, "Dialogue:") != 2 {
+		t.Errorf("expected exactly 2 dialogue lines after chunking entry 0 and stripping pure SDH cue, got %d", strings.Count(content, "Dialogue:"))
+	}
+}
+
+func TestExportPresetASS_SDHTopBox(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "clipper_sdh_topbox_*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	entries := []SubtitleEntry{
+		{Start: "0:00:01.00", End: "0:00:03.00", Text: "Mereka yang terinfeksi\n[Laboratorium berlumuran darah]"},
+		{Start: "0:00:04.00", End: "0:00:07.00", Text: "[Lima peneliti yang terjebak]"},
+	}
+
+	outFile := filepath.Join(tmpDir, "topbox.ass")
+	if err := ExportPresetASS(entries, outFile, "hormozi", 54, true, "", "top-box"); err != nil {
+		t.Fatalf("ExportPresetASS top-box failed: %v", err)
+	}
+
+	data, err := os.ReadFile(outFile)
+	if err != nil {
+		t.Fatalf("failed to read output: %v", err)
+	}
+	content := string(data)
+
+	// Should have Narrator style defined
+	if !strings.Contains(content, "Style: Narrator") {
+		t.Errorf("expected Narrator style header, got: %s", content)
+	}
+	// Should have top-center alignment (8)
+	if !strings.Contains(content, ",8,60,60,") {
+		t.Errorf("expected alignment 8 for Narrator style, got: %s", content)
+	}
+	// Should render SDH in Narrator style
+	if !strings.Contains(content, "Narrator,,0,0,0,,[Laboratorium berlumuran darah]") {
+		t.Errorf("expected Narrator dialogue line, got: %s", content)
+	}
+	if !strings.Contains(content, "Narrator,,0,0,0,,[Lima peneliti yang terjebak]") {
+		t.Errorf("expected pure SDH rendered in Narrator style, got: %s", content)
+	}
+	// Speech should still be rendered with Default style
+	if !strings.Contains(content, "Default,,0,0,0,") {
+		t.Errorf("expected Default dialogue line for speech, got: %s", content)
 	}
 }

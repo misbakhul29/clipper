@@ -22,6 +22,33 @@ type SubtitleEntry struct {
 }
 
 var vttTimeRegex = regexp.MustCompile(`((?:\d{1,2}:)?\d{2}:\d{2}[\.\,]\d{3})\s*-->\s*((?:\d{1,2}:)?\d{2}:\d{2}[\.\,]\d{3})`)
+var sdhBracketRegex = regexp.MustCompile(`(?s)\[(.*?)\]`)
+
+// ExtractSDHAndSpeech separates silent narrator context / sound effect descriptions inside brackets [...]
+// from actual spoken dialogue text.
+func ExtractSDHAndSpeech(text string) (speechText string, sdhText string) {
+	matches := sdhBracketRegex.FindAllStringSubmatch(text, -1)
+	var sdhParts []string
+	for _, m := range matches {
+		if len(m) >= 2 {
+			clean := strings.TrimSpace(m[1])
+			if clean != "" {
+				sdhParts = append(sdhParts, clean)
+			}
+		}
+	}
+	sdhText = strings.Join(sdhParts, " | ")
+
+	// Strip brackets to get spoken speech
+	speech := sdhBracketRegex.ReplaceAllString(text, "")
+	speech = strings.TrimSpace(speech)
+	speech = strings.ReplaceAll(speech, "\n", " ")
+	for strings.Contains(speech, "  ") {
+		speech = strings.ReplaceAll(speech, "  ", " ")
+	}
+
+	return speech, sdhText
+}
 
 // ParseVTT parses VTT or SRT subtitle file content into a slice of SubtitleEntry.
 func ParseVTT(content string) ([]SubtitleEntry, error) {
@@ -591,8 +618,8 @@ func GetSubtitlePreset(name string, isShorts bool) SubtitlePreset {
 	}
 }
 
-// ExportPresetASS exports subtitle entries using a named visual preset with optional custom font and size overrides.
-func ExportPresetASS(entries []SubtitleEntry, outputPath string, presetName string, fontSize int, isShorts bool, customFont string) error {
+// ExportPresetASS exports subtitle entries using a named visual preset with optional custom font, size, and SDH separation.
+func ExportPresetASS(entries []SubtitleEntry, outputPath string, presetName string, fontSize int, isShorts bool, customFont string, sdhMode string) error {
 	preset := GetSubtitlePreset(presetName, isShorts)
 
 	if fontSize > 0 {
@@ -602,12 +629,54 @@ func ExportPresetASS(entries []SubtitleEntry, outputPath string, presetName stri
 		preset.FontName = customFont
 	}
 
+	sdhMode = strings.ToLower(strings.TrimSpace(sdhMode))
+	if sdhMode == "" {
+		sdhMode = "strip"
+	}
+
+	var speechEntries []SubtitleEntry
+	var sdhEntries []SubtitleEntry
+
+	for _, entry := range entries {
+		switch sdhMode {
+		case "top-box":
+			speech, sdh := ExtractSDHAndSpeech(entry.Text)
+			if speech != "" {
+				speechEntries = append(speechEntries, SubtitleEntry{
+					Start: entry.Start,
+					End:   entry.End,
+					Text:  speech,
+				})
+			}
+			if sdh != "" {
+				sdhEntries = append(sdhEntries, SubtitleEntry{
+					Start: entry.Start,
+					End:   entry.End,
+					Text:  sdh,
+				})
+			}
+		case "keep":
+			speechEntries = append(speechEntries, entry)
+		case "strip":
+			fallthrough
+		default:
+			speech, _ := ExtractSDHAndSpeech(entry.Text)
+			if speech != "" {
+				speechEntries = append(speechEntries, SubtitleEntry{
+					Start: entry.Start,
+					End:   entry.End,
+					Text:  speech,
+				})
+			}
+		}
+	}
+
 	// Micro-chunk words if preset defines MaxWords
-	var formattedEntries []SubtitleEntry
+	var formattedSpeech []SubtitleEntry
 	if preset.MaxWords > 0 {
-		formattedEntries = ChunkSubtitlesToWords(entries, preset.MaxWords)
+		formattedSpeech = ChunkSubtitlesToWords(speechEntries, preset.MaxWords)
 	} else {
-		formattedEntries = entries
+		formattedSpeech = speechEntries
 	}
 
 	var sb strings.Builder
@@ -626,7 +695,8 @@ func ExportPresetASS(entries []SubtitleEntry, outputPath string, presetName stri
 	sb.WriteString("[V4+ Styles]\n")
 	sb.WriteString("Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n")
 
-	sb.WriteString(fmt.Sprintf("Style: Default,%s,%d,%s,%s,%s,%s,%d,0,0,0,%d,%d,%.1f,0,%d,%.1f,%.1f,2,40,40,%d,1\n\n",
+	// Primary dialogue style
+	sb.WriteString(fmt.Sprintf("Style: Default,%s,%d,%s,%s,%s,%s,%d,0,0,0,%d,%d,%.1f,0,%d,%.1f,%.1f,2,40,40,%d,1\n",
 		preset.FontName,
 		preset.FontSize,
 		preset.PrimaryColor,
@@ -643,10 +713,32 @@ func ExportPresetASS(entries []SubtitleEntry, outputPath string, presetName stri
 		preset.MarginV,
 	))
 
+	// Narrator context style (Top-Center Alignment 8, Italic, soft white)
+	if sdhMode == "top-box" && len(sdhEntries) > 0 {
+		narratorFont := "Arial"
+		narratorSize := 32
+		narratorMarginV := 80
+		if isShorts {
+			narratorSize = 36
+			narratorMarginV = 120
+		}
+		sb.WriteString(fmt.Sprintf("Style: Narrator,%s,%d,&H00F0F0F0,&H00000000,&H00000000,&H90000000,-1,-1,0,0,100,100,0.5,0,1,2.0,1.2,8,60,60,%d,1\n",
+			narratorFont, narratorSize, narratorMarginV))
+	}
+	sb.WriteString("\n")
+
 	sb.WriteString("[Events]\n")
 	sb.WriteString("Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")
 
-	for _, entry := range formattedEntries {
+	// Write static Narrator cues if top-box enabled
+	for _, sdh := range sdhEntries {
+		cleanText := strings.TrimSpace(sdh.Text)
+		cleanText = strings.ReplaceAll(cleanText, "\n", " ")
+		sb.WriteString(fmt.Sprintf("Dialogue: 0,%s,%s,Narrator,,0,0,0,,[%s]\n", sdh.Start, sdh.End, cleanText))
+	}
+
+	// Write spoken dialogue cues
+	for _, entry := range formattedSpeech {
 		text := strings.TrimSpace(entry.Text)
 		if preset.Uppercase {
 			text = strings.ToUpper(text)
@@ -675,7 +767,7 @@ func ExportKaraokeASS(entries []SubtitleEntry, outputPath string, fontSize int, 
 
 // ExportKaraokeASSWithFont exports subtitle entries into TikTok-style ASS format with custom font name.
 func ExportKaraokeASSWithFont(entries []SubtitleEntry, outputPath string, fontSize int, isShorts bool, fontName string) error {
-	return ExportPresetASS(entries, outputPath, "hormozi", fontSize, isShorts, fontName)
+	return ExportPresetASS(entries, outputPath, "hormozi", fontSize, isShorts, fontName, "strip")
 }
 
 // AdjustSubtitlesForJumpCuts shifts and filters subtitle entries after silence intervals have been excised.

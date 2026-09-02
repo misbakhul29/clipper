@@ -60,6 +60,7 @@ func main() {
 		jumpCutMargin float64
 		jumpCutNoise  float64
 		subPreset     string
+		subSDHMode    string
 	)
 
 	flag.StringVar(&configFile, "config", "", "Path to JSON configuration file")
@@ -90,6 +91,7 @@ func main() {
 	flag.BoolVar(&burnSubtitles, "subtitles", false, "Hardcode/burn-in subtitles directly onto video clips")
 	flag.StringVar(&subStyle, "sub-style", "karaoke", "Subtitle style for burnt-in captions ('karaoke' for TikTok 2-word chunks, or 'standard')")
 	flag.StringVar(&subPreset, "sub-preset", "hormozi", "Viral subtitle theme preset ('hormozi', 'minimal', 'devon', 'neon', 'cinematic')")
+	flag.StringVar(&subSDHMode, "sub-sdh-mode", "strip", "Handling for silent narrator & SDH brackets: 'strip' (clean speech), 'top-box' (dual-layer top banner), 'keep'")
 	flag.IntVar(&subFontSize, "sub-font-size", 48, "Subtitle font size for burnt-in captions")
 	flag.StringVar(&subFontPath, "sub-font-path", "", "Custom font file path (.ttf / .otf) for burnt-in captions")
 	flag.BoolVar(&useWhisper, "use-whisper", false, "Force local Whisper AI for speech-to-text transcription")
@@ -179,6 +181,7 @@ func main() {
 			JumpCutMargin: jumpCutMargin,
 			JumpCutNoise:  jumpCutNoise,
 			SubPreset:     subPreset,
+			SubSDHMode:    subSDHMode,
 			Segments:      parsedSegs,
 		}
 		if err := saveConfig(initConfig, genCfg); err != nil {
@@ -270,6 +273,9 @@ func main() {
 	}
 	if isFlagPassed("sub-preset") {
 		cfg.SubPreset = subPreset
+	}
+	if isFlagPassed("sub-sdh-mode") {
+		cfg.SubSDHMode = subSDHMode
 	}
 	if isFlagPassed("sub-font-size") {
 		cfg.SubFontSize = subFontSize
@@ -465,6 +471,7 @@ func runInteractiveWizard(defaultFile string) {
 	subChoice := promptString(reader, "\nBurn subtitles directly into video? (y/n)", "n")
 	burnSubs := strings.ToLower(subChoice) == "y" || strings.ToLower(subChoice) == "yes"
 	subPresetChoice := "hormozi"
+	subSDHChoice := "strip"
 	if burnSubs {
 		fmt.Println("Subtitle Theme Presets:")
 		fmt.Println("  1. hormozi   (Viral yellow, bold outline, pop-in bounce animation)")
@@ -481,6 +488,21 @@ func runInteractiveWizard(defaultFile string) {
 			subPresetChoice = "cinematic"
 		default:
 			subPresetChoice = "hormozi"
+		}
+
+		fmt.Println("\nSilent Narrator & SDH Context Handling [...] :")
+		fmt.Println("  1. strip   (Remove [...] to keep speech snappy & clean - recommended)")
+		fmt.Println("  2. top-box (Render [...] as elegant static context box at top)")
+		fmt.Println("  3. keep    (Keep [...] as-is)")
+		sdhInput := promptString(reader, "Select SDH mode (1-3 or name)", "1")
+		subSDHChoice = "strip"
+		switch strings.ToLower(sdhInput) {
+		case "2", "top-box", "box":
+			subSDHChoice = "top-box"
+		case "3", "keep":
+			subSDHChoice = "keep"
+		default:
+			subSDHChoice = "strip"
 		}
 	}
 
@@ -527,6 +549,7 @@ func runInteractiveWizard(defaultFile string) {
 		JumpCut:       jumpCutEnabled,
 		BurnSubtitles: burnSubs,
 		SubPreset:     subPresetChoice,
+		SubSDHMode:    subSDHChoice,
 		FaceTracking:  true,
 		Segments:      segments,
 	}

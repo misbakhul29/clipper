@@ -254,7 +254,11 @@ func (c *Clipper) Process(cfg *Config) error {
 		if preset == "" {
 			preset = "hormozi"
 		}
-		fmt.Printf("Burnt-in Subtitles: Enabled (Theme: %s)\n", preset)
+		sdh := cfg.SubSDHMode
+		if sdh == "" {
+			sdh = "strip"
+		}
+		fmt.Printf("Burnt-in Subtitles: Enabled (Theme: %s, SDH Narrator: %s)\n", preset, sdh)
 	}
 	if cfg.Loudnorm {
 		targetI := cfg.LoudnormI
@@ -423,7 +427,12 @@ func (c *Clipper) Process(cfg *Config) error {
 							}
 						}
 
-						exportErr := transcriber.ExportPresetASS(sliced, tmpSubFile, preset, cfg.SubFontSize, cfg.Shorts, fontName)
+						sdhMode := cfg.SubSDHMode
+						if sdhMode == "" {
+							sdhMode = "strip"
+						}
+
+						exportErr := transcriber.ExportPresetASS(sliced, tmpSubFile, preset, cfg.SubFontSize, cfg.Shorts, fontName, sdhMode)
 						if exportErr == nil {
 							subPath = tmpSubFile
 						}

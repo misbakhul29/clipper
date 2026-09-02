@@ -39,6 +39,7 @@ go install .
 | **Subtitle & Terjemahan** | | | |
 | `-burn-subtitles` / `-subtitles` | `bool` | `false` | Menempelkan (*hardcode*) subtitle terjemahan secara permanen pada video |
 | `-sub-preset` | `string` | `"hormozi"` | Preset tema subtitle viral: `"hormozi"` (bounce kuning), `"minimal"` / `"devon"` (putih bersih), `"neon"` (cyan glow), `"cinematic"` (soft ivory) |
+| `-sub-sdh-mode` | `string` | `"strip"` | Penanganan silent narrator / teks kurung `[...]`: `"strip"` (bersihkan dari dialog wicara), `"top-box"` (tampilkan banner statis di atas frame), `"keep"` (biarkan apa adanya) |
 | `-sub-style` | `string` | `"karaoke"` | Gaya subtitle: `"karaoke"` (animasi 2-3 kata kuning TikTok) atau `"standard"` (2 baris) |
 | `-sub-font-size` | `int` | `48` | Ukuran font subtitle terjemahan |
 | `-sub-font-path` | `string` | `""` | Path berkas font kustom (`.ttf`/`.otf`) untuk caption subtitle |

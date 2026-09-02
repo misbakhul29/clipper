@@ -40,6 +40,7 @@ Skenario paling umum untuk mengunduh video YouTube, menganalisis klip menarik me
   "translate_lang": "id",
   "burn_subtitles": true,
   "sub_preset": "hormozi",
+  "sub_sdh_mode": "strip",
   "sub_style": "karaoke",
   "sub_font_size": 54,
   "use_whisper": false,
