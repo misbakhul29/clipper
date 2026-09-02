@@ -305,3 +305,130 @@ func containsText(slice []string, text string) bool {
 	}
 	return false
 }
+
+// BuildMetadataHighlightPrompts constructs system and user prompts to generate video segments from metadata and duration without subtitles.
+func BuildMetadataHighlightPrompts(videoTitle string, durationSec float64, targetLang string, isShorts bool) (systemPrompt string, userPrompt string) {
+	durStr := FormatSecondsToTime(durationSec)
+	langInstruction := ""
+	if targetLang == "id" || strings.HasPrefix(strings.ToLower(targetLang), "ind") {
+		langInstruction = "The 'title' field MUST be written in Bahasa Indonesia (Indonesian)."
+	} else if targetLang != "" {
+		langInstruction = fmt.Sprintf("The 'title' field MUST be written in %s language.", targetLang)
+	}
+
+	clipRules := "Each clip should be between 20 seconds and 50 seconds long, optimized for Shorts/Reels/TikTok."
+	if !isShorts {
+		clipRules = "Each clip should be between 1 minute and 3 minutes long, optimized for YouTube highlights."
+	}
+
+	systemPrompt = fmt.Sprintf(`You are an expert video editor and social media viral content strategist.
+Given a video's title and total duration, propose 2 to 5 high-impact viral segment timestamps (start, end, and title).
+
+CRITICAL RULES:
+1. %s
+2. The first segment MUST capture an opening hook starting at "00:00".
+3. The "start" and "end" timestamps must be formatted as "MM:SS" or "HH:MM:SS" and MUST NOT exceed the total duration (%s).
+4. %s
+
+Respond ONLY with a valid JSON array of objects with keys: "start", "end", "title".
+No markdown, no explanation, only raw JSON.`, clipRules, durStr, langInstruction)
+
+	userPrompt = fmt.Sprintf("Video Title: %s\nTotal Duration: %s (%.0f seconds)", videoTitle, durStr, durationSec)
+	return systemPrompt, userPrompt
+}
+
+// GenerateHeuristicHighlights produces intelligently spaced segment intervals across a video's duration without requiring subtitles.
+func GenerateHeuristicHighlights(durationSec float64, isShorts bool, targetLang string) []AIHighlight {
+	if durationSec <= 10 {
+		return []AIHighlight{
+			{Start: "00:00", End: FormatSecondsToTime(durationSec), Title: "Full Video Highlight"},
+		}
+	}
+
+	clipLength := 35.0
+	if !isShorts {
+		clipLength = 90.0
+	}
+	if durationSec < clipLength {
+		return []AIHighlight{
+			{Start: "00:00", End: FormatSecondsToTime(durationSec), Title: "Opening Highlight"},
+		}
+	}
+
+	isIndo := targetLang == "id" || strings.HasPrefix(strings.ToLower(targetLang), "ind")
+	tHook := "Opening Viral Hook"
+	tInsight := "Key Core Insight"
+	tClimax := "Peak Climax Moment"
+	tOutro := "Actionable Conclusion"
+	if isIndo {
+		tHook = "Hook Pembuka Menarik"
+		tInsight = "Poin Inti & Pembahasan Utama"
+		tClimax = "Momen Puncak & Klimaks"
+		tOutro = "Kesimpulan & Penutup"
+	}
+
+	var highlights []AIHighlight
+	// 1. Opening Hook
+	hookEnd := clipLength
+	if hookEnd > durationSec {
+		hookEnd = durationSec
+	}
+	highlights = append(highlights, AIHighlight{
+		Start: "00:00",
+		End:   FormatSecondsToTime(hookEnd),
+		Title: tHook,
+	})
+
+	// 2. Middle highlight
+	if durationSec > clipLength*2.5 {
+		midStart := durationSec * 0.35
+		midEnd := midStart + clipLength
+		if midEnd < durationSec {
+			highlights = append(highlights, AIHighlight{
+				Start: FormatSecondsToTime(midStart),
+				End:   FormatSecondsToTime(midEnd),
+				Title: tInsight,
+			})
+		}
+	}
+
+	// 3. Climax
+	if durationSec > clipLength*4.0 {
+		climaxStart := durationSec * 0.65
+		climaxEnd := climaxStart + clipLength
+		if climaxEnd < durationSec {
+			highlights = append(highlights, AIHighlight{
+				Start: FormatSecondsToTime(climaxStart),
+				End:   FormatSecondsToTime(climaxEnd),
+				Title: tClimax,
+			})
+		}
+	}
+
+	// 4. Conclusion / CTA
+	if durationSec > clipLength*2.0 {
+		finalEnd := durationSec
+		finalStart := durationSec - clipLength
+		if finalStart > hookEnd+10 {
+			highlights = append(highlights, AIHighlight{
+				Start: FormatSecondsToTime(finalStart),
+				End:   FormatSecondsToTime(finalEnd),
+				Title: tOutro,
+			})
+		}
+	}
+
+	return highlights
+}
+
+// FormatSecondsToTime formats float seconds into MM:SS or HH:MM:SS.
+func FormatSecondsToTime(sec float64) string {
+	totalSec := int(sec)
+	h := totalSec / 3600
+	m := (totalSec % 3600) / 60
+	s := totalSec % 60
+	if h > 0 {
+		return fmt.Sprintf("%02d:%02d:%02d", h, m, s)
+	}
+	return fmt.Sprintf("%02d:%02d", m, s)
+}

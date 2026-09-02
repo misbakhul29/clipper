@@ -166,4 +166,22 @@ func TestWebServerEndpoints(t *testing.T) {
 			t.Errorf("expected auto_detect to be valid without manual segments, got: %s", rec.Body.String())
 		}
 	})
+
+	t.Run("POST API Auto-Detect AI Mode Without Subtitles", func(t *testing.T) {
+		sampleFile := filepath.Join(tmpDir, "sample_clip_001.mp4")
+		payload := []byte(`{"input_file":"` + sampleFile + `","mode":"ai"}`)
+		req := httptest.NewRequest(http.MethodPost, "/api/auto-detect", bytes.NewReader(payload))
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Errorf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+		var resp autoDetectResponse
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed decoding autoDetectResponse: %v", err)
+		}
+		if len(resp.Segments) == 0 {
+			t.Errorf("expected at least 1 detected segment, got 0")
+		}
+	})
 }

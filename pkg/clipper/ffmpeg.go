@@ -621,3 +621,33 @@ func escapeDrawtext(text string) string {
 	text = strings.ReplaceAll(text, "%", "％")
 	return text
 }
+
+// GetVideoDuration returns the duration of a video in seconds using ffprobe or ffmpeg.
+func (f *FFmpegRunner) GetVideoDuration(videoPath string) (float64, error) {
+	if ffprobePath, err := exec.LookPath("ffprobe"); err == nil {
+		cmd := exec.Command(ffprobePath, "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", videoPath)
+		out, err := cmd.Output()
+		if err == nil {
+			val := strings.TrimSpace(string(out))
+			if sec, err := strconv.ParseFloat(val, 64); err == nil && sec > 0 {
+				return sec, nil
+			}
+		}
+	}
+
+	cmd := exec.Command(f.FFmpegPath, "-i", videoPath)
+	out, _ := cmd.CombinedOutput()
+	lines := strings.Split(string(out), "\n")
+	for _, l := range lines {
+		if idx := strings.Index(l, "Duration: "); idx != -1 {
+			rem := l[idx+len("Duration: "):]
+			if comma := strings.Index(rem, ","); comma != -1 {
+				timeStr := strings.TrimSpace(rem[:comma])
+				if sec, err := ParseTimeSeconds(timeStr); err == nil && sec > 0 {
+					return sec, nil
+				}
+			}
+		}
+	}
+	return 0, fmt.Errorf("could not determine video duration for %s", videoPath)
+}

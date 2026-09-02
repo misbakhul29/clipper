@@ -631,54 +631,56 @@ func (c *Clipper) DetectSegmentsWithSubs(cfg *Config, originalInput string) ([]S
 			lang = "id"
 		}
 		var subEntries []transcriber.SubtitleEntry
-		var err error
+
+		// If user explicitly enabled Whisper, try it
 		if cfg.UseWhisper {
-			subEntries, err = transcriber.TranscribeWithWhisper(cfg.InputFile, cfg.CacheDir, lang)
+			subEntries, _ = transcriber.TranscribeWithWhisper(cfg.InputFile, cfg.CacheDir, lang)
 		} else {
-			subEntries, err = transcriber.FetchSubtitles(originalInput, cfg.CacheDir, lang)
-			if err != nil || len(subEntries) == 0 {
-				subEntries, err = transcriber.FetchSubtitles(originalInput, cfg.CacheDir, "en")
-			}
-			if err != nil || len(subEntries) == 0 {
-				subEntries, err = transcriber.TranscribeWithWhisper(cfg.InputFile, cfg.CacheDir, lang)
+			// Check if subtitles are already cached or readily available on YouTube
+			subEntries, _ = transcriber.FetchSubtitles(originalInput, cfg.CacheDir, lang)
+			if len(subEntries) == 0 {
+				subEntries, _ = transcriber.FetchSubtitles(originalInput, cfg.CacheDir, "en")
 			}
 		}
 
-		// Graceful Fallback: If subtitles/transcripts are unavailable (no captions and no Whisper on system),
-		// gracefully fall back to Audio Silence Voice Detection so segments are still produced without crashing!
-		if err != nil || len(subEntries) == 0 {
-			fmt.Printf("Subtitles unavailable (%v). Gracefully falling back to audio Silence Voice Detection...\n", err)
-			detected, sErr := detector.DetectSilence(c.runner.FFmpegPath, cfg.InputFile, -30, 0.5)
-			if sErr != nil {
-				return nil, nil, fmt.Errorf("failed to detect speech segments: %w", sErr)
-			}
-			for _, d := range detected {
-				segments = append(segments, Segment{
-					Start: d.Start,
-					End:   d.End,
-					Title: d.Title,
-				})
-			}
-			return segments, nil, nil
-		}
-
-		cachedSubs = subEntries
 		cfg.AIConfig.IsShorts = cfg.Shorts
-		highlights, err := ai.AnalyzeHighlightsMultiProvider(subEntries, cfg.AIConfig, lang)
-		if err != nil {
-			fmt.Printf("AI highlight analysis returned error (%v). Falling back to audio Silence Voice Detection...\n", err)
-			detected, sErr := detector.DetectSilence(c.runner.FFmpegPath, cfg.InputFile, -30, 0.5)
-			if sErr == nil && len(detected) > 0 {
-				for _, d := range detected {
+
+		// If subtitles were retrieved, analyze highlights from transcript
+		if len(subEntries) > 0 {
+			cachedSubs = subEntries
+			highlights, err := ai.AnalyzeHighlightsMultiProvider(subEntries, cfg.AIConfig, lang)
+			if err == nil && len(highlights) > 0 {
+				for _, h := range highlights {
 					segments = append(segments, Segment{
-						Start: d.Start,
-						End:   d.End,
-						Title: d.Title,
+						Start: h.Start,
+						End:   h.End,
+						Title: h.Title,
 					})
 				}
 				return segments, cachedSubs, nil
 			}
-			return nil, nil, fmt.Errorf("AI highlight analysis failed: %w", err)
+		}
+
+		// NO SUBTITLES REQUIRED: Generate smart segment list directly from video duration & metadata!
+		durationSec, _ := c.runner.GetVideoDuration(cfg.InputFile)
+		if durationSec <= 0 {
+			durationSec = 180.0
+		}
+		title := filepath.Base(cfg.InputFile)
+		if originalInput != "" && !strings.HasPrefix(originalInput, "/") {
+			title = originalInput
+		}
+
+		highlights, aiErr := ai.AnalyzeHighlightsWithoutSubtitles(title, durationSec, cfg.AIConfig, lang)
+		if aiErr == nil && len(highlights) > 0 {
+			for _, h := range highlights {
+				segments = append(segments, Segment{
+					Start: h.Start,
+					End:   h.End,
+					Title: h.Title,
+				})
+			}
+			return segments, nil, nil
 		}
 		for _, h := range highlights {
 			segments = append(segments, Segment{
