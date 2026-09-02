@@ -443,23 +443,167 @@ func ChunkSubtitlesToWords(entries []SubtitleEntry, maxWords int) []SubtitleEntr
 	return chunked
 }
 
-// ExportKaraokeASS exports subtitle entries into TikTok-style ASS format with yellow active word styling and thick outline.
-func ExportKaraokeASS(entries []SubtitleEntry, outputPath string, fontSize int, isShorts bool) error {
-	return ExportKaraokeASSWithFont(entries, outputPath, fontSize, isShorts, "Impact")
+// SubtitlePreset defines visual, timing, and animation parameters for ASS subtitles.
+type SubtitlePreset struct {
+	Name           string
+	FontName       string
+	FontSize       int
+	PrimaryColor   string
+	SecondaryColor string
+	OutlineColor   string
+	BackColor      string
+	Bold           int
+	Outline        float64
+	Shadow         float64
+	BorderStyle    int
+	Spacing        float64
+	ScaleX         int
+	ScaleY         int
+	MarginV        int
+	TransformTag   string
+	MaxWords       int
+	Uppercase      bool
 }
 
-// ExportKaraokeASSWithFont exports subtitle entries into TikTok-style ASS format with custom font name.
-func ExportKaraokeASSWithFont(entries []SubtitleEntry, outputPath string, fontSize int, isShorts bool, fontName string) error {
-	if fontSize <= 0 {
-		fontSize = 54
-	}
-	if fontName == "" {
-		fontName = "Impact"
-	}
-
-	marginV := 180
+// GetSubtitlePreset returns the preset theme configuration for ASS subtitle rendering.
+func GetSubtitlePreset(name string, isShorts bool) SubtitlePreset {
+	norm := strings.ToLower(strings.TrimSpace(name))
+	marginV := 160
 	if isShorts {
 		marginV = 440 // Centered in lower third of 9:16 frame
+	}
+
+	switch norm {
+	case "minimal", "devon":
+		fontSize := 46
+		if !isShorts {
+			fontSize = 36
+			marginV = 120
+		}
+		return SubtitlePreset{
+			Name:           "minimal",
+			FontName:       "Arial",
+			FontSize:       fontSize,
+			PrimaryColor:   "&H00FFFFFF", // Crisp white
+			SecondaryColor: "&H00FFFFFF",
+			OutlineColor:   "&H00111111", // Subtle clean dark outline
+			BackColor:      "&H80000000",
+			Bold:           -1,
+			Outline:        2.0,
+			Shadow:         1.0,
+			BorderStyle:    1,
+			Spacing:        0.5,
+			ScaleX:         100,
+			ScaleY:         100,
+			MarginV:        marginV,
+			TransformTag:   "",
+			MaxWords:       3,
+			Uppercase:      false,
+		}
+
+	case "neon":
+		fontSize := 54
+		if !isShorts {
+			fontSize = 42
+			marginV = 140
+		}
+		return SubtitlePreset{
+			Name:           "neon",
+			FontName:       "Impact",
+			FontSize:       fontSize,
+			PrimaryColor:   "&H00FFFF00", // Electric Cyan (&HAABBGGRR: Blue FF, Green FF)
+			SecondaryColor: "&H00FFFF00",
+			OutlineColor:   "&H008000FF", // Neon Violet/Magenta glow
+			BackColor:      "&H00000000",
+			Bold:           -1,
+			Outline:        4.5,
+			Shadow:         2.0,
+			BorderStyle:    1,
+			Spacing:        1.0,
+			ScaleX:         105,
+			ScaleY:         105,
+			MarginV:        marginV,
+			TransformTag:   `{\blur3}`,
+			MaxWords:       3,
+			Uppercase:      true,
+		}
+
+	case "cinematic":
+		fontSize := 38
+		if isShorts {
+			fontSize = 42
+		} else {
+			marginV = 100
+		}
+		return SubtitlePreset{
+			Name:           "cinematic",
+			FontName:       "Georgia",
+			FontSize:       fontSize,
+			PrimaryColor:   "&H00F0F0F0", // Soft Ivory White
+			SecondaryColor: "&H00F0F0F0",
+			OutlineColor:   "&H00151515", // Gentle filmic shadow
+			BackColor:      "&H90000000",
+			Bold:           0,
+			Outline:        1.5,
+			Shadow:         1.2,
+			BorderStyle:    1,
+			Spacing:        1.5,
+			ScaleX:         100,
+			ScaleY:         100,
+			MarginV:        marginV,
+			TransformTag:   "",
+			MaxWords:       7,
+			Uppercase:      false,
+		}
+
+	case "hormozi", "default", "":
+		fallthrough
+	default:
+		fontSize := 56
+		if !isShorts {
+			fontSize = 44
+			marginV = 160
+		}
+		return SubtitlePreset{
+			Name:           "hormozi",
+			FontName:       "Impact",
+			FontSize:       fontSize,
+			PrimaryColor:   "&H0000FFFF", // Vibrant Neon Yellow (&HAABBGGRR: Green FF, Red FF)
+			SecondaryColor: "&H0000FF55", // Lime Accent
+			OutlineColor:   "&H00000000", // Thick black outline
+			BackColor:      "&H90000000",
+			Bold:           -1,
+			Outline:        5.0,
+			Shadow:         2.5,
+			BorderStyle:    1,
+			Spacing:        1.0,
+			ScaleX:         105,
+			ScaleY:         105,
+			MarginV:        marginV,
+			TransformTag:   `{\fscx115\fscy115\t(0,100,\fscx105\fscy105)}`, // Pop-in bounce animation
+			MaxWords:       2,
+			Uppercase:      true,
+		}
+	}
+}
+
+// ExportPresetASS exports subtitle entries using a named visual preset with optional custom font and size overrides.
+func ExportPresetASS(entries []SubtitleEntry, outputPath string, presetName string, fontSize int, isShorts bool, customFont string) error {
+	preset := GetSubtitlePreset(presetName, isShorts)
+
+	if fontSize > 0 {
+		preset.FontSize = fontSize
+	}
+	if customFont != "" {
+		preset.FontName = customFont
+	}
+
+	// Micro-chunk words if preset defines MaxWords
+	var formattedEntries []SubtitleEntry
+	if preset.MaxWords > 0 {
+		formattedEntries = ChunkSubtitlesToWords(entries, preset.MaxWords)
+	} else {
+		formattedEntries = entries
 	}
 
 	var sb strings.Builder
@@ -471,16 +615,39 @@ func ExportKaraokeASSWithFont(entries []SubtitleEntry, outputPath string, fontSi
 
 	sb.WriteString("[V4+ Styles]\n")
 	sb.WriteString("Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n")
-	// Style: Vibrant Yellow (&H0000FFFF) text with thick black outline (&H00000000) and shadow
-	sb.WriteString(fmt.Sprintf("Style: Default,%s,%d,&H0000FFFF,&H00000000,&H00000000,&H90000000,-1,0,0,0,105,105,1,0,1,5,2,2,40,40,%d,1\n\n", fontName, fontSize, marginV))
+
+	sb.WriteString(fmt.Sprintf("Style: Default,%s,%d,%s,%s,%s,%s,%d,0,0,0,%d,%d,%.1f,0,%d,%.1f,%.1f,2,40,40,%d,1\n\n",
+		preset.FontName,
+		preset.FontSize,
+		preset.PrimaryColor,
+		preset.SecondaryColor,
+		preset.OutlineColor,
+		preset.BackColor,
+		preset.Bold,
+		preset.ScaleX,
+		preset.ScaleY,
+		preset.Spacing,
+		preset.BorderStyle,
+		preset.Outline,
+		preset.Shadow,
+		preset.MarginV,
+	))
 
 	sb.WriteString("[Events]\n")
 	sb.WriteString("Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")
 
-	for _, entry := range entries {
-		upperText := strings.ToUpper(strings.TrimSpace(entry.Text))
-		cleanText := strings.ReplaceAll(upperText, "\n", " ")
-		sb.WriteString(fmt.Sprintf("Dialogue: 0,%s,%s,Default,,0,0,0,,%s\n", entry.Start, entry.End, cleanText))
+	for _, entry := range formattedEntries {
+		text := strings.TrimSpace(entry.Text)
+		if preset.Uppercase {
+			text = strings.ToUpper(text)
+		}
+		text = strings.ReplaceAll(text, "\n", " ")
+
+		if preset.TransformTag != "" {
+			text = preset.TransformTag + text
+		}
+
+		sb.WriteString(fmt.Sprintf("Dialogue: 0,%s,%s,Default,,0,0,0,,%s\n", entry.Start, entry.End, text))
 	}
 
 	dir := filepath.Dir(outputPath)
@@ -489,6 +656,16 @@ func ExportKaraokeASSWithFont(entries []SubtitleEntry, outputPath string, fontSi
 	}
 
 	return os.WriteFile(outputPath, []byte(sb.String()), 0644)
+}
+
+// ExportKaraokeASS exports subtitle entries into TikTok-style ASS format with yellow active word styling and thick outline.
+func ExportKaraokeASS(entries []SubtitleEntry, outputPath string, fontSize int, isShorts bool) error {
+	return ExportKaraokeASSWithFont(entries, outputPath, fontSize, isShorts, "Impact")
+}
+
+// ExportKaraokeASSWithFont exports subtitle entries into TikTok-style ASS format with custom font name.
+func ExportKaraokeASSWithFont(entries []SubtitleEntry, outputPath string, fontSize int, isShorts bool, fontName string) error {
+	return ExportPresetASS(entries, outputPath, "hormozi", fontSize, isShorts, fontName)
 }
 
 // AdjustSubtitlesForJumpCuts shifts and filters subtitle entries after silence intervals have been excised.

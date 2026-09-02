@@ -59,6 +59,7 @@ func main() {
 		jumpCutMinSil float64
 		jumpCutMargin float64
 		jumpCutNoise  float64
+		subPreset     string
 	)
 
 	flag.StringVar(&configFile, "config", "", "Path to JSON configuration file")
@@ -88,6 +89,7 @@ func main() {
 	flag.BoolVar(&burnSubtitles, "burn-subtitles", false, "Hardcode/burn-in subtitles directly onto video clips")
 	flag.BoolVar(&burnSubtitles, "subtitles", false, "Hardcode/burn-in subtitles directly onto video clips")
 	flag.StringVar(&subStyle, "sub-style", "karaoke", "Subtitle style for burnt-in captions ('karaoke' for TikTok 2-word chunks, or 'standard')")
+	flag.StringVar(&subPreset, "sub-preset", "hormozi", "Viral subtitle theme preset ('hormozi', 'minimal', 'devon', 'neon', 'cinematic')")
 	flag.IntVar(&subFontSize, "sub-font-size", 48, "Subtitle font size for burnt-in captions")
 	flag.StringVar(&subFontPath, "sub-font-path", "", "Custom font file path (.ttf / .otf) for burnt-in captions")
 	flag.BoolVar(&useWhisper, "use-whisper", false, "Force local Whisper AI for speech-to-text transcription")
@@ -176,6 +178,7 @@ func main() {
 			JumpCutMinSil: jumpCutMinSil,
 			JumpCutMargin: jumpCutMargin,
 			JumpCutNoise:  jumpCutNoise,
+			SubPreset:     subPreset,
 			Segments:      parsedSegs,
 		}
 		if err := saveConfig(initConfig, genCfg); err != nil {
@@ -264,6 +267,9 @@ func main() {
 	}
 	if isFlagPassed("sub-style") {
 		cfg.SubStyle = subStyle
+	}
+	if isFlagPassed("sub-preset") {
+		cfg.SubPreset = subPreset
 	}
 	if isFlagPassed("sub-font-size") {
 		cfg.SubFontSize = subFontSize
@@ -456,6 +462,28 @@ func runInteractiveWizard(defaultFile string) {
 	jumpCutChoice := promptString(reader, "\nEnable Smart Silence Removal (Jump-Cut) inside clips? (y/n)", "n")
 	jumpCutEnabled := strings.ToLower(jumpCutChoice) == "y" || strings.ToLower(jumpCutChoice) == "yes"
 
+	subChoice := promptString(reader, "\nBurn subtitles directly into video? (y/n)", "n")
+	burnSubs := strings.ToLower(subChoice) == "y" || strings.ToLower(subChoice) == "yes"
+	subPresetChoice := "hormozi"
+	if burnSubs {
+		fmt.Println("Subtitle Theme Presets:")
+		fmt.Println("  1. hormozi   (Viral yellow, bold outline, pop-in bounce animation)")
+		fmt.Println("  2. minimal   (Clean crisp white, subtle border - Ali Abdaal / Devon style)")
+		fmt.Println("  3. neon      (Electric cyan, glowing magenta blur)")
+		fmt.Println("  4. cinematic (Soft ivory, wide spacing, classic subtitle)")
+		presetInput := promptString(reader, "Select preset (1-4 or name)", "1")
+		switch strings.ToLower(presetInput) {
+		case "2", "minimal", "devon":
+			subPresetChoice = "minimal"
+		case "3", "neon":
+			subPresetChoice = "neon"
+		case "4", "cinematic":
+			subPresetChoice = "cinematic"
+		default:
+			subPresetChoice = "hormozi"
+		}
+	}
+
 	quality := promptString(reader, "\nYouTube Video Download Quality (best, 1080p, 720p, 480p, 360p, worst)", "best")
 	autoDetect := promptString(reader, "\nAuto Detection Mode (press Enter to skip, or enter 'silence' / 'scene')", "")
 
@@ -494,11 +522,13 @@ func runInteractiveWizard(defaultFile string) {
 		Shorts:       isShorts,
 		ShortsStyle:  shortsStyle,
 		Quality:      quality,
-		AutoDetect:   autoDetect,
-		Loudnorm:     loudnormEnabled,
-		JumpCut:      jumpCutEnabled,
-		FaceTracking: true,
-		Segments:     segments,
+		AutoDetect:    autoDetect,
+		Loudnorm:      loudnormEnabled,
+		JumpCut:       jumpCutEnabled,
+		BurnSubtitles: burnSubs,
+		SubPreset:     subPresetChoice,
+		FaceTracking:  true,
+		Segments:      segments,
 	}
 
 	if err := saveConfig(fileOut, cfg); err != nil {

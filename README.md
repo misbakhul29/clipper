@@ -13,6 +13,7 @@ Sistem pemotong video otomatis berbasis **Go (Golang)** yang terintegrasi dengan
 - 👤 **Dynamic Speaker Auto-Framing & Face Tracking (`-shorts-style smart-crop`)**: Pemotongan vertikal 9:16 otomatis yang melacak wajah pembicara aktif (*Active Speaker Tracking*) berbasis pure Go AI detector (`pigo`) dengan transisi pergerakan kamera halus (*temporal camera easing & deadband*).
 - 🔊 **Auto Audio Normalization (`-loudnorm`)**: Penyetaraan volume suara standar industri EBU R128 (-14 LUFS target Shorts/TikTok/Reels) otomatis tanpa distorsi (*True Peak -2 dBTP*).
 - ✂️ **Smart Silence Removal / Jump-Cut (`-jump-cut`)**: Otomatis memotong jeda hening / diam 2–4 detik di tengah percakapan dengan margin wicara aman (*anti-clipping speech margin*) untuk tempo video yang padat (*snappy*).
+- 🎨 **Preset Tema Subtitle Viral (`-sub-preset`)**: Gaya subtitle ASS siap pakai ala CapCut/OpusClip (`hormozi` pop-in bounce, `minimal`/`devon` clean white, `neon` glowing cyan, `cinematic` soft ivory).
 - 🎙️ **Smart Silence & Scene Auto-Detection**: Deteksi otomatis bagian percakapan/suara (`-auto-detect silence`) atau perpindahan adegan (`-auto-detect scene`).
 - ⚡ **Parallel Concurrency Engine**: Render banyak klip sekaligus secara paralel via Goroutines worker pool.
 - 🎨 **Watermark Image & Text Overlay**: Penambahan logo watermark PNG & caption teks otomatis pada klip.

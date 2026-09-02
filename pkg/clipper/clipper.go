@@ -250,7 +250,11 @@ func (c *Clipper) Process(cfg *Config) error {
 		fmt.Printf("Overlay Text: '%s' (pos: %s)\n", cfg.OverlayText, cfg.TextPos)
 	}
 	if cfg.BurnSubtitles {
-		fmt.Printf("Burnt-in Subtitles: Enabled\n")
+		preset := cfg.SubPreset
+		if preset == "" {
+			preset = "hormozi"
+		}
+		fmt.Printf("Burnt-in Subtitles: Enabled (Theme: %s)\n", preset)
 	}
 	if cfg.Loudnorm {
 		targetI := cfg.LoudnormI
@@ -404,20 +408,22 @@ func (c *Clipper) Process(cfg *Config) error {
 							}
 						}
 
-						if cfg.SubStyle == "karaoke" {
-							sliced = transcriber.ChunkSubtitlesToWords(sliced, 3)
-						}
 						tmpSubFile := filepath.Join(outputDir, fmt.Sprintf(".sub_%03d.ass", j.index+1))
 						fontName := ""
 						if cfg.SubFontPath != "" {
 							fontName = strings.TrimSuffix(filepath.Base(cfg.SubFontPath), filepath.Ext(cfg.SubFontPath))
 						}
-						var exportErr error
-						if cfg.SubStyle == "karaoke" {
-							exportErr = transcriber.ExportKaraokeASSWithFont(sliced, tmpSubFile, cfg.SubFontSize, cfg.Shorts, fontName)
-						} else {
-							exportErr = transcriber.ExportASSWithFont(sliced, tmpSubFile, cfg.SubFontSize, cfg.Shorts, fontName)
+
+						preset := cfg.SubPreset
+						if preset == "" {
+							if cfg.SubStyle == "standard" {
+								preset = "minimal"
+							} else {
+								preset = "hormozi"
+							}
 						}
+
+						exportErr := transcriber.ExportPresetASS(sliced, tmpSubFile, preset, cfg.SubFontSize, cfg.Shorts, fontName)
 						if exportErr == nil {
 							subPath = tmpSubFile
 						}

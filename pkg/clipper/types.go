@@ -66,7 +66,8 @@ type Config struct {
 	AutoDetect    string              `json:"auto_detect"`  // Auto detection mode: "silence", "scene", or "ai"
 	TranslateLang string              `json:"translate_lang"`// Target language for subtitle translation (e.g. "id", "en")
 	BurnSubtitles bool                `json:"burn_subtitles"`// Hardcode/burn-in subtitles directly onto video clips
-	SubStyle      string              `json:"sub_style"`    // Subtitle style: "karaoke" (TikTok 2-word chunks) or "standard"
+	SubStyle      string              `json:"sub_style"`     // Subtitle style: 'karaoke' or 'standard'
+	SubPreset     string              `json:"sub_preset"`    // Viral subtitle theme preset: 'hormozi', 'minimal', 'devon', 'neon', 'cinematic'
 	SubFontSize   int                 `json:"sub_font_size"` // Subtitle font size for burnt-in captions (default: 48)
 	SubFontPath   string              `json:"sub_font_path"`// Path to custom font file (.ttf / .otf) for burnt-in captions
 	UseWhisper    bool                `json:"use_whisper"`   // Force local Whisper AI for speech-to-text transcription
