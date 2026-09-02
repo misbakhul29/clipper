@@ -53,13 +53,21 @@
 
       <div class="source-bar">
         <input type="text" id="videoSource" class="text-input" placeholder="Video path (e.g. video.mp4) or YouTube URL" />
-        <button class="btn btn-secondary" onclick="loadSourceVideo()">
+        <button class="btn btn-secondary" id="loadBtn" onclick="loadSourceVideo()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          Load
+          <span id="loadBtnText">Load</span>
         </button>
       </div>
 
-      <div class="player-stage">
+      <div class="player-stage" id="playerStage">
+        <div class="player-loader" id="playerLoader" style="display: none;">
+          <svg class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10" stroke-opacity="0.25"/>
+            <path d="M12 2a10 10 0 0 1 10 10"/>
+          </svg>
+          <div class="loader-title" id="loaderTitle">Preparing video...</div>
+          <div class="loader-sub" id="loaderSub">Downloading YouTube video to local cache for playback</div>
+        </div>
         <video id="mainPlayer" controls></video>
       </div>
 

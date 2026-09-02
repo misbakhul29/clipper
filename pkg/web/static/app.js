@@ -196,18 +196,69 @@ function switchTab(tab) {
   }
 }
 
-function loadSourceVideo() {
+async function loadSourceVideo() {
   const src = document.getElementById('videoSource').value.trim();
   if (!src) {
     alert('Please enter a local video file path or YouTube URL.');
     return;
   }
 
-  if (src.startsWith('http://') || src.startsWith('https://')) {
-    alert('YouTube URL detected. Set timestamps manually or via player once downloaded.');
+  const loader = document.getElementById('playerLoader');
+  const title = document.getElementById('loaderTitle');
+  const sub = document.getElementById('loaderSub');
+  const loadBtn = document.getElementById('loadBtn');
+  const loadBtnText = document.getElementById('loadBtnText');
+
+  // Show loading state
+  if (loader) loader.style.display = 'flex';
+  if (loadBtn) loadBtn.disabled = true;
+  if (loadBtnText) loadBtnText.textContent = 'Loading...';
+
+  const isYT = src.startsWith('http://') || src.startsWith('https://') || src.includes('youtube.com') || src.includes('youtu.be');
+  if (isYT) {
+    if (title) title.textContent = 'Downloading YouTube video...';
+    if (sub) sub.textContent = 'Fetching video into local cache for frame-accurate player scrubbing and clipping.';
   } else {
-    player.src = '/preview?path=' + encodeURIComponent(src);
-    player.load();
+    if (title) title.textContent = 'Preparing video...';
+    if (sub) sub.textContent = 'Loading local video file into browser preview player.';
+  }
+
+  try {
+    const res = await fetch('/api/prepare', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: src })
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      alert(data.error || 'Failed to prepare video.');
+      if (loader) loader.style.display = 'none';
+      if (loadBtn) loadBtn.disabled = false;
+      if (loadBtnText) loadBtnText.textContent = 'Load';
+      return;
+    }
+
+    if (player) {
+      player.src = data.preview_url;
+      player.load();
+      player.oncanplay = () => {
+        if (loader) loader.style.display = 'none';
+        player.oncanplay = null;
+      };
+      // Fallback timeout to hide loader
+      setTimeout(() => {
+        if (loader) loader.style.display = 'none';
+      }, 4000);
+    } else {
+      if (loader) loader.style.display = 'none';
+    }
+  } catch (err) {
+    alert('Error preparing video: ' + err);
+    if (loader) loader.style.display = 'none';
+  } finally {
+    if (loadBtn) loadBtn.disabled = false;
+    if (loadBtnText) loadBtnText.textContent = 'Load';
   }
 }
 

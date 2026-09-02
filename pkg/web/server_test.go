@@ -117,4 +117,30 @@ func TestWebServerEndpoints(t *testing.T) {
 			t.Errorf("expected status 400 for empty payload, got %d", rec.Code)
 		}
 	})
+
+	t.Run("POST API Prepare", func(t *testing.T) {
+		// Empty source fails with 400
+		req := httptest.NewRequest(http.MethodPost, "/api/prepare", bytes.NewReader([]byte(`{"source":""}`)))
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("expected status 400 for empty source, got %d", rec.Code)
+		}
+
+		// Valid existing file returns ready
+		sampleFile := filepath.Join(tmpDir, "sample_clip_001.mp4")
+		req2 := httptest.NewRequest(http.MethodPost, "/api/prepare", bytes.NewReader([]byte(`{"source":"`+sampleFile+`"}`)))
+		rec2 := httptest.NewRecorder()
+		handler.ServeHTTP(rec2, req2)
+		if rec2.Code != http.StatusOK {
+			t.Errorf("expected status 200 for existing file, got %d: %s", rec2.Code, rec2.Body.String())
+		}
+		var prep prepareResponse
+		if err := json.NewDecoder(rec2.Body).Decode(&prep); err != nil {
+			t.Fatalf("failed decoding prepareResponse: %v", err)
+		}
+		if prep.Status != "ready" || !strings.Contains(prep.PreviewURL, "/preview?path=") {
+			t.Errorf("unexpected prepare response: %+v", prep)
+		}
+	})
 }

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/misbakhul29/clipper/pkg/clipper"
+	"github.com/misbakhul29/clipper/pkg/downloader"
 )
 
 // Server handles the local web UI dashboard and REST API.
@@ -57,6 +58,7 @@ func (s *Server) Router() http.Handler {
 
 	mux.HandleFunc("/api/status", s.handleStatus)
 	mux.HandleFunc("/api/clips", s.handleClips)
+	mux.HandleFunc("/api/prepare", s.handlePrepare)
 	mux.HandleFunc("/api/clip", s.handleClip)
 	mux.HandleFunc("/preview", s.handlePreview)
 
@@ -192,11 +194,100 @@ func (s *Server) handleClips(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(items)
 }
 
+type prepareRequestPayload struct {
+	Source string `json:"source"`
+}
+
+type prepareResponse struct {
+	Status     string `json:"status"`
+	Path       string `json:"path"`
+	PreviewURL string `json:"preview_url"`
+	IsYouTube  bool   `json:"is_youtube"`
+}
+
+func (s *Server) handlePrepare(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req prepareRequestPayload
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"invalid request: %v"}`, err), http.StatusBadRequest)
+		return
+	}
+
+	src := strings.TrimSpace(req.Source)
+	if src == "" {
+		http.Error(w, `{"error":"source path or URL is required"}`, http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	if downloader.IsYouTubeURL(src) {
+		cacheDir := "./cache"
+		if s.DefaultConfig != nil && s.DefaultConfig.CacheDir != "" {
+			cacheDir = s.DefaultConfig.CacheDir
+		}
+
+		videoPath, err := downloader.DownloadYouTubeVideo(src, cacheDir, "best", false)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": fmt.Sprintf("Failed to download YouTube video: %v", err)})
+			return
+		}
+
+		previewURL := "/preview?path=" + filepath.ToSlash(videoPath)
+		_ = json.NewEncoder(w).Encode(prepareResponse{
+			Status:     "ready",
+			Path:       videoPath,
+			PreviewURL: previewURL,
+			IsYouTube:  true,
+		})
+		return
+	}
+
+	// Local file
+	absPath, err := filepath.Abs(src)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "Invalid file path"})
+		return
+	}
+
+	fi, err := os.Stat(absPath)
+	if err != nil || fi.IsDir() {
+		w.WriteHeader(http.StatusNotFound)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": fmt.Sprintf("Local video file '%s' not found", src)})
+		return
+	}
+
+	previewURL := "/preview?path=" + filepath.ToSlash(absPath)
+	_ = json.NewEncoder(w).Encode(prepareResponse{
+		Status:     "ready",
+		Path:       absPath,
+		PreviewURL: previewURL,
+		IsYouTube:  false,
+	})
+}
+
 func (s *Server) handlePreview(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Query().Get("path")
 	if path == "" {
 		http.Error(w, "missing path query param", http.StatusBadRequest)
 		return
+	}
+
+	if downloader.IsYouTubeURL(path) {
+		cacheDir := "./cache"
+		if s.DefaultConfig != nil && s.DefaultConfig.CacheDir != "" {
+			cacheDir = s.DefaultConfig.CacheDir
+		}
+		cached, err := downloader.DownloadYouTubeVideo(path, cacheDir, "best", false)
+		if err == nil && cached != "" {
+			path = cached
+		}
 	}
 
 	fi, err := os.Stat(path)
