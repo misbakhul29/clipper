@@ -269,6 +269,13 @@ func (c *Clipper) Process(cfg *Config) error {
 	if cfg.GenerateMetadata {
 		fmt.Println("Social Metadata: Enabled (metadata.json & .txt companion)")
 	}
+	if cfg.ExtractThumbnail {
+		tCount := cfg.ThumbnailCount
+		if tCount <= 0 {
+			tCount = 1
+		}
+		fmt.Printf("Thumbnail Extractor: Enabled (Hook cover & clean frames, count: %d)\n", tCount)
+	}
 	if cfg.Loudnorm {
 		targetI := cfg.LoudnormI
 		if targetI == 0 {
@@ -502,6 +509,45 @@ func (c *Clipper) Process(cfg *Config) error {
 						_ = os.WriteFile(metaJSONPath, jsonData, 0644)
 					}
 					_ = os.WriteFile(metaTXTPath, []byte(ai.FormatMetadataText(segMeta)), 0644)
+				}
+
+				if err == nil && cfg.ExtractThumbnail && !j.isTemp {
+					thumbCount := cfg.ThumbnailCount
+					if thumbCount <= 0 {
+						thumbCount = 1
+					}
+					if thumbCount > 3 {
+						thumbCount = 3
+					}
+					bestTimes, bErr := detector.FindBestHookFrames(c.runner.FFmpegPath, j.segPath, effectiveDuration, thumbCount)
+					if bErr == nil && len(bestTimes) > 0 {
+						baseWithoutExt := strings.TrimSuffix(j.segPath, filepath.Ext(j.segPath))
+						cleanThumbPath := baseWithoutExt + "_thumb_clean.jpg"
+						hookThumbPath := baseWithoutExt + "_thumb_hook.jpg"
+
+						titleText := ""
+						if segMeta != nil && segMeta.HookTitle != "" {
+							titleText = segMeta.HookTitle
+						} else if j.seg.Title != "" {
+							titleText = j.seg.Title
+						} else {
+							titleText = filepath.Base(baseWithoutExt)
+						}
+
+						// 1. Primary clean frame
+						_ = detector.ExtractThumbnail(c.runner.FFmpegPath, j.segPath, bestTimes[0], cleanThumbPath)
+
+						// 2. Hook cover with title overlay
+						_ = detector.ExtractThumbnailWithHook(c.runner.FFmpegPath, j.segPath, bestTimes[0], titleText, cfg.Shorts, hookThumbPath)
+
+						// 3. Optional alternative frames
+						for tIdx := 1; tIdx < len(bestTimes); tIdx++ {
+							altThumbPath := fmt.Sprintf("%s_thumb_%d.jpg", baseWithoutExt, tIdx+1)
+							_ = detector.ExtractThumbnail(c.runner.FFmpegPath, j.segPath, bestTimes[tIdx], altThumbPath)
+						}
+						fmt.Printf("[%d/%d] Extracted cover thumbnail: %s (best expression at %.2fs)\n",
+							j.index+1, len(cfg.Segments), filepath.Base(hookThumbPath), bestTimes[0])
+					}
 				}
 
 				results <- jobResult{

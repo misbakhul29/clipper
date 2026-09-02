@@ -17,6 +17,7 @@ Sistem pemotong video otomatis berbasis **Go (Golang)** yang terintegrasi dengan
 - 🏷️ **Pemisah Silent Narrator & SDH (`-sub-sdh-mode`)**: Penanganan cerdas untuk deskripsi situasi `[...]` (alur cerita/movie recap) dengan mode `strip` (bersihkan dialog) atau `top-box` (banner statis di atas frame).
 - 🤩 **Auto Contextual Emoji Injection (`-sub-emoji`)**: Injeksi otomatis emoji kontekstual cerdas pada teks takarir berdasarkan kata kunci semantik (misal: "uang" ➔ 💰, "api/viral" ➔ 🔥, "ide" ➔ 💡) dengan sistem anti-spam & anti-duplikasi beruntun.
 - 📋 **AI Social Metadata Generator (`-metadata`)**: Otomatis menghasilkan berkas pendamping `metadata.json` dan `.txt` berisi judul hook viral (*high-CTR*), deskripsi, *call-to-action*, trending hashtags, dan skor viralitas (1–100) beserta alasannya untuk mempermudah upload ke TikTok, YouTube Shorts, dan Reels.
+- 🖼️ **Thumbnail & Hook Frame Auto-Extractor (`-thumbnail`)**: Otomatis mengekstrak frame beresolusi tinggi (`.jpg`) dari detik pembuka dengan ekspresi wajah terbaik, lengkap dengan overlay teks judul hook viral untuk sampul Instagram Reels / YouTube Shorts.
 - 🎙️ **Smart Silence & Scene Auto-Detection**: Deteksi otomatis bagian percakapan/suara (`-auto-detect silence`) atau perpindahan adegan (`-auto-detect scene`).
 - ⚡ **Parallel Concurrency Engine**: Render banyak klip sekaligus secara paralel via Goroutines worker pool.
 - 🎨 **Watermark Image & Text Overlay**: Penambahan logo watermark PNG & caption teks otomatis pada klip.

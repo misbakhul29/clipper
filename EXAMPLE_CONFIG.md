@@ -46,6 +46,8 @@ Skenario paling umum untuk mengunduh video YouTube, menganalisis klip menarik me
   "sub_font_size": 54,
   "use_whisper": false,
   "generate_metadata": true,
+  "extract_thumbnail": true,
+  "thumbnail_count": 1,
   "dry_run": false,
   "ai_config": {
     "api_router": "gemini",

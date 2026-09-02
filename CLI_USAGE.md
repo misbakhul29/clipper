@@ -49,6 +49,8 @@ go install .
 | **Kecerdasan Buatan (AI) & Auto-Detect** | | | |
 | `-auto-detect` | `string` | `""` | Mode deteksi segmen otomatis: `"ai"` (AI highlights), `"silence"`, atau `"scene"` |
 | `-metadata` | `bool` | `false` | Menghasilkan berkas pendamping social media metadata (`.json` & `.txt`) untuk mempermudah upload |
+| `-thumbnail` / `-thumb` | `bool` | `false` | Mengekstrak frame cover hook & clean beresolusi tinggi (`.jpg`) dari detik pembuka klip |
+| `-thumb-count` | `int` | `1` | Jumlah alternatif thumbnail yang diekstrak (1 s/d 3) |
 | `-ai-router` | `string` | `"openrouter"` | Provider AI: `"gemini"`, `"deepseek"`, `"openai"`, atau `"openrouter"` |
 | `-ai-key` | `string` | `""` | API Key untuk AI Provider yang dipilih (atau via Environment Variables) |
 | `-openrouter-key` | `string` | `""` | API Key OpenRouter (fallback legacy dari env `$OPENROUTER_API_KEY`) |
