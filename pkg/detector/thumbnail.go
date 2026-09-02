@@ -193,13 +193,19 @@ func ExtractThumbnailWithHook(ffmpegPath, videoPath string, timeSec float64, hoo
 	}
 
 	tmpDir := filepath.Dir(outputPath)
-	tmpAss := filepath.Join(tmpDir, fmt.Sprintf(".thumb_overlay_%d.ass", os.Getpid()))
+	tmpAssFile, err := os.CreateTemp(tmpDir, ".thumb_overlay_*.ass")
+	if err != nil {
+		return ExtractThumbnail(ffmpegPath, videoPath, timeSec, outputPath)
+	}
+	tmpAss := tmpAssFile.Name()
+	_ = tmpAssFile.Close()
+	defer os.Remove(tmpAss)
+
 	assContent := BuildThumbnailASS(hookTitle, isShorts)
 
 	if err := os.WriteFile(tmpAss, []byte(assContent), 0644); err != nil {
 		return ExtractThumbnail(ffmpegPath, videoPath, timeSec, outputPath)
 	}
-	defer os.Remove(tmpAss)
 
 	args := []string{
 		"-y",
@@ -235,6 +241,11 @@ func BuildThumbnailASS(hookTitle string, isShorts bool) string {
 		marginV = 450 // Positioned in upper-third to avoid being obscured by TikTok/Reels UI icons
 		alignment = 8
 	}
+
+	// Sanitize ASS special characters to prevent broken markup tags
+	hookTitle = strings.ReplaceAll(hookTitle, "{", "(")
+	hookTitle = strings.ReplaceAll(hookTitle, "}", ")")
+	hookTitle = strings.ReplaceAll(hookTitle, "\\", "/")
 
 	// Auto-wrap long titles into 2 or 3 lines with \N
 	wrapped := wrapTitleText(hookTitle, 4)

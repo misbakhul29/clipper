@@ -31,6 +31,19 @@ func TestBuildThumbnailASS(t *testing.T) {
 			t.Errorf("expected Short Title in dialogue text")
 		}
 	})
+
+	t.Run("Sanitize Brackets and Backslashes", func(t *testing.T) {
+		ass := BuildThumbnailASS("Rahasia {Keren} AC\\DC", false)
+		if strings.Contains(ass, "{Keren}") {
+			t.Errorf("expected curly braces to be replaced with parentheses, got:\n%s", ass)
+		}
+		if !strings.Contains(ass, "(Keren)") {
+			t.Errorf("expected (Keren) in dialogue, got:\n%s", ass)
+		}
+		if strings.Contains(ass, "AC\\DC") {
+			t.Errorf("expected backslash to be replaced with slash, got:\n%s", ass)
+		}
+	})
 }
 
 func TestWrapTitleText(t *testing.T) {

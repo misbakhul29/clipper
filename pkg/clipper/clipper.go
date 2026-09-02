@@ -530,8 +530,9 @@ func (c *Clipper) Process(cfg *Config) error {
 							titleText = segMeta.HookTitle
 						} else if j.seg.Title != "" {
 							titleText = j.seg.Title
-						} else {
-							titleText = filepath.Base(baseWithoutExt)
+						} else if len(segSubEntries) > 0 {
+							firstSentence, _ := transcriber.ExtractSDHAndSpeech(segSubEntries[0].Text)
+							titleText = strings.TrimSpace(firstSentence)
 						}
 
 						// 1. Primary clean frame
