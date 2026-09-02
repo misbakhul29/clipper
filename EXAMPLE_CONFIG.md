@@ -221,5 +221,9 @@ Gunakan konfigurasi ini jika Anda ingin menentukan timestamp segmen awal dan akh
 | `loudnorm_i` | `float` | `-14.0` | Target Integrated Loudness dalam LUFS |
 | `loudnorm_lra` | `float` | `7.0` | Target Loudness Range dalam LU |
 | `loudnorm_tp` | `float` | `-2.0` | Batas maksimum True Peak dalam dBTP |
+| `jump_cut` | `bool` | `false` | Smart silence removal / jump-cut pemotong hening di tengah klip |
+| `jump_cut_min_silence` | `float` | `1.0` | Ambang hening minimum dalam detik yang akan dipotong |
+| `jump_cut_margin` | `float` | `0.2` | Padding wicara aman di sekitar jeda hening dalam detik |
+| `jump_cut_noise` | `float` | `-30.0` | Ambang batas kebisingan hening (noise gate) dalam dB |
 | `ai_config` | `object` | `{}` | Konfigurasi AI Provider (`api_router`, `api_key`, `model`) |
 | `segments` | `array` | `[]` | Daftar segmen manual (`start`, `end`, `title`) |

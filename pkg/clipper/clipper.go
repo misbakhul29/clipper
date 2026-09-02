@@ -172,6 +172,17 @@ func (c *Clipper) Process(cfg *Config) error {
 		fmt.Printf("Output Dir    : %s\n", outputDir)
 		fmt.Printf("Total Segments: %d\n", len(cfg.Segments))
 		fmt.Printf("Mode          : %s, Strategy: %s, Shorts: %v (style: %s)\n", cfg.Mode, cfg.Strategy, cfg.Shorts, cfg.ShortsStyle)
+		if cfg.JumpCut {
+			minSil := cfg.JumpCutMinSil
+			if minSil <= 0 {
+				minSil = 1.0
+			}
+			margin := cfg.JumpCutMargin
+			if margin <= 0 {
+				margin = 0.2
+			}
+			fmt.Printf("Jump-Cut      : Enabled (Min Silence: %.1fs, Margin: %.1fs)\n", minSil, margin)
+		}
 		if cfg.SubFontPath != "" {
 			fmt.Printf("Custom Font   : %s\n", cfg.SubFontPath)
 		}
@@ -248,6 +259,22 @@ func (c *Clipper) Process(cfg *Config) error {
 		}
 		fmt.Printf("Audio Normalization: EBU R128 (Target: %.1f LUFS)\n", targetI)
 	}
+	if cfg.JumpCut {
+		minSil := cfg.JumpCutMinSil
+		if minSil <= 0 {
+			minSil = 1.0
+		}
+		margin := cfg.JumpCutMargin
+		if margin <= 0 {
+			margin = 0.2
+		}
+		noise := cfg.JumpCutNoise
+		if noise == 0 {
+			noise = -30.0
+		}
+		fmt.Printf("Smart Silence Removal (Jump-Cut): Enabled (Min Silence: %.1fs, Margin: %.1fs, Noise: %.1fdB)\n",
+			minSil, margin, noise)
+	}
 
 	type job struct {
 		index       int
@@ -306,8 +333,54 @@ func (c *Clipper) Process(cfg *Config) error {
 		go func() {
 			defer wg.Done()
 			for j := range jobs {
+				effectiveInput := cfg.InputFile
+				effectiveStart := j.startSec
+				effectiveDuration := j.durationSec
+				var jumpCutTemp string
+				var removedGaps []detector.SilenceGap
+
+				if cfg.JumpCut {
+					minSil := cfg.JumpCutMinSil
+					if minSil <= 0 {
+						minSil = 1.0
+					}
+					margin := cfg.JumpCutMargin
+					if margin <= 0 {
+						margin = 0.2
+					}
+					noise := cfg.JumpCutNoise
+					if noise == 0 {
+						noise = -30.0
+					}
+
+					rawGaps, _ := detector.DetectSilenceGaps(c.runner.FFmpegPath, cfg.InputFile, j.startSec, j.durationSec, noise, minSil)
+					keptIntervals, actualRemoved := detector.CalculateJumpCutIntervals(j.durationSec, rawGaps, margin)
+
+					if len(actualRemoved) > 0 && len(keptIntervals) > 1 {
+						var totalRemoved float64
+						for _, r := range actualRemoved {
+							totalRemoved += r.Duration()
+						}
+						newDur := j.durationSec - totalRemoved
+						fmt.Printf("[%d/%d] Jump-Cut: Excising %d silence pauses (-%.2fs) -> Snappy duration: %.2fs (was %.2fs)\n",
+							j.index+1, len(cfg.Segments), len(actualRemoved), totalRemoved, newDur, j.durationSec)
+
+						jumpCutTemp = filepath.Join(outputDir, fmt.Sprintf(".jc_pre_%03d.mp4", j.index+1))
+						if jcErr := c.runner.ApplyJumpCut(cfg.InputFile, j.startSec, j.durationSec, keptIntervals, jumpCutTemp); jcErr == nil {
+							effectiveInput = jumpCutTemp
+							effectiveStart = 0.0
+							effectiveDuration = newDur
+							removedGaps = actualRemoved
+						} else {
+							fmt.Printf("[%d/%d] Jump-Cut warning: %v, falling back to original clip\n", j.index+1, len(cfg.Segments), jcErr)
+							_ = os.Remove(jumpCutTemp)
+							jumpCutTemp = ""
+						}
+					}
+				}
+
 				fmt.Printf("[%d/%d] Cutting segment: %.2fs -> duration %.2fs -> %s\n",
-					j.index+1, len(cfg.Segments), j.startSec, j.durationSec, j.segPath)
+					j.index+1, len(cfg.Segments), effectiveStart, effectiveDuration, j.segPath)
 				if cfg.Shorts && cfg.ShortsStyle == "smart-crop" && cfg.FaceTracking {
 					fmt.Printf("[%d/%d] Analyzing active speaker & face tracking for smart-crop auto-framing...\n", j.index+1, len(cfg.Segments))
 				}
@@ -315,6 +388,9 @@ func (c *Clipper) Process(cfg *Config) error {
 				subPath := ""
 				if len(allSubEntries) > 0 {
 					sliced := transcriber.SliceSubtitles(allSubEntries, j.startSec, j.startSec+j.durationSec)
+					if len(removedGaps) > 0 {
+						sliced = transcriber.AdjustSubtitlesForJumpCuts(sliced, removedGaps)
+					}
 					if len(sliced) > 0 {
 						// On-demand token-saving translation for this specific clip segment
 						if cfg.TranslateLang != "" && (cfg.AIConfig.APIKey != "" || os.Getenv("OPENROUTER_API_KEY") != "" || os.Getenv("GEMINI_API_KEY") != "" || os.Getenv("DEEPSEEK_API_KEY") != "" || os.Getenv("OPENAI_API_KEY") != "") {
@@ -348,7 +424,12 @@ func (c *Clipper) Process(cfg *Config) error {
 					}
 				}
 
-				err := c.runner.CutSegment(cfg, j.startSec, j.durationSec, j.segPath, subPath)
+				segCfg := *cfg
+				segCfg.InputFile = effectiveInput
+				err := c.runner.CutSegment(&segCfg, effectiveStart, effectiveDuration, j.segPath, subPath)
+				if jumpCutTemp != "" {
+					_ = os.Remove(jumpCutTemp)
+				}
 				if subPath != "" {
 					_ = os.Remove(subPath)
 				}

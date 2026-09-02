@@ -347,3 +347,35 @@ func BuildLoudnormFilter(cfg *Config) string {
 	}
 	return fmt.Sprintf("loudnorm=I=%.1f:LRA=%.1f:TP=%.1f", targetI, targetLRA, targetTP)
 }
+
+// ApplyJumpCut trims and concatenates kept speech intervals from inputFile to outputPath.
+func (f *FFmpegRunner) ApplyJumpCut(inputFile string, startSec, durationSec float64, intervals []detector.KeptInterval, outputPath string) error {
+	filterGraph := detector.BuildJumpCutFilter(intervals)
+	if filterGraph == "" {
+		return fmt.Errorf("empty jump-cut filter graph")
+	}
+
+	startStr := FormatSeconds(startSec)
+	durStr := FormatSeconds(durationSec)
+
+	args := []string{
+		"-y",
+		"-ss", startStr,
+		"-t", durStr,
+		"-i", inputFile,
+		"-filter_complex", filterGraph,
+		"-map", "[vout]",
+		"-map", "[aout]",
+	}
+
+	vEncArgs := selectVideoEncoderArgs(f.FFmpegPath)
+	args = append(args, vEncArgs...)
+	args = append(args,
+		"-c:a", "aac",
+		"-b:a", "320k",
+		"-ar", "48000",
+		outputPath,
+	)
+
+	return f.runFFmpeg(args)
+}

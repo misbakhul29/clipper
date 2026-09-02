@@ -83,6 +83,10 @@ type Config struct {
 	LoudnormI     float64             `json:"loudnorm_i"`    // Integrated loudness target in LUFS (default: -14)
 	LoudnormLRA   float64             `json:"loudnorm_lra"`  // Loudness range target in LU (default: 7)
 	LoudnormTP    float64             `json:"loudnorm_tp"`   // Maximum true peak in dBTP (default: -2)
+	JumpCut       bool                `json:"jump_cut"`      // Smart silence removal & snappy jump-cuts inside clips
+	JumpCutMinSil float64             `json:"jump_cut_min_silence"` // Minimum silence pause to cut in seconds (default: 1.0)
+	JumpCutMargin float64             `json:"jump_cut_margin"` // Padding margin around speech in seconds (default: 0.2)
+	JumpCutNoise  float64             `json:"jump_cut_noise"`  // Silence noise gate threshold in dB (default: -30.0)
 	Segments      []Segment           `json:"segments"`
 }
 

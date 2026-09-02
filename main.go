@@ -55,6 +55,10 @@ func main() {
 		loudnormI     float64
 		loudnormLRA   float64
 		loudnormTP    float64
+		jumpCut       bool
+		jumpCutMinSil float64
+		jumpCutMargin float64
+		jumpCutNoise  float64
 	)
 
 	flag.StringVar(&configFile, "config", "", "Path to JSON configuration file")
@@ -103,6 +107,10 @@ func main() {
 	flag.Float64Var(&loudnormI, "loudnorm-i", -14.0, "Integrated loudness target in LUFS (default: -14.0)")
 	flag.Float64Var(&loudnormLRA, "loudnorm-lra", 7.0, "Loudness range target in LU (default: 7.0)")
 	flag.Float64Var(&loudnormTP, "loudnorm-tp", -2.0, "Maximum true peak in dBTP (default: -2.0)")
+	flag.BoolVar(&jumpCut, "jump-cut", false, "Smart silence removal & jump-cut editing inside video clips")
+	flag.Float64Var(&jumpCutMinSil, "jump-cut-min-silence", 1.0, "Minimum silence pause duration to cut in seconds (default: 1.0s)")
+	flag.Float64Var(&jumpCutMargin, "jump-cut-margin", 0.2, "Speech margin/padding around speech in seconds (default: 0.2s)")
+	flag.Float64Var(&jumpCutNoise, "jump-cut-noise", -30.0, "Audio noise gate threshold for silence in dB (default: -30.0dB)")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
@@ -164,6 +172,10 @@ func main() {
 			LoudnormI:     loudnormI,
 			LoudnormLRA:   loudnormLRA,
 			LoudnormTP:    loudnormTP,
+			JumpCut:       jumpCut,
+			JumpCutMinSil: jumpCutMinSil,
+			JumpCutMargin: jumpCutMargin,
+			JumpCutNoise:  jumpCutNoise,
 			Segments:      parsedSegs,
 		}
 		if err := saveConfig(initConfig, genCfg); err != nil {
@@ -311,6 +323,18 @@ func main() {
 	if isFlagPassed("loudnorm-tp") {
 		cfg.LoudnormTP = loudnormTP
 	}
+	if isFlagPassed("jump-cut") {
+		cfg.JumpCut = jumpCut
+	}
+	if isFlagPassed("jump-cut-min-silence") {
+		cfg.JumpCutMinSil = jumpCutMinSil
+	}
+	if isFlagPassed("jump-cut-margin") {
+		cfg.JumpCutMargin = jumpCutMargin
+	}
+	if isFlagPassed("jump-cut-noise") {
+		cfg.JumpCutNoise = jumpCutNoise
+	}
 
 	// Parse CLI segments string if provided
 	if segments != "" {
@@ -429,6 +453,9 @@ func runInteractiveWizard(defaultFile string) {
 	loudnormChoice := promptString(reader, "\nEnable EBU R128 audio normalization (-14 LUFS)? (y/n)", "y")
 	loudnormEnabled := strings.ToLower(loudnormChoice) == "y" || strings.ToLower(loudnormChoice) == "yes"
 
+	jumpCutChoice := promptString(reader, "\nEnable Smart Silence Removal (Jump-Cut) inside clips? (y/n)", "n")
+	jumpCutEnabled := strings.ToLower(jumpCutChoice) == "y" || strings.ToLower(jumpCutChoice) == "yes"
+
 	quality := promptString(reader, "\nYouTube Video Download Quality (best, 1080p, 720p, 480p, 360p, worst)", "best")
 	autoDetect := promptString(reader, "\nAuto Detection Mode (press Enter to skip, or enter 'silence' / 'scene')", "")
 
@@ -469,6 +496,7 @@ func runInteractiveWizard(defaultFile string) {
 		Quality:      quality,
 		AutoDetect:   autoDetect,
 		Loudnorm:     loudnormEnabled,
+		JumpCut:      jumpCutEnabled,
 		FaceTracking: true,
 		Segments:     segments,
 	}

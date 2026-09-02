@@ -71,6 +71,11 @@ go install .
 | `-loudnorm-i` | `float` | `-14.0` | Target Integrated Loudness dalam LUFS (standar YouTube/TikTok: `-14.0`) |
 | `-loudnorm-lra` | `float` | `7.0` | Target rentang loudness (Loudness Range) dalam LU |
 | `-loudnorm-tp` | `float` | `-2.0` | Batas maksimum True Peak dalam dBTP untuk mencegah distorsi |
+| **Smart Silence Removal & Jump-Cut** | | | |
+| `-jump-cut` | `bool` | `false` | Memotong jeda diam/hening di tengah klip secara otomatis |
+| `-jump-cut-min-silence` | `float` | `1.0` | Ambang durasi hening minimum yang dipotong dalam detik |
+| `-jump-cut-margin` | `float` | `0.2` | Margin/padding audio wicara di sekitar jeda dalam detik (*anti-clipping*) |
+| `-jump-cut-noise` | `float` | `-30.0` | Ambang batas kebisingan hening (*noise gate threshold*) dalam dB |
 | **Manual Timestamps & Config** | | | |
 | `-segments` | `string` | `""` | Timestamp segmen manual dipisahkan koma (misal: `'00:10-00:25,01:00-01:30'`) |
 | `-config` | `string` | `""` | Path ke berkas konfigurasi JSON |
@@ -231,4 +236,16 @@ clipper -input "podcast.mp4" \
   -segments "00:10-00:40" \
   -loudnorm -loudnorm-i -14 \
   -outdir ./normalized_clips
+```
+
+### 9. Smart Silence Removal & Jump-Cut di dalam Klip
+```bash
+clipper -input "interview.mp4" \
+  -auto-detect ai \
+  -jump-cut \
+  -jump-cut-min-silence 1.0 \
+  -jump-cut-margin 0.2 \
+  -shorts -shorts-style smart-crop \
+  -burn-subtitles -sub-style karaoke \
+  -outdir ./snappy_shorts
 ```

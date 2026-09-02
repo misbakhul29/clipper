@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/misbakhul29/clipper/pkg/detector"
 	"github.com/misbakhul29/clipper/pkg/downloader"
 )
 
@@ -488,4 +489,44 @@ func ExportKaraokeASSWithFont(entries []SubtitleEntry, outputPath string, fontSi
 	}
 
 	return os.WriteFile(outputPath, []byte(sb.String()), 0644)
+}
+
+// AdjustSubtitlesForJumpCuts shifts and filters subtitle entries after silence intervals have been excised.
+func AdjustSubtitlesForJumpCuts(entries []SubtitleEntry, gaps []detector.SilenceGap) []SubtitleEntry {
+	if len(gaps) == 0 || len(entries) == 0 {
+		return entries
+	}
+
+	var adjusted []SubtitleEntry
+
+	for _, entry := range entries {
+		tStart := parseTimestampToSec(entry.Start)
+		tEnd := parseTimestampToSec(entry.End)
+
+		newStart, _ := mapTimeAfterJumpCuts(tStart, gaps)
+		newEnd, _ := mapTimeAfterJumpCuts(tEnd, gaps)
+
+		// If the entry has a positive duration after cut
+		if newEnd-newStart >= 0.08 {
+			adjusted = append(adjusted, SubtitleEntry{
+				Start: formatASSTime(newStart),
+				End:   formatASSTime(newEnd),
+				Text:  entry.Text,
+			})
+		}
+	}
+
+	return adjusted
+}
+
+func mapTimeAfterJumpCuts(t float64, gaps []detector.SilenceGap) (float64, bool) {
+	shift := 0.0
+	for _, g := range gaps {
+		if t >= g.EndSec {
+			shift += g.Duration()
+		} else if t > g.StartSec && t < g.EndSec {
+			return g.StartSec - shift, true
+		}
+	}
+	return t - shift, false
 }
