@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/misbakhul29/clipper/pkg/detector"
 )
@@ -86,7 +87,7 @@ func (f *FFmpegRunner) CutSegment(cfg *Config, startSec, durationSec float64, ou
 		}
 	}
 
-	vEncArgs := selectVideoEncoderArgs(f.FFmpegPath)
+	vEncArgs := selectVideoEncoderArgs(f.FFmpegPath, cfg.HWAccel)
 	args = append(args, vEncArgs...)
 
 	if cfg.Loudnorm {
@@ -104,49 +105,210 @@ func (f *FFmpegRunner) CutSegment(cfg *Config, startSec, durationSec float64, ou
 	return f.runFFmpeg(args)
 }
 
+// HWAccelProfile represents a probed and validated hardware encoder configuration.
+type HWAccelProfile struct {
+	Name        string   `json:"name"`
+	Encoder     string   `json:"encoder"`
+	DisplayName string   `json:"display_name"`
+	IsHardware  bool     `json:"is_hardware"`
+	Args        []string `json:"args"`
+}
+
+var (
+	hwCacheMu  sync.RWMutex
+	hwCacheMap = make(map[string]HWAccelProfile)
+)
+
 func isEncoderWorking(ffmpegPath, encoder string) bool {
-	cmd := exec.Command(ffmpegPath, "-f", "lavfi", "-i", "color=c=black:s=16x16:d=0.1", "-c:v", encoder, "-f", "null", "-")
+	cmd := exec.Command(ffmpegPath, "-f", "lavfi", "-i", "color=c=black:s=64x64:d=0.1", "-c:v", encoder, "-f", "null", "-")
 	return cmd.Run() == nil
 }
 
-func selectVideoEncoderArgs(ffmpegPath string) []string {
-	if isEncoderWorking(ffmpegPath, "libx264") {
-		return []string{
-			"-c:v", "libx264",
-			"-crf", "16",
-			"-preset", "slow",
-			"-pix_fmt", "yuv420p",
-			"-movflags", "+faststart",
+// DetectHardwareEncoder probes FFmpeg for available hardware-accelerated video encoders.
+func DetectHardwareEncoder(ffmpegPath, preferredMode string) HWAccelProfile {
+	if ffmpegPath == "" {
+		ffmpegPath = "ffmpeg"
+	}
+	preferredMode = strings.ToLower(strings.TrimSpace(preferredMode))
+	if preferredMode == "" {
+		preferredMode = "auto"
+	}
+
+	cacheKey := ffmpegPath + ":" + preferredMode
+	hwCacheMu.RLock()
+	if prof, ok := hwCacheMap[cacheKey]; ok {
+		hwCacheMu.RUnlock()
+		return prof
+	}
+	hwCacheMu.RUnlock()
+
+	hwCacheMu.Lock()
+	defer hwCacheMu.Unlock()
+
+	// Double check after lock
+	if prof, ok := hwCacheMap[cacheKey]; ok {
+		return prof
+	}
+
+	profiles := map[string]HWAccelProfile{
+		"nvenc": {
+			Name:        "nvenc",
+			Encoder:     "h264_nvenc",
+			DisplayName: "NVIDIA NVENC (h264_nvenc)",
+			IsHardware:  true,
+			Args: []string{
+				"-c:v", "h264_nvenc",
+				"-preset", "p6",
+				"-tune", "hq",
+				"-cq", "18",
+				"-pix_fmt", "yuv420p",
+				"-movflags", "+faststart",
+			},
+		},
+		"videotoolbox": {
+			Name:        "videotoolbox",
+			Encoder:     "h264_videotoolbox",
+			DisplayName: "Apple Silicon VideoToolbox (h264_videotoolbox)",
+			IsHardware:  true,
+			Args: []string{
+				"-c:v", "h264_videotoolbox",
+				"-q:v", "65",
+				"-pix_fmt", "yuv420p",
+				"-movflags", "+faststart",
+			},
+		},
+		"qsv": {
+			Name:        "qsv",
+			Encoder:     "h264_qsv",
+			DisplayName: "Intel QuickSync (h264_qsv)",
+			IsHardware:  true,
+			Args: []string{
+				"-c:v", "h264_qsv",
+				"-preset", "veryfast",
+				"-global_quality", "20",
+				"-pix_fmt", "yuv420p",
+				"-movflags", "+faststart",
+			},
+		},
+		"amf": {
+			Name:        "amf",
+			Encoder:     "h264_amf",
+			DisplayName: "AMD AMF (h264_amf)",
+			IsHardware:  true,
+			Args: []string{
+				"-c:v", "h264_amf",
+				"-quality", "quality",
+				"-rc", "cqp",
+				"-qp_i", "18",
+				"-qp_p", "18",
+				"-pix_fmt", "yuv420p",
+				"-movflags", "+faststart",
+			},
+		},
+		"vaapi": {
+			Name:        "vaapi",
+			Encoder:     "h264_vaapi",
+			DisplayName: "Linux VA-API (h264_vaapi)",
+			IsHardware:  true,
+			Args: []string{
+				"-c:v", "h264_vaapi",
+				"-qp", "18",
+				"-movflags", "+faststart",
+			},
+		},
+		"libx264": {
+			Name:        "libx264",
+			Encoder:     "libx264",
+			DisplayName: "Software CPU (libx264)",
+			IsHardware:  false,
+			Args: []string{
+				"-c:v", "libx264",
+				"-crf", "16",
+				"-preset", "slow",
+				"-pix_fmt", "yuv420p",
+				"-movflags", "+faststart",
+			},
+		},
+		"libopenh264": {
+			Name:        "libopenh264",
+			Encoder:     "libopenh264",
+			DisplayName: "Software CPU (libopenh264)",
+			IsHardware:  false,
+			Args: []string{
+				"-c:v", "libopenh264",
+				"-b:v", "20M",
+				"-pix_fmt", "yuv420p",
+				"-movflags", "+faststart",
+			},
+		},
+		"mpeg4": {
+			Name:        "mpeg4",
+			Encoder:     "mpeg4",
+			DisplayName: "Universal Fallback (mpeg4)",
+			IsHardware:  false,
+			Args: []string{
+				"-c:v", "mpeg4",
+				"-q:v", "1",
+				"-b:v", "25M",
+				"-mbd", "rd",
+				"-flags", "+mv4+aic",
+				"-cmp", "2",
+				"-subcmp", "2",
+				"-movflags", "+faststart",
+			},
+		},
+	}
+
+	cpuFallbacks := []string{"libx264", "libopenh264", "mpeg4"}
+
+	// 1. User forced a specific hardware mode
+	if prof, ok := profiles[preferredMode]; ok && prof.IsHardware {
+		if isEncoderWorking(ffmpegPath, prof.Encoder) {
+			hwCacheMap[cacheKey] = prof
+			return prof
+		}
+		// Preferred hardware encoder not functional on host -> fallback to CPU
+		fmt.Printf("Hardware encoder '%s' requested but not functional on this host. Falling back to CPU.\n", prof.DisplayName)
+	}
+
+	// 2. User forced CPU mode
+	if preferredMode == "cpu" || preferredMode == "none" {
+		for _, name := range cpuFallbacks {
+			if isEncoderWorking(ffmpegPath, profiles[name].Encoder) {
+				hwCacheMap[cacheKey] = profiles[name]
+				return profiles[name]
+			}
+		}
+		hwCacheMap[cacheKey] = profiles["mpeg4"]
+		return profiles["mpeg4"]
+	}
+
+	// 3. Auto-detection: probe hardware encoders first in priority order
+	hwPriority := []string{"nvenc", "videotoolbox", "qsv", "amf", "vaapi"}
+	for _, name := range hwPriority {
+		prof := profiles[name]
+		if isEncoderWorking(ffmpegPath, prof.Encoder) {
+			hwCacheMap[cacheKey] = prof
+			return prof
 		}
 	}
-	if isEncoderWorking(ffmpegPath, "h264_nvenc") {
-		return []string{
-			"-c:v", "h264_nvenc",
-			"-cq", "16",
-			"-preset", "p6",
-			"-pix_fmt", "yuv420p",
-			"-movflags", "+faststart",
+
+	// 4. Fallback to CPU encoders
+	for _, name := range cpuFallbacks {
+		prof := profiles[name]
+		if isEncoderWorking(ffmpegPath, prof.Encoder) {
+			hwCacheMap[cacheKey] = prof
+			return prof
 		}
 	}
-	if isEncoderWorking(ffmpegPath, "libopenh264") {
-		return []string{
-			"-c:v", "libopenh264",
-			"-b:v", "20M",
-			"-pix_fmt", "yuv420p",
-			"-movflags", "+faststart",
-		}
-	}
-	// Fallback to MPEG-4 Ultra-HD Quality Scale (-q:v 1, -b:v 25M, -mbd rd -flags +mv4+aic)
-	return []string{
-		"-c:v", "mpeg4",
-		"-q:v", "1",
-		"-b:v", "25M",
-		"-mbd", "rd",
-		"-flags", "+mv4+aic",
-		"-cmp", "2",
-		"-subcmp", "2",
-		"-movflags", "+faststart",
-	}
+
+	hwCacheMap[cacheKey] = profiles["mpeg4"]
+	return profiles["mpeg4"]
+}
+
+func selectVideoEncoderArgs(ffmpegPath, hwaccelMode string) []string {
+	prof := DetectHardwareEncoder(ffmpegPath, hwaccelMode)
+	return prof.Args
 }
 
 func buildFilterGraph(cfg *Config, hasWatermark, hasOverlayText bool, subPath string, dynamicCropFilter string) string {
@@ -368,7 +530,7 @@ func (f *FFmpegRunner) ApplyJumpCut(inputFile string, startSec, durationSec floa
 		"-map", "[aout]",
 	}
 
-	vEncArgs := selectVideoEncoderArgs(f.FFmpegPath)
+	vEncArgs := selectVideoEncoderArgs(f.FFmpegPath, "")
 	args = append(args, vEncArgs...)
 	args = append(args,
 		"-c:a", "aac",

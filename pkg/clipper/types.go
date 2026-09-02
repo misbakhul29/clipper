@@ -76,6 +76,7 @@ type Config struct {
 	GenerateMetadata bool                `json:"generate_metadata"` // Generate companion social metadata (metadata.json / .txt) for clips
 	ExtractThumbnail bool                `json:"extract_thumbnail"` // Extract high-resolution cover thumbnail & hook frame (.jpg)
 	ThumbnailCount   int                 `json:"thumbnail_count"`   // Number of candidate thumbnails to extract (1 to 3, default: 1)
+	HWAccel          string              `json:"hwaccel"`           // Hardware acceleration mode: 'auto', 'nvenc', 'videotoolbox', 'qsv', 'vaapi', 'amf', 'cpu'
 	AIConfig         ai.AIProviderConfig `json:"ai_config"`        // Multi-provider AI config
 	OpenRouterKey string              `json:"openrouter_key"`// OpenRouter API Key (legacy fallback)
 	AIModel       string              `json:"ai_model"`     // AI model name (legacy fallback)

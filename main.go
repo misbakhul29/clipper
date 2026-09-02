@@ -65,6 +65,7 @@ func main() {
 		metadata      bool
 		extractThumb  bool
 		thumbCount    int
+		hwaccel       string
 	)
 
 	flag.StringVar(&configFile, "config", "", "Path to JSON configuration file")
@@ -104,6 +105,7 @@ func main() {
 	flag.BoolVar(&extractThumb, "thumbnail", false, "Extract high-resolution cover thumbnail and hook frames (.jpg)")
 	flag.BoolVar(&extractThumb, "thumb", false, "Extract high-resolution cover thumbnail and hook frames (.jpg)")
 	flag.IntVar(&thumbCount, "thumb-count", 1, "Number of candidate thumbnails to extract (1 to 3, default: 1)")
+	flag.StringVar(&hwaccel, "hwaccel", "auto", "Hardware acceleration mode ('auto', 'nvenc', 'videotoolbox', 'qsv', 'vaapi', 'amf', 'cpu')")
 	flag.BoolVar(&dryRun, "dry-run", false, "Analyze segments and preview commands without rendering video files")
 	flag.StringVar(&batchList, "batch-list", "", "Path to text file containing video URLs/files (one per line)")
 	flag.BoolVar(&cleanCache, "clean-cache", false, "Clean cache directory and exit")
@@ -195,6 +197,7 @@ func main() {
 			GenerateMetadata: metadata,
 			ExtractThumbnail: extractThumb,
 			ThumbnailCount:   thumbCount,
+			HWAccel:          hwaccel,
 			Segments:         parsedSegs,
 		}
 		if err := saveConfig(initConfig, genCfg); err != nil {
@@ -310,6 +313,9 @@ func main() {
 	}
 	if isFlagPassed("thumb-count") {
 		cfg.ThumbnailCount = thumbCount
+	}
+	if isFlagPassed("hwaccel") {
+		cfg.HWAccel = hwaccel
 	}
 	if isFlagPassed("dry-run") {
 		cfg.DryRun = dryRun
@@ -541,6 +547,8 @@ func runInteractiveWizard(defaultFile string) {
 	thumbChoice := promptString(reader, "\nExtract cover thumbnail and hook frame (.jpg)? (y/n)", "y")
 	extractThumbnails := strings.ToLower(thumbChoice) == "y" || strings.ToLower(thumbChoice) == "yes"
 
+	hwChoice := promptString(reader, "\nHardware Acceleration mode (auto, nvenc, videotoolbox, qsv, vaapi, amf, cpu)", "auto")
+
 	quality := promptString(reader, "\nYouTube Video Download Quality (best, 1080p, 720p, 480p, 360p, worst)", "best")
 	autoDetect := promptString(reader, "\nAuto Detection Mode (press Enter to skip, or enter 'silence' / 'scene')", "")
 
@@ -589,6 +597,7 @@ func runInteractiveWizard(defaultFile string) {
 		GenerateMetadata: generateMeta,
 		ExtractThumbnail: extractThumbnails,
 		ThumbnailCount:   1,
+		HWAccel:          hwChoice,
 		FaceTracking:     true,
 		Segments:         segments,
 	}

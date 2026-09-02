@@ -48,6 +48,7 @@ Skenario paling umum untuk mengunduh video YouTube, menganalisis klip menarik me
   "generate_metadata": true,
   "extract_thumbnail": true,
   "thumbnail_count": 1,
+  "hwaccel": "auto",
   "dry_run": false,
   "ai_config": {
     "api_router": "gemini",

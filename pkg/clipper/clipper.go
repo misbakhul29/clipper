@@ -276,6 +276,12 @@ func (c *Clipper) Process(cfg *Config) error {
 		}
 		fmt.Printf("Thumbnail Extractor: Enabled (Hook cover & clean frames, count: %d)\n", tCount)
 	}
+	hwProf := DetectHardwareEncoder(c.runner.FFmpegPath, cfg.HWAccel)
+	if hwProf.IsHardware {
+		fmt.Printf("Hardware Acceleration: %s [5x-10x speedup]\n", hwProf.DisplayName)
+	} else {
+		fmt.Printf("Hardware Acceleration: Software CPU (%s)\n", hwProf.Encoder)
+	}
 	if cfg.Loudnorm {
 		targetI := cfg.LoudnormI
 		if targetI == 0 {
