@@ -38,11 +38,22 @@ const (
 	StrategyAccurate CutStrategy = "accurate" // re-encode for frame-accurate cuts
 )
 
+// SubtitleCue represents an individual timestamped subtitle text entry inside a clip.
+type SubtitleCue struct {
+	Start float64 `json:"start"` // start offset in seconds relative to segment (e.g. 1.2)
+	End   float64 `json:"end"`   // end offset in seconds relative to segment (e.g. 3.5)
+	Text  string  `json:"text"`  // caption text
+}
+
 // Segment represents a video cut specification.
 type Segment struct {
-	Start string `json:"start"` // e.g. "00:00:10", "10", "01:15.5"
-	End   string `json:"end"`   // e.g. "00:00:25", "25", "01:30.0"
-	Title string `json:"title,omitempty"`
+	Start       string        `json:"start"` // e.g. "00:00:10", "10", "01:15.5"
+	End         string        `json:"end"`   // e.g. "00:00:25", "25", "01:30.0"
+	Title       string        `json:"title,omitempty"`
+	Subtitles   []SubtitleCue `json:"subtitles,omitempty"`     // Custom cue list for this segment
+	SubPreset   string        `json:"sub_preset,omitempty"`   // Override preset per segment
+	SubFontSize int           `json:"sub_font_size,omitempty"` // Override font size per segment
+	SubPosition string        `json:"sub_position,omitempty"`  // "bottom", "middle", "top"
 }
 
 // Config holds options for the video cutting job.

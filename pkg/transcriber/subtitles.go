@@ -678,6 +678,11 @@ func GetSubtitlePreset(name string, isShorts bool) SubtitlePreset {
 
 // ExportPresetASS exports subtitle entries using a named visual preset with optional custom font, size, SDH separation, and auto contextual emojis.
 func ExportPresetASS(entries []SubtitleEntry, outputPath string, presetName string, fontSize int, isShorts bool, customFont string, sdhMode string, enableEmoji bool) error {
+	return ExportPresetASSWithPosition(entries, outputPath, presetName, fontSize, isShorts, customFont, sdhMode, enableEmoji, "bottom")
+}
+
+// ExportPresetASSWithPosition renders ASS subtitle files with customizable vertical placement (bottom, middle, top).
+func ExportPresetASSWithPosition(entries []SubtitleEntry, outputPath string, presetName string, fontSize int, isShorts bool, customFont string, sdhMode string, enableEmoji bool, position string) error {
 	preset := GetSubtitlePreset(presetName, isShorts)
 
 	if fontSize > 0 {
@@ -761,8 +766,24 @@ func ExportPresetASS(entries []SubtitleEntry, outputPath string, presetName stri
 	sb.WriteString("[V4+ Styles]\n")
 	sb.WriteString("Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n")
 
+	alignment := 2
+	marginV := preset.MarginV
+	switch strings.ToLower(strings.TrimSpace(position)) {
+	case "middle", "center":
+		alignment = 5
+		marginV = 0
+	case "top":
+		alignment = 8
+		marginV = 100
+		if isShorts {
+			marginV = 180
+		}
+	default:
+		alignment = 2
+	}
+
 	// Primary dialogue style
-	sb.WriteString(fmt.Sprintf("Style: Default,%s,%d,%s,%s,%s,%s,%d,0,0,0,%d,%d,%.1f,0,%d,%.1f,%.1f,2,40,40,%d,1\n",
+	sb.WriteString(fmt.Sprintf("Style: Default,%s,%d,%s,%s,%s,%s,%d,0,0,0,%d,%d,%.1f,0,%d,%.1f,%.1f,%d,40,40,%d,1\n",
 		preset.FontName,
 		preset.FontSize,
 		preset.PrimaryColor,
@@ -776,7 +797,8 @@ func ExportPresetASS(entries []SubtitleEntry, outputPath string, presetName stri
 		preset.BorderStyle,
 		preset.Outline,
 		preset.Shadow,
-		preset.MarginV,
+		alignment,
+		marginV,
 	))
 
 	// Narrator context style (Top-Center Alignment 8, Italic, soft white)

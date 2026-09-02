@@ -162,13 +162,20 @@ function renderSegments() {
     return;
   }
 
-  list.innerHTML = segments.map((s, i) => `
+  list.innerHTML = segments.map((s, i) => {
+    const cueCount = (s.subtitles && s.subtitles.length > 0) ? `${s.subtitles.length} cues` : 'Subtitles';
+    const cueBtnClass = (s.subtitles && s.subtitles.length > 0) ? 'btn-primary' : 'btn-secondary';
+    return `
     <div class="segment-item">
       <div>
         <div class="segment-title">${s.title ? escapeHtml(s.title) : 'Segment #' + (i + 1)}</div>
         <div class="segment-range">${s.start} &rarr; ${s.end}</div>
       </div>
-      <div style="display:flex; gap:6px;">
+      <div style="display:flex; gap:6px; align-items:center;">
+        <button class="btn ${cueBtnClass} segment-btn-sub" onclick="openSubtitleStudio(${i})" title="Configure Subtitles">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px; height:12px;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <span>${cueCount}</span>
+        </button>
         <button class="btn btn-secondary btn-sm" onclick="seekToSegment('${s.start}')" title="Play Segment">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
         </button>
@@ -177,7 +184,7 @@ function renderSegments() {
         </button>
       </div>
     </div>
-  `).join('');
+  `;}).join('');
 }
 
 function onAutoDetectModeChange() {
@@ -499,6 +506,197 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
+// Subtitle Studio State & Methods
+let currentEditingSegmentIdx = -1;
+let currentCues = [];
+
+function openSubtitleStudio(idx) {
+  currentEditingSegmentIdx = idx;
+  const s = segments[idx];
+  if (!s) return;
+
+  currentCues = (s.subtitles && Array.isArray(s.subtitles)) ? JSON.parse(JSON.stringify(s.subtitles)) : [];
+
+  document.getElementById('subModalTitle').textContent = s.title ? s.title : `Segment #${idx + 1}`;
+  document.getElementById('subModalInterval').textContent = `${s.start} → ${s.end}`;
+
+  document.getElementById('subClipPosition').value = s.sub_position || 'bottom';
+  document.getElementById('subClipPreset').value = s.sub_preset || document.getElementById('cfgSubPreset').value || 'hormozi';
+  document.getElementById('subClipFontSize').value = s.sub_font_size || 48;
+
+  setSubModalStatus(`Ready (${currentCues.length} cues loaded)`);
+  renderSubtitleCues();
+
+  const modal = document.getElementById('subModal');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeSubtitleStudio() {
+  const modal = document.getElementById('subModal');
+  if (modal) modal.style.display = 'none';
+  currentEditingSegmentIdx = -1;
+  currentCues = [];
+}
+
+function setSubModalStatus(msg) {
+  const el = document.getElementById('subModalStatus');
+  if (el) el.textContent = msg;
+}
+
+function renderSubtitleCues() {
+  const container = document.getElementById('subCuesList');
+  if (!container) return;
+
+  if (currentCues.length === 0) {
+    container.innerHTML = `<div class="empty-state">No custom subtitle cues yet. Click 'Fetch / Transcribe' to load speech from YouTube/Whisper, or '+ Add Cue' to write captions manually.</div>`;
+    return;
+  }
+
+  container.innerHTML = currentCues.map((c, i) => `
+    <div class="sub-cue-row">
+      <input type="number" step="0.1" min="0" class="text-input sub-cue-time" value="${c.start}" title="Start (sec)" onchange="updateCueTime(${i}, 'start', this.value)" />
+      <span style="font-size:11px; color:var(--text-muted);">&rarr;</span>
+      <input type="number" step="0.1" min="0" class="text-input sub-cue-time" value="${c.end}" title="End (sec)" onchange="updateCueTime(${i}, 'end', this.value)" />
+      <input type="text" class="text-input sub-cue-text" value="${escapeHtml(c.text || '')}" placeholder="Caption line text..." oninput="updateCueText(${i}, this.value)" />
+      <button class="btn btn-secondary btn-icon" style="height:26px; width:26px; padding:0;" onclick="deleteSubtitleCue(${i})" title="Delete Cue">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+  `).join('');
+}
+
+function addSubtitleCue() {
+  let lastEnd = 0;
+  if (currentCues.length > 0) {
+    lastEnd = currentCues[currentCues.length - 1].end || 0;
+  }
+  currentCues.push({
+    start: Math.round(lastEnd * 10) / 10,
+    end: Math.round((lastEnd + 2.0) * 10) / 10,
+    text: ''
+  });
+  renderSubtitleCues();
+  setSubModalStatus(`Added cue #${currentCues.length}`);
+}
+
+function updateCueTime(idx, field, val) {
+  if (!currentCues[idx]) return;
+  currentCues[idx][field] = parseFloat(val) || 0;
+}
+
+function updateCueText(idx, val) {
+  if (!currentCues[idx]) return;
+  currentCues[idx].text = val;
+}
+
+function deleteSubtitleCue(idx) {
+  currentCues.splice(idx, 1);
+  renderSubtitleCues();
+  setSubModalStatus(`Cue removed (${currentCues.length} remaining)`);
+}
+
+async function transcribeSegmentAudio() {
+  const src = document.getElementById('videoSource').value.trim();
+  if (!src) {
+    alert('Please load a video source URL or local path first.');
+    return;
+  }
+  if (currentEditingSegmentIdx < 0 || !segments[currentEditingSegmentIdx]) return;
+
+  const s = segments[currentEditingSegmentIdx];
+  const btn = document.getElementById('btnTranscribe');
+  const btnText = document.getElementById('transcribeBtnText');
+  const useWhisper = document.getElementById('subUseWhisper').checked;
+  const lang = document.getElementById('subTranslateLang').value;
+
+  if (btn) btn.disabled = true;
+  if (btnText) btnText.textContent = 'Transcribing...';
+  setSubModalStatus('Transcribing speech cues for this segment...');
+
+  try {
+    const res = await fetch('/api/transcribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        input_file: src,
+        start: s.start,
+        end: s.end,
+        lang: lang,
+        use_whisper: useWhisper
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert(`Transcription error: ${data.error || 'failed'}`);
+      setSubModalStatus('Transcription failed.');
+    } else {
+      currentCues = data.cues || [];
+      renderSubtitleCues();
+      setSubModalStatus(`Loaded ${currentCues.length} speech cues from video`);
+    }
+  } catch (err) {
+    console.error('Transcribe error:', err);
+    alert('Error requesting speech transcription.');
+    setSubModalStatus('Network or server error.');
+  } finally {
+    if (btn) btn.disabled = false;
+    if (btnText) btnText.textContent = 'Fetch / Transcribe';
+  }
+}
+
+async function runAISubtitleAction(action) {
+  if (currentCues.length === 0) {
+    alert('Please add or transcribe subtitle cues first.');
+    return;
+  }
+
+  setSubModalStatus(`Applying AI ${action}...`);
+
+  const payload = {
+    action: action,
+    cues: currentCues,
+    target_lang: document.getElementById('subTranslateLang').value,
+    ai_router: document.getElementById('aiRouter').value,
+    api_key: document.getElementById('aiApiKey').value.trim(),
+    model: document.getElementById('aiModel').value.trim()
+  };
+
+  try {
+    const res = await fetch('/api/ai/subtitles', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert(`AI error: ${data.error || 'failed'}`);
+      setSubModalStatus('AI processing failed.');
+    } else {
+      currentCues = data.cues || currentCues;
+      renderSubtitleCues();
+      setSubModalStatus(`AI ${action} completed on ${currentCues.length} cues`);
+    }
+  } catch (err) {
+    console.error('AI subtitle error:', err);
+    alert('Error communicating with AI service.');
+    setSubModalStatus('AI error.');
+  }
+}
+
+function saveSubtitleStudio() {
+  if (currentEditingSegmentIdx < 0 || !segments[currentEditingSegmentIdx]) return;
+
+  const s = segments[currentEditingSegmentIdx];
+  s.subtitles = currentCues;
+  s.sub_position = document.getElementById('subClipPosition').value;
+  s.sub_preset = document.getElementById('subClipPreset').value;
+  s.sub_font_size = parseInt(document.getElementById('subClipFontSize').value, 10) || 48;
+
+  closeSubtitleStudio();
+  renderSegments();
+}
+
 // Init on load
 initTheme();
 loadClipsGallery();
+

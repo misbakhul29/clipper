@@ -296,6 +296,92 @@
     </div>
   </main>
 
+  <!-- Subtitle Studio Modal -->
+  <div id="subModal" class="sub-modal-backdrop" style="display:none;">
+    <div class="sub-modal-card">
+      <div class="sub-modal-header">
+        <div class="sub-modal-title-wrap">
+          <span class="sub-modal-title" id="subModalTitle">Clip Subtitles</span>
+          <span class="sub-modal-badge" id="subModalInterval">00:00 - 00:30</span>
+        </div>
+        <button class="btn btn-secondary btn-icon" onclick="closeSubtitleStudio()" title="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <!-- Action Toolbar -->
+      <div class="sub-toolbar">
+        <div class="sub-toolbar-group">
+          <button class="btn btn-secondary btn-sm" id="btnTranscribe" onclick="transcribeSegmentAudio()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+            <span id="transcribeBtnText">Fetch / Transcribe</span>
+          </button>
+          <label class="sub-checkbox-label">
+            <input type="checkbox" id="subUseWhisper" />
+            Force Whisper
+          </label>
+        </div>
+
+        <div class="sub-toolbar-group">
+          <select id="subTranslateLang" class="select-box" style="height:28px; font-size:11px; width:90px;">
+            <option value="id" selected>Indonesian</option>
+            <option value="en">English</option>
+            <option value="es">Spanish</option>
+            <option value="ja">Japanese</option>
+          </select>
+          <button class="btn btn-secondary btn-sm" onclick="runAISubtitleAction('translate')">
+            Translate
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="runAISubtitleAction('emojis')" title="Auto-inject viral emojis">
+            + Emojis
+          </button>
+          <button class="btn btn-secondary btn-sm" onclick="addSubtitleCue()">
+            + Add Cue
+          </button>
+        </div>
+      </div>
+
+      <!-- Scrollable Cue List -->
+      <div class="sub-cues-container" id="subCuesList">
+        <div class="empty-state">No custom subtitle cues yet. Click 'Fetch / Transcribe' to load speech from YouTube/Whisper, or '+ Add Cue' to write captions manually.</div>
+      </div>
+
+      <!-- Per-Clip Styling Overrides -->
+      <div class="sub-style-bar">
+        <div class="sub-style-item">
+          <label>Position</label>
+          <select id="subClipPosition" class="select-box" style="height:28px; font-size:11px;">
+            <option value="bottom" selected>Bottom (Standard)</option>
+            <option value="middle">Middle (Center View)</option>
+            <option value="top">Top (Head Title)</option>
+          </select>
+        </div>
+        <div class="sub-style-item">
+          <label>Theme Preset</label>
+          <select id="subClipPreset" class="select-box" style="height:28px; font-size:11px;">
+            <option value="hormozi" selected>Hormozi Kinetic</option>
+            <option value="minimal">Minimal Clean</option>
+            <option value="neon">Neon Glow</option>
+            <option value="cinematic">Cinematic Soft</option>
+          </select>
+        </div>
+        <div class="sub-style-item">
+          <label>Font Size</label>
+          <input type="number" id="subClipFontSize" class="text-input" style="height:28px; font-size:11px; width:65px;" value="48" min="20" max="100" />
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="sub-modal-footer">
+        <span class="sub-footer-status" id="subModalStatus">Ready</span>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-secondary" onclick="closeSubtitleStudio()">Cancel</button>
+          <button class="btn btn-primary" onclick="saveSubtitleStudio()">Save to Clip</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="/app.js"></script>
 </body>
 </html>

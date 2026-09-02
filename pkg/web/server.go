@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -11,8 +12,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/misbakhul29/clipper/pkg/ai"
 	"github.com/misbakhul29/clipper/pkg/clipper"
 	"github.com/misbakhul29/clipper/pkg/downloader"
+	"github.com/misbakhul29/clipper/pkg/transcriber"
 )
 
 // Server handles the local web UI dashboard and REST API.
@@ -60,6 +63,8 @@ func (s *Server) Router() http.Handler {
 	mux.HandleFunc("/api/clips", s.handleClips)
 	mux.HandleFunc("/api/prepare", s.handlePrepare)
 	mux.HandleFunc("/api/auto-detect", s.handleAutoDetect)
+	mux.HandleFunc("/api/transcribe", s.handleTranscribe)
+	mux.HandleFunc("/api/ai/subtitles", s.handleAISubtitles)
 	mux.HandleFunc("/api/clip", s.handleClip)
 	mux.HandleFunc("/preview", s.handlePreview)
 
@@ -541,4 +546,214 @@ func formatFileSize(bytes int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
+type transcribeRequestPayload struct {
+	InputFile  string `json:"input_file"`
+	Start      string `json:"start"`
+	End        string `json:"end"`
+	Lang       string `json:"lang"`
+	UseWhisper bool   `json:"use_whisper"`
+}
+
+type transcribeResponsePayload struct {
+	Cues  []clipper.SubtitleCue `json:"cues"`
+	Count int                   `json:"count"`
+}
+
+func (s *Server) handleTranscribe(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req transcribeRequestPayload
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"invalid request: %v"}`, err), http.StatusBadRequest)
+		return
+	}
+
+	src := strings.TrimSpace(req.InputFile)
+	if src == "" {
+		http.Error(w, `{"error":"input_file is required"}`, http.StatusBadRequest)
+		return
+	}
+
+	cacheDir := "./cache"
+	if s.DefaultConfig != nil && s.DefaultConfig.CacheDir != "" {
+		cacheDir = s.DefaultConfig.CacheDir
+	}
+
+	videoPath := src
+	if downloader.IsYouTubeURL(src) {
+		cached, err := downloader.DownloadYouTubeVideo(src, cacheDir, "best", false)
+		if err == nil && cached != "" {
+			videoPath = cached
+		}
+	}
+
+	lang := req.Lang
+	if lang == "" {
+		lang = "id"
+	}
+
+	var subs []transcriber.SubtitleEntry
+	if req.UseWhisper {
+		subs, _ = transcriber.TranscribeWithWhisper(videoPath, cacheDir, lang)
+	} else {
+		subs, _ = transcriber.FetchSubtitles(src, cacheDir, lang)
+		if len(subs) == 0 && lang != "en" {
+			subs, _ = transcriber.FetchSubtitles(src, cacheDir, "en")
+		}
+		if len(subs) == 0 {
+			subs, _ = transcriber.TranscribeWithWhisper(videoPath, cacheDir, lang)
+		}
+	}
+
+	startSec, _ := clipper.ParseTimeSeconds(req.Start)
+	endSec, _ := clipper.ParseTimeSeconds(req.End)
+	if endSec <= startSec {
+		endSec = startSec + 60
+	}
+
+	var cues []clipper.SubtitleCue
+	if len(subs) > 0 {
+		sliced := transcriber.SliceSubtitles(subs, startSec, endSec)
+		for _, e := range sliced {
+			cueStart, _ := clipper.ParseTimeSeconds(e.Start)
+			cueEnd, _ := clipper.ParseTimeSeconds(e.End)
+			relStart := cueStart - startSec
+			relEnd := cueEnd - startSec
+			if relStart < 0 {
+				relStart = 0
+			}
+			if relEnd <= relStart {
+				relEnd = relStart + 1.5
+			}
+			cleanText := strings.TrimSpace(e.Text)
+			if cleanText != "" {
+				cues = append(cues, clipper.SubtitleCue{
+					Start: math.Round(relStart*100) / 100,
+					End:   math.Round(relEnd*100) / 100,
+					Text:  cleanText,
+				})
+			}
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(transcribeResponsePayload{
+		Cues:  cues,
+		Count: len(cues),
+	})
+}
+
+type aiSubtitlesRequestPayload struct {
+	Action     string                `json:"action"` // "translate", "emojis", "polish"
+	Cues       []clipper.SubtitleCue `json:"cues"`
+	TargetLang string                `json:"target_lang"`
+	AIRouter   string                `json:"ai_router"`
+	APIKey     string                `json:"api_key"`
+	Model      string                `json:"model"`
+}
+
+func (s *Server) handleAISubtitles(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req aiSubtitlesRequestPayload
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"invalid request: %v"}`, err), http.StatusBadRequest)
+		return
+	}
+
+	if len(req.Cues) == 0 {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"cues": req.Cues, "count": 0})
+		return
+	}
+
+	var entries []transcriber.SubtitleEntry
+	for _, c := range req.Cues {
+		entries = append(entries, transcriber.SubtitleEntry{
+			Start: ai.FormatSecondsToTime(c.Start),
+			End:   ai.FormatSecondsToTime(c.End),
+			Text:  c.Text,
+		})
+	}
+
+	action := strings.ToLower(strings.TrimSpace(req.Action))
+	switch action {
+	case "emojis":
+		enhanced := transcriber.InjectContextualEmojis(entries)
+		var outCues []clipper.SubtitleCue
+		for i, e := range enhanced {
+			outCues = append(outCues, clipper.SubtitleCue{
+				Start: req.Cues[i].Start,
+				End:   req.Cues[i].End,
+				Text:  e.Text,
+			})
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"cues": outCues, "count": len(outCues)})
+		return
+
+	case "translate":
+		targetLang := req.TargetLang
+		if targetLang == "" {
+			targetLang = "id"
+		}
+		aiCfg := ai.AIProviderConfig{
+			APIRouter: req.AIRouter,
+			APIKey:    req.APIKey,
+			Model:     req.Model,
+		}
+		translated, err := ai.TranslateSubtitlesMultiProvider(entries, aiCfg, targetLang)
+		if err != nil || len(translated) == 0 {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"cues": req.Cues, "count": len(req.Cues), "warn": fmt.Sprintf("%v", err)})
+			return
+		}
+		var outCues []clipper.SubtitleCue
+		for i, e := range translated {
+			origStart := req.Cues[0].Start
+			origEnd := req.Cues[0].End
+			if i < len(req.Cues) {
+				origStart = req.Cues[i].Start
+				origEnd = req.Cues[i].End
+			}
+			outCues = append(outCues, clipper.SubtitleCue{
+				Start: origStart,
+				End:   origEnd,
+				Text:  e.Text,
+			})
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"cues": outCues, "count": len(outCues)})
+		return
+
+	case "polish":
+		var outCues []clipper.SubtitleCue
+		for _, c := range req.Cues {
+			t := strings.TrimSpace(c.Text)
+			if len(t) > 0 {
+				t = strings.ToUpper(t[:1]) + t[1:]
+			}
+			outCues = append(outCues, clipper.SubtitleCue{
+				Start: c.Start,
+				End:   c.End,
+				Text:  t,
+			})
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"cues": outCues, "count": len(outCues)})
+		return
+
+	default:
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"cues": req.Cues, "count": len(req.Cues)})
+		return
+	}
 }

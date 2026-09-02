@@ -184,4 +184,35 @@ func TestWebServerEndpoints(t *testing.T) {
 			t.Errorf("expected at least 1 detected segment, got 0")
 		}
 	})
+
+	t.Run("POST API Transcribe Validation", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/api/transcribe", bytes.NewReader([]byte(`{}`)))
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("expected status 400 for empty input_file, got %d", rec.Code)
+		}
+	})
+
+	t.Run("POST API AI Subtitles Emojis", func(t *testing.T) {
+		payload := []byte(`{"action":"emojis","cues":[{"start":0.0,"end":2.0,"text":"This video is fire and money"}]}`)
+		req := httptest.NewRequest(http.MethodPost, "/api/ai/subtitles", bytes.NewReader(payload))
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Errorf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+		var resp struct {
+			Cues []clipper.SubtitleCue `json:"cues"`
+		}
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed decoding: %v", err)
+		}
+		if len(resp.Cues) == 0 {
+			t.Fatalf("expected at least 1 cue returned")
+		}
+		if !strings.Contains(resp.Cues[0].Text, "🔥") && !strings.Contains(resp.Cues[0].Text, "💰") {
+			t.Errorf("expected emoji in text, got %s", resp.Cues[0].Text)
+		}
+	})
 }

@@ -366,7 +366,16 @@ func (c *Clipper) Process(cfg *Config) error {
 
 				subPath := ""
 				var segSubEntries []transcriber.SubtitleEntry
-				if len(allSubEntries) > 0 {
+				if len(j.seg.Subtitles) > 0 {
+					// Use custom segment subtitle cues configured in studio!
+					for _, cue := range j.seg.Subtitles {
+						segSubEntries = append(segSubEntries, transcriber.SubtitleEntry{
+							Start: ai.FormatSecondsToTime(cue.Start),
+							End:   ai.FormatSecondsToTime(cue.End),
+							Text:  cue.Text,
+						})
+					}
+				} else if len(allSubEntries) > 0 {
 					segSubEntries = transcriber.SliceSubtitles(allSubEntries, j.startSec, j.startSec+j.durationSec)
 					if len(removedGaps) > 0 {
 						segSubEntries = transcriber.AdjustSubtitlesForJumpCuts(segSubEntries, removedGaps)
@@ -381,8 +390,8 @@ func (c *Clipper) Process(cfg *Config) error {
 					}
 					sliced = transcriber.FilterSDHEntries(sliced, sdhMode)
 					if len(sliced) > 0 {
-						// On-demand token-saving translation for this specific clip segment
-						if cfg.TranslateLang != "" && (cfg.AIConfig.APIKey != "" || os.Getenv("OPENROUTER_API_KEY") != "" || os.Getenv("GEMINI_API_KEY") != "" || os.Getenv("DEEPSEEK_API_KEY") != "" || os.Getenv("OPENAI_API_KEY") != "") {
+						// On-demand token-saving translation for this specific clip segment (only when not already custom edited)
+						if len(j.seg.Subtitles) == 0 && cfg.TranslateLang != "" && (cfg.AIConfig.APIKey != "" || os.Getenv("OPENROUTER_API_KEY") != "" || os.Getenv("GEMINI_API_KEY") != "" || os.Getenv("DEEPSEEK_API_KEY") != "" || os.Getenv("OPENAI_API_KEY") != "") {
 							fmt.Printf("[%d/%d] Translating %d subtitle cues to '%s' via AI (%s / %s)...\n",
 								j.index+1, len(cfg.Segments), len(sliced), cfg.TranslateLang, cfg.AIConfig.APIRouter, cfg.AIConfig.Model)
 							translated, transErr := ai.TranslateSubtitlesMultiProvider(sliced, cfg.AIConfig, cfg.TranslateLang)
@@ -400,6 +409,9 @@ func (c *Clipper) Process(cfg *Config) error {
 						}
 
 						preset := cfg.SubPreset
+						if j.seg.SubPreset != "" {
+							preset = j.seg.SubPreset
+						}
 						if preset == "" {
 							if cfg.SubStyle == "standard" {
 								preset = "minimal"
@@ -408,7 +420,17 @@ func (c *Clipper) Process(cfg *Config) error {
 							}
 						}
 
-						exportErr := transcriber.ExportPresetASS(sliced, tmpSubFile, preset, cfg.SubFontSize, cfg.Shorts, fontName, sdhMode, cfg.SubEmoji)
+						subFontSize := cfg.SubFontSize
+						if j.seg.SubFontSize > 0 {
+							subFontSize = j.seg.SubFontSize
+						}
+
+						subPosition := j.seg.SubPosition
+						if subPosition == "" {
+							subPosition = "bottom"
+						}
+
+						exportErr := transcriber.ExportPresetASSWithPosition(sliced, tmpSubFile, preset, subFontSize, cfg.Shorts, fontName, sdhMode, cfg.SubEmoji, subPosition)
 						if exportErr == nil {
 							subPath = tmpSubFile
 						}
