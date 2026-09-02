@@ -417,11 +417,17 @@ func runInteractiveWizard(defaultFile string) {
 		fmt.Println("Shorts aspect ratio style:")
 		fmt.Println("  1. crop (Center crop 9:16)")
 		fmt.Println("  2. blur (Blurred top/bottom background 9:16)")
-		styleChoice := promptString(reader, "Select style (1 or 2)", "1")
+		fmt.Println("  3. smart-crop (Active speaker & face tracking)")
+		styleChoice := promptString(reader, "Select style (1, 2, or 3)", "1")
 		if styleChoice == "2" || strings.ToLower(styleChoice) == "blur" {
 			shortsStyle = "blur"
+		} else if styleChoice == "3" || strings.ToLower(styleChoice) == "smart-crop" {
+			shortsStyle = "smart-crop"
 		}
 	}
+
+	loudnormChoice := promptString(reader, "\nEnable EBU R128 audio normalization (-14 LUFS)? (y/n)", "y")
+	loudnormEnabled := strings.ToLower(loudnormChoice) == "y" || strings.ToLower(loudnormChoice) == "yes"
 
 	quality := promptString(reader, "\nYouTube Video Download Quality (best, 1080p, 720p, 480p, 360p, worst)", "best")
 	autoDetect := promptString(reader, "\nAuto Detection Mode (press Enter to skip, or enter 'silence' / 'scene')", "")
@@ -453,16 +459,18 @@ func runInteractiveWizard(defaultFile string) {
 	}
 
 	cfg := clipper.Config{
-		InputFile:   inputFile,
-		OutputDir:   outputDir,
-		OutputFile:  outputFile,
-		Mode:        mode,
-		Strategy:    strategy,
-		Shorts:      isShorts,
-		ShortsStyle: shortsStyle,
-		Quality:     quality,
-		AutoDetect:  autoDetect,
-		Segments:    segments,
+		InputFile:    inputFile,
+		OutputDir:    outputDir,
+		OutputFile:   outputFile,
+		Mode:         mode,
+		Strategy:     strategy,
+		Shorts:       isShorts,
+		ShortsStyle:  shortsStyle,
+		Quality:      quality,
+		AutoDetect:   autoDetect,
+		Loudnorm:     loudnormEnabled,
+		FaceTracking: true,
+		Segments:     segments,
 	}
 
 	if err := saveConfig(fileOut, cfg); err != nil {

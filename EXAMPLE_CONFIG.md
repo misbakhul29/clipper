@@ -215,5 +215,11 @@ Gunakan konfigurasi ini jika Anda ingin menentukan timestamp segmen awal dan akh
 | `sub_font_path` | `string` | `""` | Path berkas font kustom (`.ttf`/`.otf`) |
 | `use_whisper` | `bool` | `false` | Paksa transkripsi offline menggunakan Whisper AI |
 | `dry_run` | `bool` | `false` | Pratinjau segmen tanpa merender video |
+| `face_tracking` | `bool` | `true` | Pelacak wajah & pembicara aktif pada mode `smart-crop` |
+| `pan_duration` | `float` | `0.8` | Durasi pergeseran kamera halus (pan easing) dalam detik |
+| `loudnorm` | `bool` | `false` | Normalisasi audio EBU R128 (-14 LUFS, auto-aktif pada Shorts) |
+| `loudnorm_i` | `float` | `-14.0` | Target Integrated Loudness dalam LUFS |
+| `loudnorm_lra` | `float` | `7.0` | Target Loudness Range dalam LU |
+| `loudnorm_tp` | `float` | `-2.0` | Batas maksimum True Peak dalam dBTP |
 | `ai_config` | `object` | `{}` | Konfigurasi AI Provider (`api_router`, `api_key`, `model`) |
 | `segments` | `array` | `[]` | Daftar segmen manual (`start`, `end`, `title`) |
