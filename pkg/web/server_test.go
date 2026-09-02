@@ -143,4 +143,27 @@ func TestWebServerEndpoints(t *testing.T) {
 			t.Errorf("unexpected prepare response: %+v", prep)
 		}
 	})
+
+	t.Run("POST API Auto-Detect Validation", func(t *testing.T) {
+		// Empty input fails with 400
+		req := httptest.NewRequest(http.MethodPost, "/api/auto-detect", bytes.NewReader([]byte(`{"input_file":""}`)))
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("expected status 400 for empty input_file, got %d", rec.Code)
+		}
+	})
+
+	t.Run("POST API Clip with AutoDetect and 0 segments", func(t *testing.T) {
+		sampleFile := filepath.Join(tmpDir, "sample_clip_001.mp4")
+		payload := []byte(`{"input_file":"` + sampleFile + `","auto_detect":"silence","segments":[]}`)
+		req := httptest.NewRequest(http.MethodPost, "/api/clip", bytes.NewReader(payload))
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+
+		// Should not fail with 400 "at least 1 segment required"
+		if rec.Code == http.StatusBadRequest && strings.Contains(rec.Body.String(), "at least 1 segment") {
+			t.Errorf("expected auto_detect to be valid without manual segments, got: %s", rec.Body.String())
+		}
+	})
 }

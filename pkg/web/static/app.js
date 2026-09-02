@@ -180,6 +180,96 @@ function renderSegments() {
   `).join('');
 }
 
+function onAutoDetectModeChange() {
+  const mode = document.getElementById('autoDetectMode').value;
+  const btnText = document.getElementById('autoDetectBtnText');
+  const aiDrawer = document.getElementById('aiDrawer');
+  if (mode === 'ai') {
+    if (btnText) btnText.textContent = 'Generate with AI';
+  } else if (mode === 'silence') {
+    if (btnText) btnText.textContent = 'Detect Silence';
+    if (aiDrawer) aiDrawer.style.display = 'none';
+  } else if (mode === 'scene') {
+    if (btnText) btnText.textContent = 'Detect Scenes';
+    if (aiDrawer) aiDrawer.style.display = 'none';
+  }
+}
+
+function toggleAISettings() {
+  const drawer = document.getElementById('aiDrawer');
+  if (!drawer) return;
+  drawer.style.display = drawer.style.display === 'none' ? 'block' : 'none';
+}
+
+async function runAutoDetect() {
+  const src = document.getElementById('videoSource').value.trim();
+  if (!src) {
+    alert('Please enter or load a video source first.');
+    return;
+  }
+
+  const mode = document.getElementById('autoDetectMode').value;
+  const btn = document.getElementById('autoDetectBtn');
+  const btnText = document.getElementById('autoDetectBtnText');
+  const loader = document.getElementById('playerLoader');
+  const title = document.getElementById('loaderTitle');
+  const sub = document.getElementById('loaderSub');
+
+  if (btn) btn.disabled = true;
+  if (btnText) btnText.textContent = 'Analyzing...';
+  if (loader) loader.style.display = 'flex';
+
+  if (mode === 'ai') {
+    if (title) title.textContent = 'AI Highlight Analysis...';
+    if (sub) sub.textContent = 'Fetching transcript and analyzing viral highlights with AI.';
+  } else if (mode === 'silence') {
+    if (title) title.textContent = 'Detecting Speech Segments...';
+    if (sub) sub.textContent = 'Scanning audio stream for voice & dialogue boundaries.';
+  } else {
+    if (title) title.textContent = 'Detecting Scene Changes...';
+    if (sub) sub.textContent = 'Scanning video stream for visual camera shot cuts.';
+  }
+
+  const payload = {
+    input_file: src,
+    mode: mode,
+    ai_router: document.getElementById('aiRouter').value,
+    model: document.getElementById('aiModel').value.trim(),
+    api_key: document.getElementById('aiApiKey').value.trim(),
+    shorts: document.getElementById('cfgShorts').checked
+  };
+
+  try {
+    const res = await fetch('/api/auto-detect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      alert(data.error || 'Failed to auto-detect segments.');
+      return;
+    }
+
+    if (!data.segments || data.segments.length === 0) {
+      alert('No segments were detected. Try another detection mode.');
+      return;
+    }
+
+    // Append detected segments to queue
+    segments = segments.concat(data.segments);
+    renderSegments();
+    switchTab('queue');
+  } catch (err) {
+    alert('Network error during auto-detection: ' + err);
+  } finally {
+    if (btn) btn.disabled = false;
+    onAutoDetectModeChange();
+    if (loader) loader.style.display = 'none';
+  }
+}
+
 function switchTab(tab) {
   const queueBtn = document.getElementById('tabQueueBtn');
   const clipsBtn = document.getElementById('tabClipsBtn');
@@ -313,8 +403,12 @@ async function startClippingJob() {
     return;
   }
   if (segments.length === 0) {
-    alert('Please add at least one segment to the queue before rendering.');
-    return;
+    if (confirm("No segments are in the queue. Would you like to automatically generate segments using AI / Auto-Detect now?")) {
+      await runAutoDetect();
+      if (segments.length === 0) return;
+    } else {
+      return;
+    }
   }
 
   const payload = {

@@ -86,67 +86,13 @@ func (c *Clipper) Process(cfg *Config) error {
 	// Auto Detection if segments are empty
 	if len(cfg.Segments) == 0 && cfg.AutoDetect != "" {
 		fmt.Printf("Auto-detecting segments using '%s' detection mode...\n", cfg.AutoDetect)
-		switch cfg.AutoDetect {
-		case "ai", "transcript":
-			fmt.Printf("Fetching subtitles for AI analysis...\n")
-			lang := cfg.TranslateLang
-			if lang == "" {
-				lang = "id"
-			}
-			var subEntries []transcriber.SubtitleEntry
-			var err error
-			if cfg.UseWhisper {
-				subEntries, err = transcriber.TranscribeWithWhisper(cfg.InputFile, cfg.CacheDir, lang)
-			} else {
-				subEntries, err = transcriber.FetchSubtitles(originalInput, cfg.CacheDir, lang)
-				if err != nil || len(subEntries) == 0 {
-					fmt.Printf("YouTube subtitles unavailable (%v), falling back to local Whisper AI...\n", err)
-					subEntries, err = transcriber.TranscribeWithWhisper(cfg.InputFile, cfg.CacheDir, lang)
-				}
-			}
-			if err != nil {
-				return fmt.Errorf("failed to fetch or transcribe subtitles: %w", err)
-			}
-			cachedSubEntries = subEntries
-			cfg.AIConfig.IsShorts = cfg.Shorts
-			fmt.Printf("Analyzing %d subtitle entries via AI (%s / %s, is_shorts: %v, target lang: %s)...\n", len(subEntries), cfg.AIConfig.APIRouter, cfg.AIConfig.Model, cfg.Shorts, lang)
-			highlights, err := ai.AnalyzeHighlightsMultiProvider(subEntries, cfg.AIConfig, lang)
-			if err != nil {
-				return fmt.Errorf("AI highlight analysis failed: %w", err)
-			}
-			for _, h := range highlights {
-				cfg.Segments = append(cfg.Segments, Segment{
-					Start: h.Start,
-					End:   h.End,
-					Title: h.Title,
-				})
-			}
-		case "silence":
-			detected, err := detector.DetectSilence(c.runner.FFmpegPath, cfg.InputFile, -30, 0.5)
-			if err != nil {
-				return fmt.Errorf("silence auto detection failed: %w", err)
-			}
-			for _, d := range detected {
-				cfg.Segments = append(cfg.Segments, Segment{
-					Start: d.Start,
-					End:   d.End,
-					Title: d.Title,
-				})
-			}
-		case "scene":
-			detected, err := detector.DetectScenes(c.runner.FFmpegPath, cfg.InputFile, 0.3)
-			if err != nil {
-				return fmt.Errorf("scene auto detection failed: %w", err)
-			}
-			for _, d := range detected {
-				cfg.Segments = append(cfg.Segments, Segment{
-					Start: d.Start,
-					End:   d.End,
-					Title: d.Title,
-				})
-			}
-		default:
-			return fmt.Errorf("unrecognized auto_detect mode '%s', expected 'silence', 'scene', or 'ai'", cfg.AutoDetect)
+		detected, subs, err := c.DetectSegmentsWithSubs(cfg, originalInput)
+		if err != nil {
+			return err
+		}
+		cfg.Segments = append(cfg.Segments, detected...)
+		if len(subs) > 0 {
+			cachedSubEntries = subs
 		}
 		fmt.Printf("Auto-detected %d segments!\n", len(cfg.Segments))
 	}
@@ -635,4 +581,108 @@ func (c *Clipper) cleanupFiles(files []string, isTemp []bool) {
 			os.Remove(f)
 		}
 	}
+}
+
+// DetectSegments performs automated segment detection (ai, silence, or scene) on the input media and returns the detected segments.
+func (c *Clipper) DetectSegments(cfg *Config) ([]Segment, error) {
+	segs, _, err := c.DetectSegmentsWithSubs(cfg, cfg.InputFile)
+	return segs, err
+}
+
+// DetectSegmentsWithSubs performs automated segment detection and returns any cached subtitles retrieved during detection.
+func (c *Clipper) DetectSegmentsWithSubs(cfg *Config, originalInput string) ([]Segment, []transcriber.SubtitleEntry, error) {
+	if cfg.InputFile == "" {
+		return nil, nil, fmt.Errorf("input file is required for segment detection")
+	}
+
+	if originalInput == "" {
+		originalInput = cfg.InputFile
+	}
+
+	// If InputFile is a YouTube URL, ensure it is downloaded to local cache first
+	if downloader.IsYouTubeURL(cfg.InputFile) {
+		cacheDir := cfg.CacheDir
+		if cacheDir == "" {
+			cacheDir = "./cache"
+		}
+		localPath, err := downloader.DownloadYouTubeVideo(cfg.InputFile, cacheDir, cfg.Quality, cfg.NoCache)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to download YouTube video: %w", err)
+		}
+		cfg.InputFile = localPath
+	}
+
+	if _, err := os.Stat(cfg.InputFile); os.IsNotExist(err) {
+		return nil, nil, fmt.Errorf("input file does not exist: %s", cfg.InputFile)
+	}
+
+	mode := strings.ToLower(strings.TrimSpace(cfg.AutoDetect))
+	if mode == "" {
+		mode = "ai"
+	}
+
+	var segments []Segment
+	var cachedSubs []transcriber.SubtitleEntry
+
+	switch mode {
+	case "ai", "transcript":
+		lang := cfg.TranslateLang
+		if lang == "" {
+			lang = "id"
+		}
+		var subEntries []transcriber.SubtitleEntry
+		var err error
+		if cfg.UseWhisper {
+			subEntries, err = transcriber.TranscribeWithWhisper(cfg.InputFile, cfg.CacheDir, lang)
+		} else {
+			subEntries, err = transcriber.FetchSubtitles(originalInput, cfg.CacheDir, lang)
+			if err != nil || len(subEntries) == 0 {
+				subEntries, err = transcriber.TranscribeWithWhisper(cfg.InputFile, cfg.CacheDir, lang)
+			}
+		}
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to fetch or transcribe subtitles: %w", err)
+		}
+		cachedSubs = subEntries
+		cfg.AIConfig.IsShorts = cfg.Shorts
+		highlights, err := ai.AnalyzeHighlightsMultiProvider(subEntries, cfg.AIConfig, lang)
+		if err != nil {
+			return nil, nil, fmt.Errorf("AI highlight analysis failed: %w", err)
+		}
+		for _, h := range highlights {
+			segments = append(segments, Segment{
+				Start: h.Start,
+				End:   h.End,
+				Title: h.Title,
+			})
+		}
+	case "silence":
+		detected, err := detector.DetectSilence(c.runner.FFmpegPath, cfg.InputFile, -30, 0.5)
+		if err != nil {
+			return nil, nil, fmt.Errorf("silence auto detection failed: %w", err)
+		}
+		for _, d := range detected {
+			segments = append(segments, Segment{
+				Start: d.Start,
+				End:   d.End,
+				Title: d.Title,
+			})
+		}
+	case "scene":
+		detected, err := detector.DetectScenes(c.runner.FFmpegPath, cfg.InputFile, 0.3)
+		if err != nil {
+			return nil, nil, fmt.Errorf("scene auto detection failed: %w", err)
+		}
+		for _, d := range detected {
+			segments = append(segments, Segment{
+				Start: d.Start,
+				End:   d.End,
+				Title: d.Title,
+			})
+		}
+	default:
+		return nil, nil, fmt.Errorf("unrecognized auto_detect mode '%s', expected 'silence', 'scene', or 'ai'", mode)
+	}
+
+	return segments, cachedSubs, nil
 }

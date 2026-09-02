@@ -59,6 +59,7 @@ func (s *Server) Router() http.Handler {
 	mux.HandleFunc("/api/status", s.handleStatus)
 	mux.HandleFunc("/api/clips", s.handleClips)
 	mux.HandleFunc("/api/prepare", s.handlePrepare)
+	mux.HandleFunc("/api/auto-detect", s.handleAutoDetect)
 	mux.HandleFunc("/api/clip", s.handleClip)
 	mux.HandleFunc("/preview", s.handlePreview)
 
@@ -303,6 +304,10 @@ func (s *Server) handlePreview(w http.ResponseWriter, r *http.Request) {
 type clipRequestPayload struct {
 	InputFile        string            `json:"input_file"`
 	Segments         []clipper.Segment `json:"segments"`
+	AutoDetect       string            `json:"auto_detect"`
+	AIRouter         string            `json:"ai_router"`
+	APIKey           string            `json:"api_key"`
+	AIModel          string            `json:"ai_model"`
 	Shorts           bool              `json:"shorts"`
 	ShortsStyle      string            `json:"shorts_style"`
 	BurnSubtitles    bool              `json:"burn_subtitles"`
@@ -314,6 +319,85 @@ type clipRequestPayload struct {
 	ExtractThumbnail bool              `json:"extract_thumbnail"`
 	ThumbnailCount   int               `json:"thumbnail_count"`
 	HWAccel          string            `json:"hwaccel"`
+}
+
+type autoDetectRequestPayload struct {
+	InputFile  string `json:"input_file"`
+	Mode       string `json:"mode"` // "ai", "silence", "scene"
+	AIRouter   string `json:"ai_router"`
+	APIKey     string `json:"api_key"`
+	Model      string `json:"model"`
+	UseWhisper bool   `json:"use_whisper"`
+	Shorts     bool   `json:"shorts"`
+}
+
+type autoDetectResponse struct {
+	Segments []clipper.Segment `json:"segments"`
+	Count    int               `json:"count"`
+	Mode     string            `json:"mode"`
+}
+
+func (s *Server) handleAutoDetect(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req autoDetectRequestPayload
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"invalid request: %v"}`, err), http.StatusBadRequest)
+		return
+	}
+
+	src := strings.TrimSpace(req.InputFile)
+	if src == "" {
+		http.Error(w, `{"error":"input_file is required for auto detection"}`, http.StatusBadRequest)
+		return
+	}
+
+	cfg := clipper.Config{}
+	if s.DefaultConfig != nil {
+		cfg = *s.DefaultConfig
+	}
+
+	cfg.InputFile = src
+	cfg.AutoDetect = req.Mode
+	if cfg.AutoDetect == "" {
+		cfg.AutoDetect = "ai"
+	}
+	cfg.Shorts = req.Shorts
+	cfg.UseWhisper = req.UseWhisper
+
+	if req.AIRouter != "" {
+		cfg.AIConfig.APIRouter = req.AIRouter
+	}
+	if req.APIKey != "" {
+		cfg.AIConfig.APIKey = req.APIKey
+	}
+	if req.Model != "" {
+		cfg.AIConfig.Model = req.Model
+	}
+
+	c, err := clipper.New()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "Failed to initialize clipper engine: " + err.Error()})
+		return
+	}
+
+	segments, err := c.DetectSegments(&cfg)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(autoDetectResponse{
+		Segments: segments,
+		Count:    len(segments),
+		Mode:     cfg.AutoDetect,
+	})
 }
 
 func (s *Server) handleClip(w http.ResponseWriter, r *http.Request) {
@@ -336,9 +420,9 @@ func (s *Server) handleClip(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.InputFile == "" || len(req.Segments) == 0 {
+	if req.InputFile == "" || (len(req.Segments) == 0 && req.AutoDetect == "") {
 		s.mu.Unlock()
-		http.Error(w, `{"error":"input_file and at least 1 segment required"}`, http.StatusBadRequest)
+		http.Error(w, `{"error":"input_file and at least 1 segment (or auto_detect mode) required"}`, http.StatusBadRequest)
 		return
 	}
 
@@ -357,6 +441,16 @@ func (s *Server) handleClip(w http.ResponseWriter, r *http.Request) {
 
 	cfg.InputFile = req.InputFile
 	cfg.Segments = req.Segments
+	cfg.AutoDetect = req.AutoDetect
+	if req.AIRouter != "" {
+		cfg.AIConfig.APIRouter = req.AIRouter
+	}
+	if req.APIKey != "" {
+		cfg.AIConfig.APIKey = req.APIKey
+	}
+	if req.AIModel != "" {
+		cfg.AIConfig.Model = req.AIModel
+	}
 	cfg.Shorts = req.Shorts
 	if req.ShortsStyle != "" {
 		cfg.ShortsStyle = req.ShortsStyle

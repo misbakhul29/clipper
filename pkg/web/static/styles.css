@@ -414,6 +414,53 @@ video {
   text-decoration: underline;
 }
 
+.ai-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  margin: 14px 0 12px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+.ai-divider::before,
+.ai-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid var(--border);
+}
+
+.ai-divider span {
+  padding: 0 10px;
+}
+
+.auto-detect-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.auto-detect-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.ai-drawer {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.ai-drawer-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
 /* Options / Config Section */
 .config-group {
   margin-bottom: 18px;
