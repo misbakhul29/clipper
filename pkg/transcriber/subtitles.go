@@ -21,7 +21,7 @@ type SubtitleEntry struct {
 	Text  string `json:"text"`
 }
 
-var vttTimeRegex = regexp.MustCompile(`(\d{2}:\d{2}:\d{2}[\.\,]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[\.\,]\d{3})`)
+var vttTimeRegex = regexp.MustCompile(`((?:\d{1,2}:)?\d{2}:\d{2}[\.\,]\d{3})\s*-->\s*((?:\d{1,2}:)?\d{2}:\d{2}[\.\,]\d{3})`)
 
 // ParseVTT parses VTT or SRT subtitle file content into a slice of SubtitleEntry.
 func ParseVTT(content string) ([]SubtitleEntry, error) {

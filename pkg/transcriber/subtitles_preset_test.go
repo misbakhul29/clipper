@@ -115,3 +115,45 @@ func TestExportPresetASS(t *testing.T) {
 		t.Errorf("expected 1920x1080 for landscape canvas, content: %s", contentLand)
 	}
 }
+
+func TestParseVTT_Formats(t *testing.T) {
+	vttSample := `WEBVTT
+Kind: captions
+Language: en
+
+00:01.500 --> 00:03.200 line:85% position:50%
+First cue without hours
+
+00:00:05.100 --> 00:00:08.500
+Second cue with standard hours
+
+00:00:10,200 --> 00:00:12,800
+Third cue with SRT style comma
+`
+	entries, err := ParseVTT(vttSample)
+	if err != nil {
+		t.Fatalf("unexpected error parsing VTT: %v", err)
+	}
+
+	if len(entries) != 3 {
+		t.Fatalf("expected 3 entries, got %d", len(entries))
+	}
+
+	if entries[0].Text != "First cue without hours" {
+		t.Errorf("entry 0 text mismatch: %s", entries[0].Text)
+	}
+	if entries[0].Start != "00:01.500" || entries[0].End != "00:03.200" {
+		t.Errorf("entry 0 timestamp mismatch: %+v", entries[0])
+	}
+
+	if entries[1].Text != "Second cue with standard hours" {
+		t.Errorf("entry 1 text mismatch: %s", entries[1].Text)
+	}
+
+	if entries[2].Text != "Third cue with SRT style comma" {
+		t.Errorf("entry 2 text mismatch: %s", entries[2].Text)
+	}
+	if entries[2].Start != "00:00:10.200" || entries[2].End != "00:00:12.800" {
+		t.Errorf("entry 2 timestamp mismatch: %+v", entries[2])
+	}
+}
