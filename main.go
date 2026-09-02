@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/misbakhul29/clipper/pkg/clipper"
+	"github.com/misbakhul29/clipper/pkg/web"
 )
 
 func main() {
@@ -67,8 +68,10 @@ func main() {
 		thumbCount    int
 		hwaccel       string
 		showProgress  bool
+		serveAddr     string
 	)
 
+	flag.StringVar(&serveAddr, "serve", "", "Run local web UI studio dashboard (e.g. -serve :8080 or -serve 8080)")
 	flag.StringVar(&configFile, "config", "", "Path to JSON configuration file")
 	flag.StringVar(&initConfig, "init-config", "", "Generate a JSON configuration file (e.g. -init-config config.json)")
 	flag.BoolVar(&interactive, "i", false, "Run interactive config generator wizard")
@@ -393,6 +396,15 @@ func main() {
 			os.Exit(1)
 		}
 		cfg.Segments = append(cfg.Segments, parsedSegs...)
+	}
+
+	if serveAddr != "" {
+		srv := web.NewServer(serveAddr, &cfg)
+		if err := srv.Start(); err != nil {
+			fmt.Fprintf(os.Stderr, "Web Studio error: %v\n", err)
+			os.Exit(1)
+		}
+		return
 	}
 
 	if !cfg.CleanCache && cfg.InputFile == "" && cfg.BatchList == "" {
