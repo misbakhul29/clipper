@@ -12,7 +12,11 @@ function initTheme() {
 function toggleTheme() {
   const current = document.documentElement.getAttribute('data-theme') || 'dark';
   const next = current === 'dark' ? 'light' : 'dark';
+  document.documentElement.classList.add('theme-transition');
   applyTheme(next);
+  setTimeout(() => {
+    document.documentElement.classList.remove('theme-transition');
+  }, 250);
 }
 
 function applyTheme(theme) {
