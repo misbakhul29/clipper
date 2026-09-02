@@ -319,6 +319,7 @@ type clipRequestPayload struct {
 	GenerateMetadata bool              `json:"generate_metadata"`
 	ExtractThumbnail bool              `json:"extract_thumbnail"`
 	ThumbnailCount   int               `json:"thumbnail_count"`
+	TargetDuration   float64           `json:"target_duration"`
 	HWAccel          string            `json:"hwaccel"`
 }
 
@@ -445,6 +446,10 @@ func (s *Server) handleClip(w http.ResponseWriter, r *http.Request) {
 	cfg.InputFile = req.InputFile
 	cfg.Segments = req.Segments
 	cfg.AutoDetect = req.AutoDetect
+	if req.TargetDuration > 0 {
+		cfg.TargetDuration = req.TargetDuration
+		cfg.AIConfig.TargetDuration = req.TargetDuration
+	}
 	if req.AIRouter != "" {
 		cfg.AIConfig.APIRouter = req.AIRouter
 	}

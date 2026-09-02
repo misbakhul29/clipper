@@ -216,6 +216,7 @@ Gunakan konfigurasi ini jika Anda ingin menentukan timestamp segmen awal dan akh
 | `font_size` | `int` | `32` | Ukuran font teks overlay |
 | `font_color` | `string` | `"white"` | Warna font teks overlay |
 | `auto_detect` | `string` | `""` | `"ai"` (AI highlights), `"silence"`, atau `"scene"` |
+| `target_duration` | `float` | `0` | Target durasi klip auto-detect dalam detik (`30`, `60`, `120`, `300`; `0` = auto) |
 | `translate_lang` | `string` | `"id"` | Bahasa sasaran terjemahan judul & subtitle (misal: `"id"`, `"en"`) |
 | `subtitles` | `bool` | `false` | Sertakan subtitle pada video klip (alias legacy: `burn_subtitles`) |
 | `sub_style` | `string` | `"karaoke"` | `"karaoke"` (animasi 2 kata kuning) atau `"standard"` |

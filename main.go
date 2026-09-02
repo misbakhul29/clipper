@@ -36,8 +36,9 @@ func main() {
 		textPos       string
 		fontSize      int
 		fontColor     string
-		autoDetect    string
-		translateLang string
+		autoDetect     string
+		clipDuration   float64
+		translateLang  string
 		subtitles     bool
 		subStyle      string
 		subFontSize   int
@@ -95,6 +96,8 @@ func main() {
 	flag.IntVar(&fontSize, "font-size", 32, "Font size for text caption")
 	flag.StringVar(&fontColor, "font-color", "white", "Font color for text caption ('white', 'yellow', 'cyan', 'red')")
 	flag.StringVar(&autoDetect, "auto-detect", "", "Smart auto-detection mode for segments ('silence', 'scene', or 'ai')")
+	flag.Float64Var(&clipDuration, "clip-duration", 0, "Target duration for auto-detected clips in seconds (e.g. 30, 60, 120, 300; default: 0 for auto)")
+	flag.Float64Var(&clipDuration, "target-duration", 0, "Alias for -clip-duration")
 	flag.StringVar(&translateLang, "translate-lang", "id", "Target language for AI titles and subtitle translation ('id', 'en', etc.)")
 	flag.BoolVar(&subtitles, "subtitles", false, "Include/burn-in subtitles on video clips (default: false)")
 	flag.BoolVar(&subtitles, "subtitle", false, "Include/burn-in subtitles on video clips")
@@ -284,6 +287,10 @@ func main() {
 	}
 	if isFlagPassed("auto-detect") {
 		cfg.AutoDetect = autoDetect
+	}
+	if isFlagPassed("clip-duration") || isFlagPassed("target-duration") {
+		cfg.TargetDuration = clipDuration
+		cfg.AIConfig.TargetDuration = clipDuration
 	}
 	if isFlagPassed("translate-lang") {
 		cfg.TranslateLang = translateLang

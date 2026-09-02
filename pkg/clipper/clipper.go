@@ -644,6 +644,9 @@ func (c *Clipper) DetectSegmentsWithSubs(cfg *Config, originalInput string) ([]S
 		}
 
 		cfg.AIConfig.IsShorts = cfg.Shorts
+		if cfg.TargetDuration > 0 {
+			cfg.AIConfig.TargetDuration = cfg.TargetDuration
+		}
 
 		// If subtitles were retrieved, analyze highlights from transcript
 		if len(subEntries) > 0 {

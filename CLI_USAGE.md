@@ -51,6 +51,7 @@ go install .
 | `-use-whisper` | `bool` | `false` | Paksa transkripsi suara offline menggunakan **Whisper AI** lokal |
 | **Kecerdasan Buatan (AI) & Auto-Detect** | | | |
 | `-auto-detect` | `string` | `""` | Mode deteksi segmen otomatis: `"ai"` (AI highlights), `"silence"`, atau `"scene"` |
+| `-clip-duration` / `-target-duration` | `float` | `0` | Target durasi klip hasil auto-detect dalam detik (misal: `30`, `60`, `120`, `300`; `0` = auto) |
 | `-metadata` | `bool` | `false` | Menghasilkan berkas pendamping social media metadata (`.json` & `.txt`) untuk mempermudah upload |
 | `-thumbnail` / `-thumb` | `bool` | `false` | Mengekstrak frame cover hook & clean beresolusi tinggi (`.jpg`) dari detik pembuka klip |
 | `-thumb-count` | `int` | `1` | Jumlah alternatif thumbnail yang diekstrak (1 s/d 3) |

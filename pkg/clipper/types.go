@@ -64,8 +64,9 @@ type Config struct {
 	TextPos       string              `json:"text_pos"`     // Position for overlay text
 	FontSize      int                 `json:"font_size"`    // Font size for overlay text
 	FontColor     string              `json:"font_color"`   // Font color for overlay text (e.g. "white", "yellow")
-	AutoDetect    string              `json:"auto_detect"`  // Auto detection mode: "silence", "scene", or "ai"
-	TranslateLang string              `json:"translate_lang"`// Target language for subtitle translation (e.g. "id", "en")
+	AutoDetect     string              `json:"auto_detect"`     // Auto detection mode: "silence", "scene", or "ai"
+	TargetDuration float64             `json:"target_duration"` // Desired segment clip duration in seconds (0 = auto)
+	TranslateLang  string              `json:"translate_lang"`  // Target language for subtitle translation (e.g. "id", "en")
 	Subtitles     bool                `json:"subtitles"`     // Include captions/subtitles on video clips
 	SubStyle      string              `json:"sub_style"`     // Subtitle style: 'karaoke' or 'standard'
 	SubPreset     string              `json:"sub_preset"`    // Viral subtitle theme preset: 'hormozi', 'minimal', 'devon', 'neon', 'cinematic'
