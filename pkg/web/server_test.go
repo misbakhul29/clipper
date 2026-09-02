@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/misbakhul29/clipper/pkg/clipper"
@@ -32,8 +33,28 @@ func TestWebServerEndpoints(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Errorf("expected status 200, got %d", rec.Code)
 		}
-		if ct := rec.Header().Get("Content-Type"); ct != "text/html; charset=utf-8" {
-			t.Errorf("expected Content-Type text/html, got %s", ct)
+		if !strings.Contains(rec.Header().Get("Content-Type"), "text/html") {
+			t.Errorf("expected Content-Type text/html, got %s", rec.Header().Get("Content-Type"))
+		}
+	})
+
+	t.Run("GET styles.css", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/styles.css", nil)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("expected status 200, got %d", rec.Code)
+		}
+	})
+
+	t.Run("GET app.js", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/app.js", nil)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("expected status 200, got %d", rec.Code)
 		}
 	})
 

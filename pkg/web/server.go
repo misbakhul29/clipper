@@ -3,6 +3,7 @@ package web
 import (
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -49,7 +50,11 @@ func NewServer(addr string, defaultCfg *clipper.Config) *Server {
 func (s *Server) Router() http.Handler {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/", s.handleIndex)
+	sub, err := fs.Sub(StaticFS, "static")
+	if err == nil {
+		mux.Handle("/", http.FileServer(http.FS(sub)))
+	}
+
 	mux.HandleFunc("/api/status", s.handleStatus)
 	mux.HandleFunc("/api/clips", s.handleClips)
 	mux.HandleFunc("/api/clip", s.handleClip)
@@ -77,15 +82,6 @@ func (s *Server) Start() error {
 	fmt.Println("Press Ctrl+C to stop the web server.")
 
 	return server.ListenAndServe()
-}
-
-func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
-		http.NotFound(w, r)
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write([]byte(IndexHTML))
 }
 
 type statusResponse struct {

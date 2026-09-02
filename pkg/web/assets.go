@@ -1,10 +1,10 @@
 package web
 
 import (
-	_ "embed"
+	"embed"
 )
 
-// IndexHTML contains the embedded web dashboard single page application.
+// StaticFS contains all embedded web dashboard static assets (HTML, CSS, JS).
 //
-//go:embed static/index.html
-var IndexHTML string
+//go:embed static/*
+var StaticFS embed.FS
