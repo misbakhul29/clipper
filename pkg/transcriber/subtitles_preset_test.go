@@ -74,7 +74,7 @@ func TestExportPresetASS(t *testing.T) {
 	}
 
 	outHormozi := filepath.Join(tmpDir, "hormozi.ass")
-	if err := ExportPresetASS(entries, outHormozi, "hormozi", 60, true, "Montserrat-Bold", "strip"); err != nil {
+	if err := ExportPresetASS(entries, outHormozi, "hormozi", 60, true, "Montserrat-Bold", "strip", false); err != nil {
 		t.Fatalf("ExportPresetASS hormozi failed: %v", err)
 	}
 
@@ -106,7 +106,7 @@ func TestExportPresetASS(t *testing.T) {
 
 	// Test non-shorts canvas (1920x1080)
 	outLandscape := filepath.Join(tmpDir, "landscape.ass")
-	if err := ExportPresetASS(entries, outLandscape, "minimal", 40, false, "", "strip"); err != nil {
+	if err := ExportPresetASS(entries, outLandscape, "minimal", 40, false, "", "strip", false); err != nil {
 		t.Fatalf("ExportPresetASS landscape failed: %v", err)
 	}
 	dataLand, _ := os.ReadFile(outLandscape)
@@ -212,7 +212,7 @@ func TestExportPresetASS_SDHStrip(t *testing.T) {
 	}
 
 	outFile := filepath.Join(tmpDir, "strip.ass")
-	if err := ExportPresetASS(entries, outFile, "hormozi", 54, true, "", "strip"); err != nil {
+	if err := ExportPresetASS(entries, outFile, "hormozi", 54, true, "", "strip", false); err != nil {
 		t.Fatalf("ExportPresetASS strip failed: %v", err)
 	}
 
@@ -249,7 +249,7 @@ func TestExportPresetASS_SDHTopBox(t *testing.T) {
 	}
 
 	outFile := filepath.Join(tmpDir, "topbox.ass")
-	if err := ExportPresetASS(entries, outFile, "hormozi", 54, true, "", "top-box"); err != nil {
+	if err := ExportPresetASS(entries, outFile, "hormozi", 54, true, "", "top-box", false); err != nil {
 		t.Fatalf("ExportPresetASS top-box failed: %v", err)
 	}
 
@@ -314,7 +314,7 @@ func TestExportPresetASS_EmptyEntriesError(t *testing.T) {
 	}
 
 	outFile := filepath.Join(tmpDir, "empty.ass")
-	err = ExportPresetASS(entries, outFile, "hormozi", 54, true, "", "strip")
+	err = ExportPresetASS(entries, outFile, "hormozi", 54, true, "", "strip", false)
 	if err == nil {
 		t.Errorf("expected error when all entries are stripped SDH, got nil")
 	}
@@ -332,7 +332,7 @@ func TestExportPresetASS_TimestampFormatting(t *testing.T) {
 	}
 
 	outFile := filepath.Join(tmpDir, "formatted.ass")
-	if err := ExportPresetASS(entries, outFile, "minimal", 40, false, "", "keep"); err != nil {
+	if err := ExportPresetASS(entries, outFile, "minimal", 40, false, "", "keep", false); err != nil {
 		t.Fatalf("ExportPresetASS failed: %v", err)
 	}
 
@@ -376,5 +376,33 @@ func TestCleanSubtitleText(t *testing.T) {
 		if got != c.expected {
 			t.Errorf("cleanSubtitleText(%q) = %q, want %q", c.input, got, c.expected)
 		}
+	}
+}
+
+func TestExportPresetASS_WithEmojis(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "clipper_emoji_export_*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	entries := []SubtitleEntry{
+		{Start: "0:00:01.00", End: "0:00:03.00", Text: "Dapatkan banyak uang dan keuntungan"},
+	}
+
+	outFile := filepath.Join(tmpDir, "emoji.ass")
+	if err := ExportPresetASS(entries, outFile, "hormozi", 54, true, "", "strip", true); err != nil {
+		t.Fatalf("ExportPresetASS failed: %v", err)
+	}
+
+	data, err := os.ReadFile(outFile)
+	if err != nil {
+		t.Fatalf("failed to read output: %v", err)
+	}
+	content := string(data)
+
+	// Should contain contextual emoji 💰
+	if !strings.Contains(content, "💰") {
+		t.Errorf("expected emoji 💰 in dialogue, got: %s", content)
 	}
 }

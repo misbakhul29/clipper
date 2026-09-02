@@ -61,6 +61,7 @@ func main() {
 		jumpCutNoise  float64
 		subPreset     string
 		subSDHMode    string
+		subEmoji      bool
 	)
 
 	flag.StringVar(&configFile, "config", "", "Path to JSON configuration file")
@@ -92,6 +93,7 @@ func main() {
 	flag.StringVar(&subStyle, "sub-style", "karaoke", "Subtitle style for burnt-in captions ('karaoke' for TikTok 2-word chunks, or 'standard')")
 	flag.StringVar(&subPreset, "sub-preset", "hormozi", "Viral subtitle theme preset ('hormozi', 'minimal', 'devon', 'neon', 'cinematic')")
 	flag.StringVar(&subSDHMode, "sub-sdh-mode", "strip", "Handling for silent narrator & SDH brackets: 'strip' (clean speech), 'top-box' (dual-layer top banner), 'keep'")
+	flag.BoolVar(&subEmoji, "sub-emoji", true, "Auto-inject contextual emojis based on keywords into subtitle cues (default: true)")
 	flag.IntVar(&subFontSize, "sub-font-size", 48, "Subtitle font size for burnt-in captions")
 	flag.StringVar(&subFontPath, "sub-font-path", "", "Custom font file path (.ttf / .otf) for burnt-in captions")
 	flag.BoolVar(&useWhisper, "use-whisper", false, "Force local Whisper AI for speech-to-text transcription")
@@ -182,6 +184,7 @@ func main() {
 			JumpCutNoise:  jumpCutNoise,
 			SubPreset:     subPreset,
 			SubSDHMode:    subSDHMode,
+			SubEmoji:      subEmoji,
 			Segments:      parsedSegs,
 		}
 		if err := saveConfig(initConfig, genCfg); err != nil {
@@ -276,6 +279,9 @@ func main() {
 	}
 	if isFlagPassed("sub-sdh-mode") {
 		cfg.SubSDHMode = subSDHMode
+	}
+	if isFlagPassed("sub-emoji") {
+		cfg.SubEmoji = subEmoji
 	}
 	if isFlagPassed("sub-font-size") {
 		cfg.SubFontSize = subFontSize
@@ -472,6 +478,7 @@ func runInteractiveWizard(defaultFile string) {
 	burnSubs := strings.ToLower(subChoice) == "y" || strings.ToLower(subChoice) == "yes"
 	subPresetChoice := "hormozi"
 	subSDHChoice := "strip"
+	subEmojiChoice := true
 	if burnSubs {
 		fmt.Println("Subtitle Theme Presets:")
 		fmt.Println("  1. hormozi   (Viral yellow, bold outline, pop-in bounce animation)")
@@ -504,6 +511,9 @@ func runInteractiveWizard(defaultFile string) {
 		default:
 			subSDHChoice = "strip"
 		}
+
+		emojiChoice := promptString(reader, "\nAuto-inject contextual emojis (e.g. 💰, 🔥, 💡) into subtitles? (y/n)", "y")
+		subEmojiChoice = strings.ToLower(emojiChoice) == "y" || strings.ToLower(emojiChoice) == "yes"
 	}
 
 	quality := promptString(reader, "\nYouTube Video Download Quality (best, 1080p, 720p, 480p, 360p, worst)", "best")
@@ -550,6 +560,7 @@ func runInteractiveWizard(defaultFile string) {
 		BurnSubtitles: burnSubs,
 		SubPreset:     subPresetChoice,
 		SubSDHMode:    subSDHChoice,
+		SubEmoji:      subEmojiChoice,
 		FaceTracking:  true,
 		Segments:      segments,
 	}

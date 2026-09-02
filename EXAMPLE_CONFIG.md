@@ -41,6 +41,7 @@ Skenario paling umum untuk mengunduh video YouTube, menganalisis klip menarik me
   "burn_subtitles": true,
   "sub_preset": "hormozi",
   "sub_sdh_mode": "strip",
+  "sub_emoji": true,
   "sub_style": "karaoke",
   "sub_font_size": 54,
   "use_whisper": false,

@@ -258,7 +258,11 @@ func (c *Clipper) Process(cfg *Config) error {
 		if sdh == "" {
 			sdh = "strip"
 		}
-		fmt.Printf("Burnt-in Subtitles: Enabled (Theme: %s, SDH Narrator: %s)\n", preset, sdh)
+		emojiStatus := "Enabled"
+		if !cfg.SubEmoji {
+			emojiStatus = "Disabled"
+		}
+		fmt.Printf("Burnt-in Subtitles: Enabled (Theme: %s, SDH: %s, Emojis: %s)\n", preset, sdh, emojiStatus)
 	}
 	if cfg.Loudnorm {
 		targetI := cfg.LoudnormI
@@ -437,7 +441,7 @@ func (c *Clipper) Process(cfg *Config) error {
 							sdhMode = "strip"
 						}
 
-						exportErr := transcriber.ExportPresetASS(sliced, tmpSubFile, preset, cfg.SubFontSize, cfg.Shorts, fontName, sdhMode)
+						exportErr := transcriber.ExportPresetASS(sliced, tmpSubFile, preset, cfg.SubFontSize, cfg.Shorts, fontName, sdhMode, cfg.SubEmoji)
 						if exportErr == nil {
 							subPath = tmpSubFile
 						}

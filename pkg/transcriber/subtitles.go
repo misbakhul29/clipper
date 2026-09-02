@@ -660,8 +660,8 @@ func GetSubtitlePreset(name string, isShorts bool) SubtitlePreset {
 	}
 }
 
-// ExportPresetASS exports subtitle entries using a named visual preset with optional custom font, size, and SDH separation.
-func ExportPresetASS(entries []SubtitleEntry, outputPath string, presetName string, fontSize int, isShorts bool, customFont string, sdhMode string) error {
+// ExportPresetASS exports subtitle entries using a named visual preset with optional custom font, size, SDH separation, and auto contextual emojis.
+func ExportPresetASS(entries []SubtitleEntry, outputPath string, presetName string, fontSize int, isShorts bool, customFont string, sdhMode string, enableEmoji bool) error {
 	preset := GetSubtitlePreset(presetName, isShorts)
 
 	if fontSize > 0 {
@@ -719,6 +719,10 @@ func ExportPresetASS(entries []SubtitleEntry, outputPath string, presetName stri
 		formattedSpeech = ChunkSubtitlesToWords(speechEntries, preset.MaxWords)
 	} else {
 		formattedSpeech = speechEntries
+	}
+
+	if enableEmoji {
+		formattedSpeech = InjectContextualEmojis(formattedSpeech)
 	}
 
 	if len(formattedSpeech) == 0 && len(sdhEntries) == 0 {
@@ -819,7 +823,7 @@ func ExportKaraokeASS(entries []SubtitleEntry, outputPath string, fontSize int, 
 
 // ExportKaraokeASSWithFont exports subtitle entries into TikTok-style ASS format with custom font name.
 func ExportKaraokeASSWithFont(entries []SubtitleEntry, outputPath string, fontSize int, isShorts bool, fontName string) error {
-	return ExportPresetASS(entries, outputPath, "hormozi", fontSize, isShorts, fontName, "strip")
+	return ExportPresetASS(entries, outputPath, "hormozi", fontSize, isShorts, fontName, "strip", true)
 }
 
 // AdjustSubtitlesForJumpCuts shifts and filters subtitle entries after silence intervals have been excised.
