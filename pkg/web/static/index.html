@@ -1,41 +1,48 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Clipper Studio — Video Trimmer & Shorts Engine</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <title>Clipper — Minimalist Video Studio</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
   <header>
     <div class="brand">
-      <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
       </svg>
-      <span class="brand-title">CLIPPER STUDIO</span>
-      <span class="badge" id="portBadge">LOCAL</span>
+      <span class="brand-title">CLIPPER</span>
+      <span class="badge" id="portBadge">:8000</span>
     </div>
-    <div class="status-indicator">
-      <div class="status-dot" id="statusDot"></div>
-      <span id="statusText">Ready</span>
+    <div class="header-right">
+      <div class="badge" id="statusBadge">READY</div>
+      <button class="theme-toggle-btn" id="themeToggle" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
+        <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <!-- Sun icon (shown in dark mode) -->
+          <circle cx="12" cy="12" r="5"/>
+          <line x1="12" y1="1" x2="12" y2="3"/>
+          <line x1="12" y1="21" x2="12" y2="23"/>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+          <line x1="1" y1="12" x2="3" y2="12"/>
+          <line x1="21" y1="12" x2="23" y2="12"/>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+        </svg>
+      </button>
     </div>
   </header>
 
   <main>
-    <!-- Left Column: Source Video, Player, Trimmer & Settings -->
+    <!-- Left Column: Source, Player, Trimmer, Settings -->
     <div class="panel">
       <div class="panel-header">
-        <h2 class="panel-title">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg>
-          Video Source & Player
-        </h2>
+        <span class="panel-title">Source & Player</span>
       </div>
 
       <div class="source-bar">
-        <input type="text" id="videoSource" class="text-input" placeholder="Path to local video (e.g. video.mp4) or YouTube URL" />
+        <input type="text" id="videoSource" class="text-input" placeholder="Video path (e.g. video.mp4) or YouTube URL" />
         <button class="btn btn-secondary" onclick="loadSourceVideo()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
           Load
@@ -48,16 +55,16 @@
 
       <div class="transport-bar">
         <div class="transport-controls">
-          <button class="btn btn-secondary btn-sm btn-icon" onclick="seekRelative(-1)" title="Back 1 sec">
+          <button class="btn btn-secondary btn-sm btn-icon" onclick="seekRelative(-1)" title="Seek -1s">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>
           </button>
-          <button class="btn btn-secondary btn-sm btn-icon" onclick="seekRelative(-0.1)" title="Back 0.1 sec">
+          <button class="btn btn-secondary btn-sm btn-icon" onclick="seekRelative(-0.1)" title="Seek -0.1s">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
           </button>
-          <button class="btn btn-secondary btn-sm btn-icon" onclick="seekRelative(0.1)" title="Forward 0.1 sec">
+          <button class="btn btn-secondary btn-sm btn-icon" onclick="seekRelative(0.1)" title="Seek +0.1s">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
           </button>
-          <button class="btn btn-secondary btn-sm btn-icon" onclick="seekRelative(1)" title="Forward 1 sec">
+          <button class="btn btn-secondary btn-sm btn-icon" onclick="seekRelative(1)" title="Seek +1s">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>
           </button>
         </div>
@@ -66,24 +73,24 @@
 
       <!-- Trimmer Box -->
       <div class="trimmer-card">
-        <div class="trimmer-row">
+        <div class="trimmer-grid">
           <div class="field-group">
             <label class="field-label">
-              Start Point (In)
+              Start (In)
               <span class="set-link" onclick="markCurrent('start')">[In]</span>
             </label>
             <input type="text" id="trimStart" class="text-input" value="00:00" placeholder="00:00" />
           </div>
           <div class="field-group">
             <label class="field-label">
-              End Point (Out)
+              End (Out)
               <span class="set-link" onclick="markCurrent('end')">[Out]</span>
             </label>
             <input type="text" id="trimEnd" class="text-input" value="00:30" placeholder="00:30" />
           </div>
           <div class="field-group">
-            <label class="field-label">Segment Title (Optional)</label>
-            <input type="text" id="trimTitle" class="text-input" placeholder="e.g. Intro Hook" />
+            <label class="field-label">Title (Optional)</label>
+            <input type="text" id="trimTitle" class="text-input" placeholder="e.g. Highlight Hook" />
           </div>
           <div class="field-group">
             <button class="btn btn-secondary" onclick="addSegment()">
@@ -94,47 +101,44 @@
         </div>
       </div>
 
-      <!-- Config Section -->
-      <div class="config-section">
+      <!-- Settings -->
+      <div class="config-group">
         <div class="panel-header">
-          <h2 class="panel-title">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-            Render Settings
-          </h2>
+          <span class="panel-title">Render Settings</span>
         </div>
 
         <div class="config-grid">
           <div class="config-item">
             <label class="toggle-label">
-              Shorts (9:16)
+              Shorts 9:16
               <input type="checkbox" id="cfgShorts" checked />
             </label>
             <select id="cfgShortsStyle" class="select-box">
               <option value="smart-crop" selected>Smart Crop (Tracking)</option>
               <option value="crop">Center Crop</option>
-              <option value="blur">Blurred Background</option>
+              <option value="blur">Blur Background</option>
             </select>
           </div>
 
           <div class="config-item">
             <label class="toggle-label">
-              Burn Subtitles
+              Subtitles
               <input type="checkbox" id="cfgBurnSubs" checked />
             </label>
             <select id="cfgSubPreset" class="select-box">
               <option value="hormozi" selected>Hormozi Kinetic</option>
-              <option value="neon">Neon Cyan Glow</option>
-              <option value="minimal">Minimal White</option>
+              <option value="minimal">Minimal Clean</option>
+              <option value="neon">Neon Outline</option>
               <option value="cinematic">Cinematic Soft</option>
             </select>
           </div>
 
           <div class="config-item">
             <label class="toggle-label">
-              EBU Loudnorm
+              Loudnorm
               <input type="checkbox" id="cfgLoudnorm" checked />
             </label>
-            <span style="font-size:11px; color:var(--text-muted);">-14.0 LUFS Target</span>
+            <span class="hint-text">EBU R128 (-14 LUFS)</span>
           </div>
 
           <div class="config-item">
@@ -142,27 +146,27 @@
               Jump-Cut
               <input type="checkbox" id="cfgJumpCut" />
             </label>
-            <span style="font-size:11px; color:var(--text-muted);">Remove Silence</span>
+            <span class="hint-text">Silence Removal</span>
           </div>
 
           <div class="config-item">
             <label class="toggle-label">
-              AI Metadata
+              Metadata
               <input type="checkbox" id="cfgMetadata" checked />
             </label>
-            <span style="font-size:11px; color:var(--text-muted);">Viral Hook & Score</span>
+            <span class="hint-text">Social JSON & TXT</span>
           </div>
 
           <div class="config-item">
             <label class="toggle-label">
-              Cover Thumbnail
+              Thumbnail
               <input type="checkbox" id="cfgThumbnail" checked />
             </label>
-            <span style="font-size:11px; color:var(--text-muted);">High-res Frame JPG</span>
+            <span class="hint-text">Cover Frame JPG</span>
           </div>
 
           <div class="config-item">
-            <label class="toggle-label">GPU Acceleration</label>
+            <label class="toggle-label">Acceleration</label>
             <select id="cfgHwaccel" class="select-box">
               <option value="auto" selected>Auto-Detect GPU</option>
               <option value="nvenc">NVIDIA NVENC</option>
@@ -174,14 +178,12 @@
         </div>
       </div>
 
-      <div class="action-bar">
-        <button class="btn btn-primary btn-render" onclick="startClippingJob()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
-          Render Segments
-        </button>
-      </div>
+      <button class="btn btn-primary render-btn" onclick="startClippingJob()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
+        Render Clips
+      </button>
 
-      <!-- Live Progress -->
+      <!-- Progress -->
       <div class="progress-card" id="progressCard">
         <div class="progress-header">
           <span id="progressTitle">Rendering...</span>
@@ -193,30 +195,28 @@
       </div>
     </div>
 
-    <!-- Right Column: Queue & Output Gallery -->
+    <!-- Right Column: Queue & Output Clips -->
     <div class="panel">
       <div class="tabs">
         <button class="tab-btn active" id="tabQueueBtn" onclick="switchTab('queue')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
           Queue
           <span class="count-chip" id="queueCount">0</span>
         </button>
         <button class="tab-btn" id="tabClipsBtn" onclick="switchTab('clips')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-          Exported Clips
+          Clips
           <span class="count-chip" id="clipsCount">0</span>
         </button>
       </div>
 
       <div id="tabQueue">
         <div class="segment-stack" id="segmentStack">
-          <div class="empty-state">No segments added yet. Use the trimmer below the player to define in/out points.</div>
+          <div class="empty-state">No segments added yet. Use the trimmer on the left to set in/out points.</div>
         </div>
       </div>
 
       <div id="tabClips" style="display:none;">
         <div class="clips-grid" id="clipsGrid">
-          <div class="empty-state">No rendered clips found in output directory.</div>
+          <div class="empty-state">No rendered clips found.</div>
         </div>
       </div>
     </div>

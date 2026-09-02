@@ -1,9 +1,49 @@
-// Clipper Studio - Client Application
+// Clipper Studio — Minimalist Client Application
 const player = document.getElementById('mainPlayer');
 let segments = [];
 let pollTimer = null;
 
-// Player event listeners
+// Theme Switcher (Light / Dark mode)
+function initTheme() {
+  const saved = localStorage.getItem('clipper-theme') || 'dark';
+  applyTheme(saved);
+}
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme') || 'dark';
+  const next = current === 'dark' ? 'light' : 'dark';
+  applyTheme(next);
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('clipper-theme', theme);
+
+  const icon = document.getElementById('themeIcon');
+  if (!icon) return;
+
+  if (theme === 'dark') {
+    // Show Sun icon (switches to light)
+    icon.innerHTML = `
+      <circle cx="12" cy="12" r="5"/>
+      <line x1="12" y1="1" x2="12" y2="3"/>
+      <line x1="12" y1="21" x2="12" y2="23"/>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+      <line x1="1" y1="12" x2="3" y2="12"/>
+      <line x1="21" y1="12" x2="23" y2="12"/>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+    `;
+  } else {
+    // Show Moon icon (switches to dark)
+    icon.innerHTML = `
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+    `;
+  }
+}
+
+// Player time update
 if (player) {
   player.addEventListener('timeupdate', () => {
     const cur = player.currentTime || 0;
@@ -79,7 +119,7 @@ function addSegment() {
   const title = titleEl.value.trim();
 
   if (!start || !end) {
-    alert('Please enter both start and end timestamps.');
+    alert('Please enter start and end timestamps.');
     return;
   }
 
@@ -114,7 +154,7 @@ function renderSegments() {
   if (!list) return;
 
   if (segments.length === 0) {
-    list.innerHTML = '<div class="empty-state">No segments added yet. Use the trimmer below the player to define in/out points.</div>';
+    list.innerHTML = '<div class="empty-state">No segments added yet. Use the trimmer on the left to set in/out points.</div>';
     return;
   }
 
@@ -128,7 +168,7 @@ function renderSegments() {
         <button class="btn btn-secondary btn-sm" onclick="seekToSegment('${s.start}')" title="Play Segment">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
         </button>
-        <button class="btn btn-danger btn-sm" onclick="removeSegment(${i})" title="Remove">
+        <button class="btn btn-secondary btn-sm" onclick="removeSegment(${i})" title="Remove">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
@@ -155,7 +195,7 @@ function switchTab(tab) {
 function loadSourceVideo() {
   const src = document.getElementById('videoSource').value.trim();
   if (!src) {
-    alert('Please provide a local video file path or YouTube URL.');
+    alert('Please enter a local video file path or YouTube URL.');
     return;
   }
 
@@ -178,7 +218,7 @@ async function loadClipsGallery() {
     if (!grid) return;
 
     if (!data || data.length === 0) {
-      grid.innerHTML = '<div class="empty-state">No rendered clips found in output directory.</div>';
+      grid.innerHTML = '<div class="empty-state">No rendered clips found.</div>';
       return;
     }
 
@@ -207,7 +247,7 @@ async function loadClipsGallery() {
       </div>
     `).join('');
   } catch (err) {
-    console.error('Error fetching clips:', err);
+    console.error('Error loading clips:', err);
   }
 }
 
@@ -254,7 +294,7 @@ async function startClippingJob() {
     if (progressCard) progressCard.style.display = 'block';
     startPollingStatus();
   } catch (err) {
-    alert('Network error communicating with server: ' + err);
+    alert('Network error: ' + err);
   }
 }
 
@@ -265,25 +305,22 @@ function startPollingStatus() {
       const res = await fetch('/api/status');
       const st = await res.json();
 
-      const statusDot = document.getElementById('statusDot');
-      const statusText = document.getElementById('statusText');
+      const statusBadge = document.getElementById('statusBadge');
       const progressTitle = document.getElementById('progressTitle');
       const progressPct = document.getElementById('progressPct');
       const progressFill = document.getElementById('progressFill');
 
       if (st.is_running) {
-        if (statusDot) statusDot.className = 'status-dot busy';
-        if (statusText) statusText.textContent = 'Rendering (' + st.progress_pct + '%)';
+        if (statusBadge) statusBadge.textContent = 'RENDERING (' + st.progress_pct + '%)';
         if (progressTitle) progressTitle.textContent = st.current_task || 'Rendering...';
         if (progressPct) progressPct.textContent = st.progress_pct + '%';
         if (progressFill) progressFill.style.width = st.progress_pct + '%';
       } else {
-        if (statusDot) statusDot.className = 'status-dot';
-        if (statusText) statusText.textContent = 'Ready';
+        if (statusBadge) statusBadge.textContent = 'READY';
         if (st.last_error) {
           if (progressTitle) progressTitle.textContent = 'Failed: ' + st.last_error;
         } else if (st.completed) {
-          if (progressTitle) progressTitle.textContent = 'Rendering completed';
+          if (progressTitle) progressTitle.textContent = 'Completed';
           if (progressFill) progressFill.style.width = '100%';
           if (progressPct) progressPct.textContent = '100%';
           switchTab('clips');
@@ -301,7 +338,7 @@ function escapeHtml(str) {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
 
-// Keyboard shortcuts: I = Mark Start, O = Mark End
+// Shortcuts: I = In, O = Out, Space = Play/Pause
 window.addEventListener('keydown', (e) => {
   if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
   if (e.key === 'i' || e.key === 'I') {
@@ -314,5 +351,6 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
-// Initial clips fetch
+// Init on load
+initTheme();
 loadClipsGallery();
