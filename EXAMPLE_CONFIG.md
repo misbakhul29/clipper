@@ -38,7 +38,7 @@ Skenario paling umum untuk mengunduh video YouTube, menganalisis klip menarik me
   "concurrency": 0,
   "auto_detect": "ai",
   "translate_lang": "id",
-  "burn_subtitles": true,
+  "subtitles": true,
   "sub_preset": "hormozi",
   "sub_sdh_mode": "strip",
   "sub_emoji": true,
@@ -76,7 +76,7 @@ Gunakan konfigurasi ini untuk memproses video lokal tanpa subtitle YouTube bawaa
   "cache_dir": "./cache",
   "auto_detect": "ai",
   "translate_lang": "id",
-  "burn_subtitles": true,
+  "subtitles": true,
   "sub_style": "karaoke",
   "sub_font_size": 48,
   "sub_font_path": "./fonts/Montserrat-Bold.ttf",
@@ -106,7 +106,7 @@ Gunakan `batch_list` untuk memproses daftar banyak URL video dari berkas `urls.t
   "shorts_style": "blur",
   "auto_detect": "ai",
   "translate_lang": "id",
-  "burn_subtitles": true,
+  "subtitles": true,
   "sub_style": "karaoke",
   "sub_font_size": 54,
   "ai_config": {
@@ -133,7 +133,7 @@ Gunakan konfigurasi ini jika Anda ingin menentukan timestamp segmen awal dan akh
   "shorts_style": "crop",
   "watermark": "./assets/logo.png",
   "watermark_pos": "top-right",
-  "burn_subtitles": true,
+  "subtitles": true,
   "sub_style": "standard",
   "sub_font_size": 48,
   "segments": [
@@ -217,7 +217,7 @@ Gunakan konfigurasi ini jika Anda ingin menentukan timestamp segmen awal dan akh
 | `font_color` | `string` | `"white"` | Warna font teks overlay |
 | `auto_detect` | `string` | `""` | `"ai"` (AI highlights), `"silence"`, atau `"scene"` |
 | `translate_lang` | `string` | `"id"` | Bahasa sasaran terjemahan judul & subtitle (misal: `"id"`, `"en"`) |
-| `burn_subtitles` | `bool` | `false` | Hardcode subtitle permanen pada video |
+| `subtitles` | `bool` | `false` | Sertakan subtitle pada video klip (alias legacy: `burn_subtitles`) |
 | `sub_style` | `string` | `"karaoke"` | `"karaoke"` (animasi 2 kata kuning) atau `"standard"` |
 | `sub_font_size` | `int` | `48` | Ukuran font subtitle terjemahan |
 | `sub_font_path` | `string` | `""` | Path berkas font kustom (`.ttf`/`.otf`) |

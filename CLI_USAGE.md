@@ -40,7 +40,7 @@ go install .
 | `-face-tracking` | `bool` | `true` | Aktifkan dynamic active speaker / face tracking auto-framing pada mode `smart-crop` |
 | `-pan-duration` | `float` | `0.8` | Durasi transisi pergerakan kamera halus (*camera pan easing*) dalam detik |
 | **Subtitle & Terjemahan** | | | |
-| `-burn-subtitles` / `-subtitles` | `bool` | `false` | Menempelkan (*hardcode*) subtitle terjemahan secara permanen pada video |
+| `-subtitles` / `-subtitle` | `bool` | `false` | Sertakan subtitle pada video klip (alias legacy: `-burn-subtitles`) |
 | `-sub-preset` | `string` | `"hormozi"` | Preset tema subtitle viral: `"hormozi"` (bounce kuning), `"minimal"` / `"devon"` (putih bersih), `"neon"` (cyan glow), `"cinematic"` (soft ivory) |
 | `-sub-sdh-mode` | `string` | `"strip"` | Penanganan silent narrator / teks kurung `[...]`: `"strip"` (bersihkan dari dialog wicara), `"top-box"` (tampilkan banner statis di atas frame), `"keep"` (biarkan apa adanya) |
 | `-sub-emoji` | `bool` | `true` | Injeksi otomatis emoji kontekstual cerdas pada subtitle berdasarkan kata kunci (misal: 💰, 🔥, 💡) |
@@ -116,7 +116,7 @@ clipper -input "https://www.youtube.com/watch?v=xxx" \
   -ai-router gemini \
   -ai-key "AIzaSyC-np-3N_..." \
   -ai-model "gemini-3.6-flash" \
-  -shorts -burn-subtitles -sub-style karaoke
+  -shorts -subtitles -sub-style karaoke
 ```
 
 *Contoh `config.json`:*
@@ -139,7 +139,7 @@ clipper -input "https://www.youtube.com/watch?v=xxx" \
   -auto-detect ai \
   -ai-router deepseek \
   -ai-model "deepseek-chat" \
-  -shorts -burn-subtitles
+  -shorts -subtitles
 ```
 
 *Contoh `config.json`:*
@@ -162,7 +162,7 @@ clipper -input "https://www.youtube.com/watch?v=xxx" \
   -auto-detect ai \
   -ai-router openai \
   -ai-model "gpt-4o-mini" \
-  -shorts -burn-subtitles
+  -shorts -subtitles
 ```
 
 #### 4. OpenRouter (Multi-LLM Aggregator)
@@ -173,7 +173,7 @@ clipper -input "https://www.youtube.com/watch?v=xxx" \
   -auto-detect ai \
   -ai-router openrouter \
   -ai-model "openrouter/free" \
-  -shorts -burn-subtitles
+  -shorts -subtitles
 ```
 
 ---
@@ -186,7 +186,7 @@ clipper -input "https://www.youtube.com/watch?v=t7xtO3KqsmM" \
   -auto-detect ai \
   -shorts \
   -shorts-style blur \
-  -burn-subtitles \
+  -subtitles \
   -sub-style karaoke \
   -sub-font-size 54 \
   -translate-lang id \
@@ -201,7 +201,7 @@ clipper -input "https://www.youtube.com/watch?v=xxx" -auto-detect silence -short
 
 ### 3. Pemrosesan Antrean Banyak Video (Batch Queue)
 ```bash
-clipper -batch-list my_urls.txt -auto-detect ai -shorts -burn-subtitles -sub-style karaoke
+clipper -batch-list my_urls.txt -auto-detect ai -shorts -subtitles -sub-style karaoke
 ```
 
 ### 4. Membersihkan Cache Video & Subtitle
@@ -219,7 +219,7 @@ clipper -input "./my_recording.mp4" \
   -auto-detect ai \
   -use-whisper \
   -shorts \
-  -burn-subtitles \
+  -subtitles \
   -sub-font-path "./fonts/Montserrat-Bold.ttf" \
   -outdir ./whisper_shorts
 ```
@@ -235,7 +235,7 @@ clipper -input "https://www.youtube.com/watch?v=xxx" \
   -auto-detect ai \
   -shorts -shorts-style smart-crop \
   -pan-duration 0.8 \
-  -burn-subtitles -sub-style karaoke \
+  -subtitles -sub-style karaoke \
   -outdir ./smart_crop_shorts
 ```
 
@@ -255,6 +255,6 @@ clipper -input "interview.mp4" \
   -jump-cut-min-silence 1.0 \
   -jump-cut-margin 0.2 \
   -shorts -shorts-style smart-crop \
-  -burn-subtitles -sub-style karaoke \
+  -subtitles -sub-style karaoke \
   -outdir ./snappy_shorts
 ```

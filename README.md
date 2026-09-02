@@ -59,7 +59,7 @@ go build -o bin/clipper .
 clipper -input "https://www.youtube.com/watch?v=xxx" \
   -auto-detect ai \
   -shorts -shorts-style blur \
-  -burn-subtitles -sub-style karaoke -sub-font-size 54 \
+  -subtitles -sub-style karaoke -sub-font-size 54 \
   -translate-lang id \
   -ai-router gemini -ai-key "YOUR_GEMINI_API_KEY" \
   -outdir ./yt_karaoke_shorts
@@ -72,7 +72,7 @@ clipper -input "https://www.youtube.com/watch?v=xxx" -auto-detect silence -short
 
 ### 3. Pemrosesan Antrean Banyak Video (Batch Queue)
 ```bash
-clipper -batch-list my_urls.txt -auto-detect ai -shorts -burn-subtitles -sub-style karaoke
+clipper -batch-list my_urls.txt -auto-detect ai -shorts -subtitles -sub-style karaoke
 ```
 
 ### 4. Bersihkan Cache yang Berumur Lebih dari 7 Hari
@@ -82,7 +82,7 @@ clipper -clean-cache -clean-days 7
 
 ### 5. Local Whisper Speech-to-Text Offline
 ```bash
-clipper -input "my_local_video.mp4" -auto-detect ai -use-whisper -shorts -burn-subtitles -sub-style karaoke
+clipper -input "my_local_video.mp4" -auto-detect ai -use-whisper -shorts -subtitles -sub-style karaoke
 ```
 
 ### 6. Mode Interaktif Wizard

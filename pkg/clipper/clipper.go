@@ -162,7 +162,7 @@ func (c *Clipper) Process(cfg *Config) error {
 	}
 
 	var allSubEntries []transcriber.SubtitleEntry
-	if cfg.BurnSubtitles || cfg.GenerateMetadata {
+	if cfg.Subtitles || cfg.GenerateMetadata {
 		if len(cachedSubEntries) > 0 {
 			allSubEntries = cachedSubEntries
 			fmt.Printf("Reusing %d cached subtitle entries for video clips!\n", len(allSubEntries))
@@ -197,7 +197,7 @@ func (c *Clipper) Process(cfg *Config) error {
 	if cfg.OverlayText != "" {
 		fmt.Printf("Overlay Text: '%s' (pos: %s)\n", cfg.OverlayText, cfg.TextPos)
 	}
-	if cfg.BurnSubtitles {
+	if cfg.Subtitles {
 		preset := cfg.SubPreset
 		if preset == "" {
 			preset = "hormozi"
@@ -373,7 +373,7 @@ func (c *Clipper) Process(cfg *Config) error {
 					}
 				}
 
-				if cfg.BurnSubtitles && len(segSubEntries) > 0 {
+				if cfg.Subtitles && len(segSubEntries) > 0 {
 					sliced := segSubEntries
 					sdhMode := cfg.SubSDHMode
 					if sdhMode == "" {

@@ -66,7 +66,7 @@ type Config struct {
 	FontColor     string              `json:"font_color"`   // Font color for overlay text (e.g. "white", "yellow")
 	AutoDetect    string              `json:"auto_detect"`  // Auto detection mode: "silence", "scene", or "ai"
 	TranslateLang string              `json:"translate_lang"`// Target language for subtitle translation (e.g. "id", "en")
-	BurnSubtitles bool                `json:"burn_subtitles"`// Hardcode/burn-in subtitles directly onto video clips
+	Subtitles     bool                `json:"subtitles"`     // Include captions/subtitles on video clips
 	SubStyle      string              `json:"sub_style"`     // Subtitle style: 'karaoke' or 'standard'
 	SubPreset     string              `json:"sub_preset"`    // Viral subtitle theme preset: 'hormozi', 'minimal', 'devon', 'neon', 'cinematic'
 	SubSDHMode    string              `json:"sub_sdh_mode"`  // Handling for silent narrator & SDH brackets: 'strip', 'top-box', 'keep'
@@ -103,9 +103,10 @@ type Config struct {
 func (c *Config) UnmarshalJSON(data []byte) error {
 	type Alias Config
 	aux := &struct {
-		Subtitles    *bool `json:"subtitles"`
-		Subtitle     *bool `json:"subtitle"`
-		BurnSubtitle *bool `json:"burn_subtitle"`
+		Subtitles     *bool `json:"subtitles"`
+		Subtitle      *bool `json:"subtitle"`
+		BurnSubtitles *bool `json:"burn_subtitles"`
+		BurnSubtitle  *bool `json:"burn_subtitle"`
 		*Alias
 	}{
 		Alias: (*Alias)(c),
@@ -116,11 +117,13 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 	}
 
 	if aux.Subtitles != nil {
-		c.BurnSubtitles = *aux.Subtitles
+		c.Subtitles = *aux.Subtitles
 	} else if aux.Subtitle != nil {
-		c.BurnSubtitles = *aux.Subtitle
+		c.Subtitles = *aux.Subtitle
+	} else if aux.BurnSubtitles != nil {
+		c.Subtitles = *aux.BurnSubtitles
 	} else if aux.BurnSubtitle != nil {
-		c.BurnSubtitles = *aux.BurnSubtitle
+		c.Subtitles = *aux.BurnSubtitle
 	}
 
 	return nil

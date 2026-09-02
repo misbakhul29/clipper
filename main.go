@@ -38,7 +38,7 @@ func main() {
 		fontColor     string
 		autoDetect    string
 		translateLang string
-		burnSubtitles bool
+		subtitles     bool
 		subStyle      string
 		subFontSize   int
 		subFontPath   string
@@ -96,9 +96,9 @@ func main() {
 	flag.StringVar(&fontColor, "font-color", "white", "Font color for text caption ('white', 'yellow', 'cyan', 'red')")
 	flag.StringVar(&autoDetect, "auto-detect", "", "Smart auto-detection mode for segments ('silence', 'scene', or 'ai')")
 	flag.StringVar(&translateLang, "translate-lang", "id", "Target language for AI titles and subtitle translation ('id', 'en', etc.)")
-	flag.BoolVar(&burnSubtitles, "burn-subtitles", false, "Hardcode/burn-in subtitles directly onto video clips")
-	flag.BoolVar(&burnSubtitles, "subtitles", false, "Hardcode/burn-in subtitles directly onto video clips")
-	flag.BoolVar(&burnSubtitles, "subtitle", false, "Hardcode/burn-in subtitles directly onto video clips")
+	flag.BoolVar(&subtitles, "subtitles", false, "Include/burn-in subtitles on video clips (default: false)")
+	flag.BoolVar(&subtitles, "subtitle", false, "Include/burn-in subtitles on video clips")
+	flag.BoolVar(&subtitles, "burn-subtitles", false, "Legacy alias for -subtitles")
 	flag.StringVar(&subStyle, "sub-style", "karaoke", "Subtitle style for burnt-in captions ('karaoke' for TikTok 2-word chunks, or 'standard')")
 	flag.StringVar(&subPreset, "sub-preset", "hormozi", "Viral subtitle theme preset ('hormozi', 'minimal', 'devon', 'neon', 'cinematic')")
 	flag.StringVar(&subSDHMode, "sub-sdh-mode", "strip", "Handling for silent narrator & SDH brackets: 'strip' (clean speech), 'top-box' (dual-layer top banner), 'keep'")
@@ -288,8 +288,8 @@ func main() {
 	if isFlagPassed("translate-lang") {
 		cfg.TranslateLang = translateLang
 	}
-	if isFlagPassed("burn-subtitles") || isFlagPassed("subtitles") || isFlagPassed("subtitle") {
-		cfg.BurnSubtitles = burnSubtitles
+	if isFlagPassed("subtitles") || isFlagPassed("subtitle") || isFlagPassed("burn-subtitles") {
+		cfg.Subtitles = subtitles
 	}
 	if isFlagPassed("sub-style") {
 		cfg.SubStyle = subStyle
@@ -609,7 +609,7 @@ func runInteractiveWizard(defaultFile string) {
 		AutoDetect:    autoDetect,
 		Loudnorm:      loudnormEnabled,
 		JumpCut:       jumpCutEnabled,
-		BurnSubtitles: burnSubs,
+		Subtitles:        burnSubs,
 		SubPreset:     subPresetChoice,
 		SubSDHMode:       subSDHChoice,
 		SubEmoji:         subEmojiChoice,

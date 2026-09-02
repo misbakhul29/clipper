@@ -18,7 +18,7 @@
   "font_color": "white",
   "auto_detect": "ai",
   "translate_lang": "id",
-  "burn_subtitles": true,
+  "subtitles": true,
   "sub_style": "karaoke",
   "sub_font_size": 54,
   "sub_font_path": "",

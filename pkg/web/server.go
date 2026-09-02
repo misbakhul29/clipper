@@ -457,9 +457,9 @@ func (s *Server) handleClip(w http.ResponseWriter, r *http.Request) {
 		cfg.ShortsStyle = req.ShortsStyle
 	}
 	if req.Subtitles != nil {
-		cfg.BurnSubtitles = *req.Subtitles
+		cfg.Subtitles = *req.Subtitles
 	} else if req.BurnSubtitles != nil {
-		cfg.BurnSubtitles = *req.BurnSubtitles
+		cfg.Subtitles = *req.BurnSubtitles
 	}
 	if req.SubPreset != "" {
 		cfg.SubPreset = req.SubPreset

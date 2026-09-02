@@ -93,8 +93,8 @@ func TestConfigSubtitlesJSONParsing(t *testing.T) {
 		if err := json.Unmarshal(jsonData, &cfg); err != nil {
 			t.Fatalf("failed unmarshaling: %v", err)
 		}
-		if !cfg.BurnSubtitles {
-			t.Errorf("expected BurnSubtitles to be true, got false")
+		if !cfg.Subtitles {
+			t.Errorf("expected Subtitles to be true, got false")
 		}
 	})
 
@@ -104,19 +104,19 @@ func TestConfigSubtitlesJSONParsing(t *testing.T) {
 		if err := json.Unmarshal(jsonData, &cfg); err != nil {
 			t.Fatalf("failed unmarshaling: %v", err)
 		}
-		if cfg.BurnSubtitles {
-			t.Errorf("expected BurnSubtitles to be false, got true")
+		if cfg.Subtitles {
+			t.Errorf("expected Subtitles to be false, got true")
 		}
 	})
 
-	t.Run("burn_subtitles true", func(t *testing.T) {
+	t.Run("burn_subtitles true (legacy alias)", func(t *testing.T) {
 		jsonData := []byte(`{"input_file":"video.mp4","burn_subtitles":true}`)
 		var cfg Config
 		if err := json.Unmarshal(jsonData, &cfg); err != nil {
 			t.Fatalf("failed unmarshaling: %v", err)
 		}
-		if !cfg.BurnSubtitles {
-			t.Errorf("expected BurnSubtitles to be true, got false")
+		if !cfg.Subtitles {
+			t.Errorf("expected Subtitles to be true, got false")
 		}
 	})
 }
