@@ -72,8 +72,9 @@ type Config struct {
 	SubEmoji      bool                `json:"sub_emoji"`     // Auto-inject contextual emojis based on keywords into subtitle cues
 	SubFontSize   int                 `json:"sub_font_size"` // Subtitle font size for burnt-in captions (default: 48)
 	SubFontPath   string              `json:"sub_font_path"`// Path to custom font file (.ttf / .otf) for burnt-in captions
-	UseWhisper    bool                `json:"use_whisper"`   // Force local Whisper AI for speech-to-text transcription
-	AIConfig      ai.AIProviderConfig `json:"ai_config"`    // Multi-provider AI config
+	UseWhisper       bool                `json:"use_whisper"`       // Force local Whisper AI for speech-to-text transcription
+	GenerateMetadata bool                `json:"generate_metadata"` // Generate companion social metadata (metadata.json / .txt) for clips
+	AIConfig         ai.AIProviderConfig `json:"ai_config"`        // Multi-provider AI config
 	OpenRouterKey string              `json:"openrouter_key"`// OpenRouter API Key (legacy fallback)
 	AIModel       string              `json:"ai_model"`     // AI model name (legacy fallback)
 	DryRun        bool                `json:"dry_run"`      // Dry-run mode: analyze & preview commands without rendering video

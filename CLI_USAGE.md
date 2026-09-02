@@ -48,6 +48,7 @@ go install .
 | `-use-whisper` | `bool` | `false` | Paksa transkripsi suara offline menggunakan **Whisper AI** lokal |
 | **Kecerdasan Buatan (AI) & Auto-Detect** | | | |
 | `-auto-detect` | `string` | `""` | Mode deteksi segmen otomatis: `"ai"` (AI highlights), `"silence"`, atau `"scene"` |
+| `-metadata` | `bool` | `false` | Menghasilkan berkas pendamping social media metadata (`.json` & `.txt`) untuk mempermudah upload |
 | `-ai-router` | `string` | `"openrouter"` | Provider AI: `"gemini"`, `"deepseek"`, `"openai"`, atau `"openrouter"` |
 | `-ai-key` | `string` | `""` | API Key untuk AI Provider yang dipilih (atau via Environment Variables) |
 | `-openrouter-key` | `string` | `""` | API Key OpenRouter (fallback legacy dari env `$OPENROUTER_API_KEY`) |

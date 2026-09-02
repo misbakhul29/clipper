@@ -1,10 +1,12 @@
 package clipper
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 
@@ -214,12 +216,12 @@ func (c *Clipper) Process(cfg *Config) error {
 	}
 
 	var allSubEntries []transcriber.SubtitleEntry
-	if cfg.BurnSubtitles {
+	if cfg.BurnSubtitles || cfg.GenerateMetadata {
 		if len(cachedSubEntries) > 0 {
 			allSubEntries = cachedSubEntries
-			fmt.Printf("Reusing %d cached subtitle entries for burn-in captions!\n", len(allSubEntries))
+			fmt.Printf("Reusing %d cached subtitle entries for video clips!\n", len(allSubEntries))
 		} else {
-			fmt.Printf("Fetching subtitles for burnt-in captions...\n")
+			fmt.Printf("Fetching subtitles for video clips...\n")
 			lang := cfg.TranslateLang
 			if lang == "" {
 				lang = "id"
@@ -236,7 +238,7 @@ func (c *Clipper) Process(cfg *Config) error {
 			}
 			if err == nil && len(subs) > 0 {
 				allSubEntries = subs
-				fmt.Printf("Loaded %d subtitle entries for burn-in captions!\n", len(allSubEntries))
+				fmt.Printf("Loaded %d subtitle entries for video clips!\n", len(allSubEntries))
 			}
 		}
 	}
@@ -264,6 +266,9 @@ func (c *Clipper) Process(cfg *Config) error {
 		}
 		fmt.Printf("Burnt-in Subtitles: Enabled (Theme: %s, SDH: %s, Emojis: %s)\n", preset, sdh, emojiStatus)
 	}
+	if cfg.GenerateMetadata {
+		fmt.Println("Social Metadata: Enabled (metadata.json & .txt companion)")
+	}
 	if cfg.Loudnorm {
 		targetI := cfg.LoudnormI
 		if targetI == 0 {
@@ -290,6 +295,7 @@ func (c *Clipper) Process(cfg *Config) error {
 
 	type job struct {
 		index       int
+		seg         Segment
 		startSec    float64
 		durationSec float64
 		segPath     string
@@ -300,6 +306,7 @@ func (c *Clipper) Process(cfg *Config) error {
 		index   int
 		segPath string
 		isTemp  bool
+		meta    *ai.SocialMetadata
 		err     error
 	}
 
@@ -330,6 +337,7 @@ func (c *Clipper) Process(cfg *Config) error {
 
 		jobs <- job{
 			index:       i,
+			seg:         seg,
 			startSec:    startSec,
 			durationSec: durationSec,
 			segPath:     segPath,
@@ -398,11 +406,16 @@ func (c *Clipper) Process(cfg *Config) error {
 				}
 
 				subPath := ""
+				var segSubEntries []transcriber.SubtitleEntry
 				if len(allSubEntries) > 0 {
-					sliced := transcriber.SliceSubtitles(allSubEntries, j.startSec, j.startSec+j.durationSec)
+					segSubEntries = transcriber.SliceSubtitles(allSubEntries, j.startSec, j.startSec+j.durationSec)
 					if len(removedGaps) > 0 {
-						sliced = transcriber.AdjustSubtitlesForJumpCuts(sliced, removedGaps)
+						segSubEntries = transcriber.AdjustSubtitlesForJumpCuts(segSubEntries, removedGaps)
 					}
+				}
+
+				if cfg.BurnSubtitles && len(segSubEntries) > 0 {
+					sliced := segSubEntries
 					sdhMode := cfg.SubSDHMode
 					if sdhMode == "" {
 						sdhMode = "strip"
@@ -436,11 +449,6 @@ func (c *Clipper) Process(cfg *Config) error {
 							}
 						}
 
-						sdhMode := cfg.SubSDHMode
-						if sdhMode == "" {
-							sdhMode = "strip"
-						}
-
 						exportErr := transcriber.ExportPresetASS(sliced, tmpSubFile, preset, cfg.SubFontSize, cfg.Shorts, fontName, sdhMode, cfg.SubEmoji)
 						if exportErr == nil {
 							subPath = tmpSubFile
@@ -457,10 +465,50 @@ func (c *Clipper) Process(cfg *Config) error {
 				if subPath != "" {
 					_ = os.Remove(subPath)
 				}
+				var segMeta *ai.SocialMetadata
+				if err == nil && cfg.GenerateMetadata && !j.isTemp {
+					var transcriptBuilder strings.Builder
+					for _, entry := range segSubEntries {
+						cleanText, _ := transcriber.ExtractSDHAndSpeech(entry.Text)
+						if cleanText != "" {
+							transcriptBuilder.WriteString(cleanText)
+							transcriptBuilder.WriteString(" ")
+						}
+					}
+					clipTranscript := strings.TrimSpace(transcriptBuilder.String())
+
+					// Try AI multi-provider if key is configured
+					if cfg.AIConfig.APIKey != "" || os.Getenv("OPENROUTER_API_KEY") != "" || os.Getenv("GEMINI_API_KEY") != "" || os.Getenv("DEEPSEEK_API_KEY") != "" || os.Getenv("OPENAI_API_KEY") != "" {
+						aiMeta, aiErr := ai.GenerateSocialMetadataMultiProvider(clipTranscript, cfg.AIConfig, cfg.TranslateLang, cfg.Shorts)
+						if aiErr == nil && aiMeta != nil {
+							segMeta = aiMeta
+						}
+					}
+					if segMeta == nil {
+						segMeta = ai.GenerateHeuristicSocialMetadata(clipTranscript, j.seg.Title, cfg.TranslateLang, cfg.Shorts)
+					}
+
+					segMeta.SegmentIndex = j.index + 1
+					segMeta.StartTime = j.seg.Start
+					segMeta.EndTime = j.seg.End
+					segMeta.DurationSec = effectiveDuration
+					segMeta.VideoFile = filepath.Base(j.segPath)
+
+					baseWithoutExt := strings.TrimSuffix(j.segPath, filepath.Ext(j.segPath))
+					metaJSONPath := baseWithoutExt + "_metadata.json"
+					metaTXTPath := baseWithoutExt + "_metadata.txt"
+
+					if jsonData, mErr := json.MarshalIndent(segMeta, "", "  "); mErr == nil {
+						_ = os.WriteFile(metaJSONPath, jsonData, 0644)
+					}
+					_ = os.WriteFile(metaTXTPath, []byte(ai.FormatMetadataText(segMeta)), 0644)
+				}
+
 				results <- jobResult{
 					index:   j.index,
 					segPath: j.segPath,
 					isTemp:  j.isTemp,
+					meta:    segMeta,
 					err:     err,
 				}
 			}
@@ -473,6 +521,7 @@ func (c *Clipper) Process(cfg *Config) error {
 	// Collect results in order
 	createdFiles := make([]string, len(cfg.Segments))
 	isTempFiles := make([]bool, len(cfg.Segments))
+	var allMetas []*ai.SocialMetadata
 
 	for r := range results {
 		if r.err != nil {
@@ -481,6 +530,20 @@ func (c *Clipper) Process(cfg *Config) error {
 		}
 		createdFiles[r.index] = r.segPath
 		isTempFiles[r.index] = r.isTemp
+		if r.meta != nil {
+			allMetas = append(allMetas, r.meta)
+		}
+	}
+
+	if cfg.GenerateMetadata && len(allMetas) > 0 {
+		sort.Slice(allMetas, func(i, j int) bool {
+			return allMetas[i].SegmentIndex < allMetas[j].SegmentIndex
+		})
+		summaryFile := filepath.Join(outputDir, "metadata.json")
+		if sumData, mErr := json.MarshalIndent(allMetas, "", "  "); mErr == nil {
+			_ = os.WriteFile(summaryFile, sumData, 0644)
+			fmt.Printf("Generated social metadata companion files in: %s\n", outputDir)
+		}
 	}
 
 	if cfg.Mode == ModeMerge {

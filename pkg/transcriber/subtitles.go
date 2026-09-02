@@ -187,6 +187,19 @@ func FetchSubtitles(inputStr, outputDir, lang string) ([]SubtitleEntry, error) {
 		return ParseVTT(string(data))
 	}
 
+	// Case 1b: Check for local companion .srt or .vtt file next to the video
+	baseNoExt := strings.TrimSuffix(inputStr, filepath.Ext(inputStr))
+	if fileExists(baseNoExt + ".srt") {
+		if data, err := os.ReadFile(baseNoExt + ".srt"); err == nil && len(data) > 0 {
+			return ParseVTT(string(data))
+		}
+	}
+	if fileExists(baseNoExt + ".vtt") {
+		if data, err := os.ReadFile(baseNoExt + ".vtt"); err == nil && len(data) > 0 {
+			return ParseVTT(string(data))
+		}
+	}
+
 	videoCacheDir := downloader.GetVideoCacheDir(outputDir, inputStr)
 	if err := os.MkdirAll(videoCacheDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create subtitle cache dir: %w", err)

@@ -62,6 +62,7 @@ func main() {
 		subPreset     string
 		subSDHMode    string
 		subEmoji      bool
+		metadata      bool
 	)
 
 	flag.StringVar(&configFile, "config", "", "Path to JSON configuration file")
@@ -97,6 +98,7 @@ func main() {
 	flag.IntVar(&subFontSize, "sub-font-size", 48, "Subtitle font size for burnt-in captions")
 	flag.StringVar(&subFontPath, "sub-font-path", "", "Custom font file path (.ttf / .otf) for burnt-in captions")
 	flag.BoolVar(&useWhisper, "use-whisper", false, "Force local Whisper AI for speech-to-text transcription")
+	flag.BoolVar(&metadata, "metadata", false, "Generate companion social media metadata (metadata.json & .txt) for clips")
 	flag.BoolVar(&dryRun, "dry-run", false, "Analyze segments and preview commands without rendering video files")
 	flag.StringVar(&batchList, "batch-list", "", "Path to text file containing video URLs/files (one per line)")
 	flag.BoolVar(&cleanCache, "clean-cache", false, "Clean cache directory and exit")
@@ -182,10 +184,11 @@ func main() {
 			JumpCutMinSil: jumpCutMinSil,
 			JumpCutMargin: jumpCutMargin,
 			JumpCutNoise:  jumpCutNoise,
-			SubPreset:     subPreset,
-			SubSDHMode:    subSDHMode,
-			SubEmoji:      subEmoji,
-			Segments:      parsedSegs,
+			SubPreset:        subPreset,
+			SubSDHMode:       subSDHMode,
+			SubEmoji:         subEmoji,
+			GenerateMetadata: metadata,
+			Segments:         parsedSegs,
 		}
 		if err := saveConfig(initConfig, genCfg); err != nil {
 			fmt.Fprintf(os.Stderr, "Error generating config file '%s': %v\n", initConfig, err)
@@ -291,6 +294,9 @@ func main() {
 	}
 	if isFlagPassed("use-whisper") {
 		cfg.UseWhisper = useWhisper
+	}
+	if isFlagPassed("metadata") {
+		cfg.GenerateMetadata = metadata
 	}
 	if isFlagPassed("dry-run") {
 		cfg.DryRun = dryRun
@@ -516,6 +522,9 @@ func runInteractiveWizard(defaultFile string) {
 		subEmojiChoice = strings.ToLower(emojiChoice) == "y" || strings.ToLower(emojiChoice) == "yes"
 	}
 
+	metaChoice := promptString(reader, "\nGenerate companion social media metadata (metadata.json & .txt)? (y/n)", "y")
+	generateMeta := strings.ToLower(metaChoice) == "y" || strings.ToLower(metaChoice) == "yes"
+
 	quality := promptString(reader, "\nYouTube Video Download Quality (best, 1080p, 720p, 480p, 360p, worst)", "best")
 	autoDetect := promptString(reader, "\nAuto Detection Mode (press Enter to skip, or enter 'silence' / 'scene')", "")
 
@@ -559,10 +568,11 @@ func runInteractiveWizard(defaultFile string) {
 		JumpCut:       jumpCutEnabled,
 		BurnSubtitles: burnSubs,
 		SubPreset:     subPresetChoice,
-		SubSDHMode:    subSDHChoice,
-		SubEmoji:      subEmojiChoice,
-		FaceTracking:  true,
-		Segments:      segments,
+		SubSDHMode:       subSDHChoice,
+		SubEmoji:         subEmojiChoice,
+		GenerateMetadata: generateMeta,
+		FaceTracking:     true,
+		Segments:         segments,
 	}
 
 	if err := saveConfig(fileOut, cfg); err != nil {

@@ -45,6 +45,7 @@ Skenario paling umum untuk mengunduh video YouTube, menganalisis klip menarik me
   "sub_style": "karaoke",
   "sub_font_size": 54,
   "use_whisper": false,
+  "generate_metadata": true,
   "dry_run": false,
   "ai_config": {
     "api_router": "gemini",
