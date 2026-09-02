@@ -150,11 +150,11 @@ func CalculateJumpCutIntervals(totalDuration float64, gaps []SilenceGap, marginS
 		cutEnd := g.EndSec - marginSec
 
 		// If gap is at the very beginning of the clip, don't add margin before speech
-		if g.StartSec <= 0.05 {
+		if g.StartSec <= marginSec {
 			cutStart = 0.0
 		}
-		// If gap is at the very end of the clip, cut until the end
-		if g.EndSec >= totalDuration-0.05 {
+		// If gap extends to the end of the clip, cut until the end
+		if g.EndSec >= totalDuration-marginSec {
 			cutEnd = totalDuration
 		}
 

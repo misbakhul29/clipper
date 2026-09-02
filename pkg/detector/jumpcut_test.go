@@ -126,6 +126,29 @@ func TestCalculateJumpCutIntervals(t *testing.T) {
 			t.Fatalf("expected 2 removed gaps, got %d", len(removed))
 		}
 	})
+
+	t.Run("Silence near clip boundaries within margin", func(t *testing.T) {
+		// Start silence starts at 0.1s (within margin 0.2s)
+		// End silence ends at 9.9s (within margin 0.2s from 10.0s)
+		gaps := []SilenceGap{
+			{StartSec: 0.1, EndSec: 2.0},
+			{StartSec: 8.0, EndSec: 9.9},
+		}
+		kept, removed := CalculateJumpCutIntervals(10.0, gaps, 0.2)
+
+		// Start cut: 0.0 -> 1.8
+		// Middle kept: 1.8 -> 8.2
+		// End cut: 8.2 -> 10.0
+		if len(kept) != 1 {
+			t.Fatalf("expected 1 kept speech interval, got %d", len(kept))
+		}
+		if math.Abs(kept[0].StartSec-1.8) > 1e-3 || math.Abs(kept[0].EndSec-8.2) > 1e-3 {
+			t.Errorf("unexpected kept: %+v", kept[0])
+		}
+		if len(removed) != 2 {
+			t.Fatalf("expected 2 removed gaps, got %d", len(removed))
+		}
+	})
 }
 
 func TestBuildJumpCutFilter(t *testing.T) {
