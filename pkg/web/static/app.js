@@ -1,5 +1,5 @@
-// Clipper Studio — Minimalist Client Application
-const player = document.getElementById('mainPlayer');
+// Clipper Studio — Minimalist Video Studio Application Engine
+let player = document.getElementById('videoPlayer') || document.getElementById('mainPlayer');
 let segments = [];
 let pollTimer = null;
 
@@ -47,16 +47,26 @@ function applyTheme(theme) {
   }
 }
 
-// Player time update
-if (player) {
-  player.addEventListener('timeupdate', () => {
-    const cur = player.currentTime || 0;
-    const dur = player.duration || 0;
-    const el = document.getElementById('playheadTime');
-    if (el) {
-      el.textContent = formatTimecode(cur) + ' / ' + formatTimecode(dur);
-    }
-  });
+// Player time update handler
+function setupPlayerEvents() {
+  if (!player) {
+    player = document.getElementById('videoPlayer') || document.getElementById('mainPlayer');
+  }
+  if (player) {
+    player.addEventListener('timeupdate', () => {
+      const cur = player.currentTime || 0;
+      const dur = player.duration || 0;
+      const el = document.getElementById('timeDisplay') || document.getElementById('playheadTime');
+      if (el) {
+        el.textContent = formatTimecode(cur) + ' / ' + formatTimecode(dur);
+      }
+    });
+
+    player.addEventListener('play', () => {
+      const ph = document.getElementById('playerPlaceholder');
+      if (ph) ph.style.display = 'none';
+    });
+  }
 }
 
 function formatTimecode(sec) {
@@ -88,21 +98,24 @@ function parseSeconds(str) {
 }
 
 function seekRelative(delta) {
+  if (!player) player = document.getElementById('videoPlayer');
   if (player && !isNaN(player.duration)) {
     player.currentTime = Math.max(0, Math.min(player.duration, player.currentTime + delta));
   }
 }
 
 function togglePlay() {
+  if (!player) player = document.getElementById('videoPlayer');
   if (!player) return;
   if (player.paused) {
-    player.play();
+    player.play().catch(() => {});
   } else {
     player.pause();
   }
 }
 
 function markCurrent(target) {
+  if (!player) player = document.getElementById('videoPlayer');
   if (!player) return;
   const cur = player.currentTime || 0;
   const formatted = formatSimple(cur);
@@ -145,9 +158,10 @@ function removeSegment(idx) {
 }
 
 function seekToSegment(startStr) {
+  if (!player) player = document.getElementById('videoPlayer');
   if (!player) return;
   player.currentTime = parseSeconds(startStr);
-  player.play();
+  player.play().catch(() => {});
 }
 
 function renderSegments() {
@@ -158,7 +172,11 @@ function renderSegments() {
   if (!list) return;
 
   if (segments.length === 0) {
-    list.innerHTML = '<div class="empty-state">No segments added yet. Use the trimmer on the left to set in/out points.</div>';
+    list.innerHTML = `
+      <div class="empty-state">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.6;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 14"/></svg>
+        <span>No segments added yet. Use the trimmer or AI detection on the left.</span>
+      </div>`;
     return;
   }
 
@@ -261,7 +279,6 @@ async function runAutoDetect() {
     segments = segments.concat(data.segments);
     renderSegments();
     switchTab('queue');
-    alert(`Generated ${data.count} segment(s) into queue! Review or edit timestamps, then click 'Render Clips' below when ready.`);
   } catch (err) {
     alert('Network error during auto-detection: ' + err);
   } finally {
@@ -287,6 +304,10 @@ function switchTab(tab) {
   }
 }
 
+function loadSource() {
+  loadSourceVideo();
+}
+
 async function loadSourceVideo() {
   const src = document.getElementById('videoSource').value.trim();
   if (!src) {
@@ -299,6 +320,7 @@ async function loadSourceVideo() {
   const sub = document.getElementById('loaderSub');
   const loadBtn = document.getElementById('loadBtn');
   const loadBtnText = document.getElementById('loadBtnText');
+  const ph = document.getElementById('playerPlaceholder');
 
   // Show loading state
   if (loader) loader.style.display = 'flex';
@@ -330,9 +352,11 @@ async function loadSourceVideo() {
       return;
     }
 
+    if (!player) player = document.getElementById('videoPlayer');
     if (player) {
       player.src = data.preview_url;
       player.load();
+      if (ph) ph.style.display = 'none';
       player.oncanplay = () => {
         if (loader) loader.style.display = 'none';
         player.oncanplay = null;
@@ -364,7 +388,11 @@ async function loadClipsGallery() {
     if (!grid) return;
 
     if (!data || data.length === 0) {
-      grid.innerHTML = '<div class="empty-state">No rendered clips found.</div>';
+      grid.innerHTML = `
+        <div class="empty-state">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.6;"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+          <span>No rendered clips found in output directory.</span>
+        </div>`;
       return;
     }
 
@@ -455,88 +483,48 @@ async function startClippingJob() {
     generate_metadata: document.getElementById('cfgMetadata').checked,
     extract_thumbnail: document.getElementById('cfgThumbnail').checked,
     thumbnail_count: 1,
-    hwaccel: document.getElementById('cfgHwaccel').value,
-    output_dir: document.getElementById('cfgOutputDir')?.value.trim() || './clips'
+    hwaccel: document.getElementById('cfgHwaccel')?.value || 'auto',
+    output_dir: document.getElementById('cfgOutputDir')?.value.trim() || './clips',
+    ai_config: {
+      api_key: getGlobalApiKey(),
+      segment_model: getGlobalSegmentModel(),
+      stt_model: getGlobalSTTModel()
+    }
   };
 
+  const card = document.getElementById('progressCard');
+  if (card) card.style.display = 'block';
+
+  const statusPill = document.getElementById('statusPill');
+  if (statusPill) statusPill.classList.add('rendering');
+
   try {
-    const res = await fetch('/api/clip', {
+    const res = await fetch('/api/render', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
     const data = await res.json();
     if (!res.ok) {
-      alert(data.error || 'Failed to start clipping job.');
+      alert(data.error || 'Failed to start rendering.');
+      if (card) card.style.display = 'none';
+      if (statusPill) statusPill.classList.remove('rendering');
       return;
     }
-
-    const progressCard = document.getElementById('progressCard');
-    if (progressCard) progressCard.style.display = 'block';
     startPollingStatus();
   } catch (err) {
-    alert('Network error: ' + err);
+    alert('Failed to start rendering: ' + err);
+    if (card) card.style.display = 'none';
+    if (statusPill) statusPill.classList.remove('rendering');
   }
 }
 
-function exportCurrentConfig() {
-  const input = document.getElementById('videoSource')?.value.trim() || '';
-  const config = {
-    input: input,
-    output_dir: document.getElementById('cfgOutputDir')?.value.trim() || './clips',
-    output: document.getElementById('cfgOutputFile')?.value.trim() || 'merged_highlight.mp4',
-    mode: document.getElementById('cfgMode')?.value || 'split',
-    strategy: document.getElementById('cfgStrategy')?.value || 'fast',
-    shorts: document.getElementById('cfgShorts')?.checked ?? true,
-    shorts_style: document.getElementById('cfgShortsStyle')?.value || 'smart-crop',
-    quality: document.getElementById('cfgQuality')?.value || 'best',
-    subtitles: document.getElementById('cfgBurnSubs')?.checked ?? true,
-    sub_preset: document.getElementById('cfgSubPreset')?.value || 'hormozi',
-    sub_sdh_mode: document.getElementById('cfgSubSDHMode')?.value || 'strip',
-    sub_emoji: true,
-    sub_font_size: 48,
-    loudnorm: document.getElementById('cfgLoudnorm')?.checked ?? true,
-    jump_cut: document.getElementById('cfgJumpCut')?.checked ?? false,
-    jump_cut_min_silence: parseFloat(document.getElementById('cfgJumpCutMinSil')?.value || '1.0'),
-    jump_cut_margin: parseFloat(document.getElementById('cfgJumpCutMargin')?.value || '0.2'),
-    jump_cut_noise: parseFloat(document.getElementById('cfgJumpCutNoise')?.value || '-30'),
-    watermark: document.getElementById('cfgWatermark')?.value.trim() || '',
-    watermark_pos: document.getElementById('cfgWatermarkPos')?.value || 'top-right',
-    overlay_text: document.getElementById('cfgOverlayText')?.value.trim() || '',
-    text_pos: document.getElementById('cfgTextPos')?.value || 'bottom-center',
-    font_color: document.getElementById('cfgFontColor')?.value || 'white',
-    generate_metadata: document.getElementById('cfgMetadata')?.checked ?? true,
-    extract_thumbnail: document.getElementById('cfgThumbnail')?.checked ?? true,
-    thumbnail_count: 1,
-    hwaccel: document.getElementById('cfgHwaccel')?.value || 'auto',
-    show_progress: true,
-    face_tracking: true,
-    ai_config: {
-      api_router: 'gemini',
-      api_key: getGlobalApiKey(),
-      model: getGlobalSegmentModel()
-    },
-    segments: segments
-  };
-
-  const jsonStr = JSON.stringify(config, null, 2);
-  const blob = new Blob([jsonStr], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'config.json';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
 function handleConfigFileImport(event) {
-  const file = event.target.files?.[0];
+  const file = event.target.files[0];
   if (!file) return;
 
   const reader = new FileReader();
-  reader.onload = function(e) {
+  reader.onload = (e) => {
     try {
       const cfg = JSON.parse(e.target.result);
       applyImportedConfig(cfg);
@@ -599,8 +587,46 @@ function applyImportedConfig(cfg) {
     localStorage.setItem('clipper_gemini_api_key', cfg.ai_config.api_key);
     initGlobalAISettings();
   }
+}
 
-  alert(`✓ Configuration successfully loaded (${segments.length} segments)`);
+function exportCurrentConfig() {
+  const currentConfig = {
+    input_file: document.getElementById('videoSource')?.value.trim() || '',
+    output_dir: document.getElementById('cfgOutputDir')?.value.trim() || './clips',
+    output: document.getElementById('cfgOutputFile')?.value.trim() || 'merged_highlight.mp4',
+    mode: document.getElementById('cfgMode')?.value || 'split',
+    strategy: document.getElementById('cfgStrategy')?.value || 'fast',
+    shorts: document.getElementById('cfgShorts')?.checked || false,
+    shorts_style: document.getElementById('cfgShortsStyle')?.value || 'smart-crop',
+    quality: document.getElementById('cfgQuality')?.value || 'best',
+    subtitles: document.getElementById('cfgBurnSubs')?.checked || false,
+    sub_preset: document.getElementById('cfgSubPreset')?.value || 'hormozi',
+    sub_sdh_mode: document.getElementById('cfgSubSDHMode')?.value || 'strip',
+    sub_emoji: true,
+    loudnorm: document.getElementById('cfgLoudnorm')?.checked || false,
+    jump_cut: document.getElementById('cfgJumpCut')?.checked || false,
+    jump_cut_min_silence: parseFloat(document.getElementById('cfgJumpCutMinSil')?.value || '1.0'),
+    jump_cut_margin: parseFloat(document.getElementById('cfgJumpCutMargin')?.value || '0.2'),
+    jump_cut_noise: parseFloat(document.getElementById('cfgJumpCutNoise')?.value || '-30'),
+    watermark: document.getElementById('cfgWatermark')?.value.trim() || '',
+    watermark_pos: document.getElementById('cfgWatermarkPos')?.value || 'top-right',
+    overlay_text: document.getElementById('cfgOverlayText')?.value.trim() || '',
+    text_pos: document.getElementById('cfgTextPos')?.value || 'bottom-center',
+    font_color: document.getElementById('cfgFontColor')?.value || 'white',
+    generate_metadata: document.getElementById('cfgMetadata')?.checked || false,
+    extract_thumbnail: document.getElementById('cfgThumbnail')?.checked || false,
+    thumbnail_count: 1,
+    hwaccel: document.getElementById('cfgHwaccel')?.value || 'auto',
+    segments: segments
+  };
+
+  const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(currentConfig, null, 2));
+  const dlAnchor = document.createElement('a');
+  dlAnchor.setAttribute("href", dataStr);
+  dlAnchor.setAttribute("download", "config.json");
+  document.body.appendChild(dlAnchor);
+  dlAnchor.click();
+  dlAnchor.remove();
 }
 
 function startPollingStatus() {
@@ -611,17 +637,20 @@ function startPollingStatus() {
       const st = await res.json();
 
       const statusBadge = document.getElementById('statusBadge');
+      const statusPill = document.getElementById('statusPill');
       const progressTitle = document.getElementById('progressTitle');
       const progressPct = document.getElementById('progressPct');
       const progressFill = document.getElementById('progressFill');
 
       if (st.is_running) {
         if (statusBadge) statusBadge.textContent = 'RENDERING (' + st.progress_pct + '%)';
+        if (statusPill) statusPill.classList.add('rendering');
         if (progressTitle) progressTitle.textContent = st.current_task || 'Rendering...';
         if (progressPct) progressPct.textContent = st.progress_pct + '%';
         if (progressFill) progressFill.style.width = st.progress_pct + '%';
       } else {
         if (statusBadge) statusBadge.textContent = 'READY';
+        if (statusPill) statusPill.classList.remove('rendering');
         if (st.last_error) {
           if (progressTitle) progressTitle.textContent = 'Failed: ' + st.last_error;
         } else if (st.completed) {
@@ -708,7 +737,7 @@ function renderSubtitleCues() {
       <span style="font-size:11px; color:var(--text-muted);">&rarr;</span>
       <input type="number" step="0.1" min="0" class="text-input sub-cue-time" value="${c.end}" title="End (sec)" onchange="updateCueTime(${i}, 'end', this.value)" />
       <input type="text" class="text-input sub-cue-text" value="${escapeHtml(c.text || '')}" placeholder="Caption line text..." oninput="updateCueText(${i}, this.value)" />
-      <button class="btn btn-secondary btn-icon" style="height:26px; width:26px; padding:0;" onclick="deleteSubtitleCue(${i})" title="Delete Cue">
+      <button class="btn btn-secondary btn-icon" style="height:28px; width:28px; padding:0;" onclick="deleteSubtitleCue(${i})" title="Delete Cue">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
@@ -904,8 +933,15 @@ function closeGlobalAISettings() {
 }
 
 // Init on load
+document.addEventListener('DOMContentLoaded', () => {
+  initTheme();
+  initGlobalAISettings();
+  setupPlayerEvents();
+  loadClipsGallery();
+});
+
+// Run immediate fallback if DOM already ready
 initTheme();
 initGlobalAISettings();
+setupPlayerEvents();
 loadClipsGallery();
-
-
