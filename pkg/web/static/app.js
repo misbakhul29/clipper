@@ -878,10 +878,21 @@ function saveSubtitleStudio() {
 }
 
 // Global AI Settings State & LocalStorage Persistence
+function sanitizeGeminiModelName(model, isSTT) {
+  if (!model || model.startsWith('gemini-3') || model === 'default') {
+    return 'gemini-2.5-flash';
+  }
+  return model;
+}
+
 function initGlobalAISettings() {
   const savedKey = localStorage.getItem('clipper_gemini_api_key') || '';
-  const savedSegModel = localStorage.getItem('clipper_ai_segment_model') || 'gemini-3.8-flash';
-  const savedSTTModel = localStorage.getItem('clipper_ai_stt_model') || 'gemini-3.5-transcribe';
+  let savedSegModel = sanitizeGeminiModelName(localStorage.getItem('clipper_ai_segment_model'), false);
+  let savedSTTModel = sanitizeGeminiModelName(localStorage.getItem('clipper_ai_stt_model'), true);
+
+  // Migrate in localStorage
+  localStorage.setItem('clipper_ai_segment_model', savedSegModel);
+  localStorage.setItem('clipper_ai_stt_model', savedSTTModel);
 
   const keyEl = document.getElementById('globalAIApiKey');
   const segEl = document.getElementById('globalAISegmentModel');
@@ -897,17 +908,19 @@ function getGlobalApiKey() {
 }
 
 function getGlobalSegmentModel() {
-  return document.getElementById('globalAISegmentModel')?.value || localStorage.getItem('clipper_ai_segment_model') || 'gemini-3.8-flash';
+  const m = document.getElementById('globalAISegmentModel')?.value || localStorage.getItem('clipper_ai_segment_model') || 'gemini-2.5-flash';
+  return sanitizeGeminiModelName(m, false);
 }
 
 function getGlobalSTTModel() {
-  return document.getElementById('globalAISTTModel')?.value || localStorage.getItem('clipper_ai_stt_model') || 'gemini-3.5-transcribe';
+  const m = document.getElementById('globalAISTTModel')?.value || localStorage.getItem('clipper_ai_stt_model') || 'gemini-2.5-flash';
+  return sanitizeGeminiModelName(m, true);
 }
 
 function saveGlobalAISettings() {
   const key = document.getElementById('globalAIApiKey')?.value.trim() || '';
-  const segModel = document.getElementById('globalAISegmentModel')?.value || 'gemini-3.8-flash';
-  const sttModel = document.getElementById('globalAISTTModel')?.value || 'gemini-3.5-transcribe';
+  const segModel = sanitizeGeminiModelName(document.getElementById('globalAISegmentModel')?.value, false);
+  const sttModel = sanitizeGeminiModelName(document.getElementById('globalAISTTModel')?.value, true);
 
   localStorage.setItem('clipper_gemini_api_key', key);
   localStorage.setItem('clipper_ai_segment_model', segModel);
@@ -915,7 +928,7 @@ function saveGlobalAISettings() {
 
   const statusEl = document.getElementById('aiModalStatus');
   if (statusEl) {
-    statusEl.textContent = key ? 'API key saved locally ✓' : 'Ready (No API key set)';
+    statusEl.textContent = key ? 'API key & model saved locally ✓' : 'Ready (No API key set)';
   }
 }
 

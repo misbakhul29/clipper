@@ -57,8 +57,17 @@ func AnalyzeHighlightsWithoutSubtitles(videoTitle string, durationSec float64, a
 	var err error
 
 	if router == "gemini" {
-		fullPrompt := fmt.Sprintf("%s\n\n%s", sysPrompt, userPrompt)
-		content, err = callGeminiGenerate(aiCfg.APIKey, aiCfg.Model, fullPrompt)
+		resolvedKey, resolvedModel, rErr := resolveAPIKeyAndModel(aiCfg.APIKey, "GEMINI_API_KEY", aiCfg.Model, "gemini-2.5-flash", "Gemini")
+		if rErr == nil {
+			fullPrompt := fmt.Sprintf("%s\n\n%s", sysPrompt, userPrompt)
+			content, err = callGeminiGenerate(resolvedKey, resolvedModel, fullPrompt)
+			if err != nil {
+				fmt.Printf("[AI ERROR] Gemini highlight analysis failed: %v\n", err)
+			}
+		} else {
+			err = rErr
+			fmt.Printf("[AI WARN] Gemini key resolution: %v\n", err)
+		}
 	} else if router == "deepseek" {
 		resolvedKey, resolvedModel, rErr := resolveAPIKeyAndModel(aiCfg.APIKey, "DEEPSEEK_API_KEY", aiCfg.Model, "deepseek-chat", "DeepSeek")
 		if rErr == nil {
@@ -86,10 +95,13 @@ func AnalyzeHighlightsWithoutSubtitles(videoTitle string, durationSec float64, a
 	if err == nil && content != "" {
 		if highlights, pErr := ParseAIHighlightsJSON(content); pErr == nil && len(highlights) > 0 {
 			return highlights, nil
+		} else if pErr != nil {
+			fmt.Printf("[AI WARN] Failed to parse AI highlights JSON: %v. Content: %s\n", pErr, content)
 		}
 	}
 
 	// Graceful fallback: smartly distributed highlights across the video's actual duration (always succeeds!)
+	fmt.Printf("[AI INFO] Falling back to heuristic highlight distribution across %.1fs video duration.\n", durationSec)
 	return GenerateHeuristicHighlights(durationSec, aiCfg.IsShorts, aiCfg.TargetDuration, targetLang), nil
 }
 

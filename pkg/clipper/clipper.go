@@ -674,7 +674,9 @@ func (c *Clipper) DetectSegmentsWithSubs(cfg *Config, originalInput string) ([]S
 		if len(subEntries) > 0 {
 			cachedSubs = subEntries
 			highlights, err := ai.AnalyzeHighlightsMultiProvider(subEntries, cfg.AIConfig, lang)
-			if err == nil && len(highlights) > 0 {
+			if err != nil {
+				fmt.Printf("[AI WARN] Transcript analysis failed: %v. Falling back to metadata...\n", err)
+			} else if len(highlights) > 0 {
 				for _, h := range highlights {
 					segments = append(segments, Segment{
 						Start: h.Start,

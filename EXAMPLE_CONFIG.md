@@ -54,7 +54,7 @@ Skenario paling umum untuk mengunduh video YouTube, menganalisis klip menarik me
   "ai_config": {
     "api_router": "gemini",
     "api_key": "YOUR_GEMINI_API_KEY",
-    "model": "gemini-3.6-flash"
+    "model": "gemini-2.5-flash"
   }
 }
 ```
@@ -112,7 +112,7 @@ Gunakan `batch_list` untuk memproses daftar banyak URL video dari berkas `urls.t
   "ai_config": {
     "api_router": "gemini",
     "api_key": "YOUR_GEMINI_API_KEY",
-    "model": "gemini-3.6-flash"
+    "model": "gemini-2.5-flash"
   }
 }
 ```
