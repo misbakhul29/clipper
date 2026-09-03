@@ -3,7 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Clipper — Minimalist Video Studio</title>
+  <title>Clipper — Minimalist AI Video Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script>
     (function() {
       try {
@@ -17,29 +20,43 @@
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
+  <!-- Global Header -->
   <header>
     <div class="brand">
-      <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-      </svg>
-      <span class="brand-title">CLIPPER</span>
-      <span class="badge" id="portBadge">:8000</span>
+      <div class="brand-icon-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+        </svg>
+      </div>
+      <div class="brand-info">
+        <span class="brand-title">CLIPPER</span>
+        <span class="port-badge" id="portBadge">:8000</span>
+      </div>
     </div>
+
     <div class="header-right">
       <input type="file" id="configFileInput" accept=".json" style="display:none;" onchange="handleConfigFileImport(event)" />
-      <button class="btn btn-secondary btn-sm" onclick="document.getElementById('configFileInput').click()" title="Import existing config.json" style="height:28px; font-size:11px; display:inline-flex; align-items:center; gap:4px;">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px; height:12px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      
+      <button class="btn btn-secondary btn-sm" onclick="document.getElementById('configFileInput').click()" title="Import existing config.json">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         <span>Import</span>
       </button>
-      <button class="btn btn-secondary btn-sm" onclick="exportCurrentConfig()" title="Export current setup as config.json" style="height:28px; font-size:11px; display:inline-flex; align-items:center; gap:4px;">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px; height:12px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+
+      <button class="btn btn-secondary btn-sm" onclick="exportCurrentConfig()" title="Export current setup as config.json">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
         <span>Export</span>
       </button>
-      <button class="btn btn-secondary btn-sm" id="globalAISettingsBtn" onclick="toggleGlobalAISettings()" title="Global AI Configuration" style="height:28px; font-size:11px; display:inline-flex; align-items:center; gap:4px;">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px; height:12px;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-        <span>AI Settings</span>
+
+      <button class="btn btn-secondary btn-sm" id="globalAISettingsBtn" onclick="toggleGlobalAISettings()" title="Global AI Configuration">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span>AI Config</span>
       </button>
-      <div class="badge" id="statusBadge">READY</div>
+
+      <div class="status-pill" id="statusPill">
+        <span class="status-dot"></span>
+        <span id="statusBadge">READY</span>
+      </div>
+
       <button class="theme-toggle-btn" id="themeToggle" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
         <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <!-- Sun icon (shown in dark mode) -->
@@ -61,18 +78,22 @@
     <!-- Left Column: Source, Player, Trimmer, Settings -->
     <div class="panel">
       <div class="panel-header">
-        <span class="panel-title">Source & Player</span>
+        <span class="panel-title">Source & Video Player</span>
       </div>
 
       <!-- Source URL Input -->
       <div class="field-row">
-        <input type="text" id="videoSource" class="text-input" placeholder="Video path (e.g. video.mp4) or YouTube URL" />
-        <button class="btn btn-primary" id="loadSourceBtn" onclick="loadSource()">Load</button>
+        <input type="text" id="videoSource" class="text-input" placeholder="Enter video path (e.g. video.mp4) or YouTube URL..." />
+        <button class="btn btn-primary" id="loadBtn" onclick="loadSource()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          <span id="loadBtnText">Load</span>
+        </button>
       </div>
 
-      <!-- Player Canvas / Area -->
-      <div class="player-container">
+      <!-- Player Stage / Area -->
+      <div class="player-container" id="playerStage">
         <video id="videoPlayer" playsinline></video>
+        
         <div id="playerPlaceholder" class="player-placeholder">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
             <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/>
@@ -84,30 +105,43 @@
             <line x1="17" y1="17" x2="22" y2="17"/>
             <line x1="17" y1="7" x2="22" y2="7"/>
           </svg>
-          <span>Load a video file or YouTube URL to begin</span>
+          <span>Load a video file or YouTube URL above to preview & cut clips</span>
+        </div>
+
+        <div id="playerLoader" class="player-loader">
+          <div class="spinner"></div>
+          <div class="loader-title" id="loaderTitle">Preparing video...</div>
+          <div class="loader-sub" id="loaderSub">Loading local video file into browser preview player.</div>
         </div>
       </div>
 
-      <!-- Player Controls -->
+      <!-- Transport Scrubber Controls -->
       <div class="player-controls">
         <div class="btn-group">
-          <button class="btn btn-secondary btn-icon" onclick="seekRelative(-1)" title="Seek -1s">
+          <button class="btn btn-secondary btn-icon" onclick="seekRelative(-5)" title="Seek -5s">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 17l-5-5 5-5M18 17l-5-5 5-5"/></svg>
           </button>
-          <button class="btn btn-secondary btn-icon" onclick="seekRelative(-0.1)" title="Seek -0.1s">
+          <button class="btn btn-secondary btn-icon" onclick="seekRelative(-1)" title="Seek -1s">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
           </button>
-          <button class="btn btn-secondary btn-icon" onclick="seekRelative(0.1)" title="Seek +0.1s">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+          <button class="btn btn-secondary btn-icon" onclick="togglePlay()" title="Play/Pause (Space)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
           </button>
           <button class="btn btn-secondary btn-icon" onclick="seekRelative(1)" title="Seek +1s">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+          </button>
+          <button class="btn btn-secondary btn-icon" onclick="seekRelative(5)" title="Seek +5s">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 17l5-5-5-5M6 17l5-5-5-5"/></svg>
           </button>
         </div>
         <div class="time-display" id="timeDisplay">00:00.00 / 00:00.00</div>
+        <div class="btn-group">
+          <button class="btn btn-secondary btn-sm" onclick="markCurrent('start')" title="Set Current Time as Start (I)">[Set In]</button>
+          <button class="btn btn-secondary btn-sm" onclick="markCurrent('end')" title="Set Current Time as End (O)">[Set Out]</button>
+        </div>
       </div>
 
-      <!-- Trimmer Controls -->
+      <!-- Trimmer In/Out Section -->
       <div class="trimmer-section">
         <div class="trimmer-grid">
           <div class="field-group">
@@ -125,11 +159,11 @@
             <input type="text" id="trimEnd" class="text-input" value="00:30" placeholder="00:30" />
           </div>
           <div class="field-group">
-            <label class="field-label">Title (Optional)</label>
+            <label class="field-label">Clip Title (Optional)</label>
             <input type="text" id="trimTitle" class="text-input" placeholder="e.g. Highlight Hook" />
           </div>
           <div class="field-group">
-            <button class="btn btn-secondary" onclick="addSegment()">
+            <button class="btn btn-secondary" onclick="addSegment()" style="height:38px;">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               Add
             </button>
@@ -137,7 +171,7 @@
         </div>
 
         <div class="ai-divider">
-          <span>OR AUTO-DETECT / AI</span>
+          <span>✨ AI AUTO-HIGHLIGHTS & DETECTION</span>
         </div>
 
         <!-- AI & Auto-Detect Controls -->
@@ -145,9 +179,9 @@
           <div class="auto-detect-row">
             <div class="field-group" style="flex:1;">
               <select id="autoDetectMode" class="select-box" onchange="onAutoDetectModeChange()">
-                <option value="ai" selected>AI Smart Highlights</option>
-                <option value="silence">Silence Voice Detection</option>
-                <option value="scene">Scene Transition Detection</option>
+                <option value="ai" selected>🤖 AI Smart Highlights (Gemini)</option>
+                <option value="silence">🎙️ Silence Voice Detection</option>
+                <option value="scene">🎬 Scene Transition Detection</option>
               </select>
             </div>
             <div class="field-group" style="width:130px;">
@@ -159,12 +193,9 @@
                 <option value="300">~5 Mins</option>
               </select>
             </div>
-            <button class="btn btn-secondary" id="autoDetectBtn" onclick="runAutoDetect()">
+            <button class="btn btn-ai" id="autoDetectBtn" onclick="runAutoDetect()">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
               <span id="autoDetectBtnText">Generate with AI</span>
-            </button>
-            <button class="btn btn-secondary btn-icon" id="aiConfigToggle" onclick="toggleGlobalAISettings()" title="Configure AI Models & API Key">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
             </button>
           </div>
         </div>
@@ -172,9 +203,9 @@
 
       <!-- Settings -->
       <div class="config-group">
-        <div class="panel-header" style="justify-content:space-between;">
-          <span class="panel-title">Render Settings</span>
-          <button class="set-link" onclick="toggleAdvancedRenderOptions()" id="advOptionsToggle">[+ Advanced Options]</button>
+        <div class="panel-header" style="margin-bottom:10px;">
+          <span class="panel-title">Render Configuration</span>
+          <button class="set-link" onclick="toggleAdvancedRenderOptions()" id="advOptionsToggle" style="font-size:11.5px;">[+ Advanced Options]</button>
         </div>
 
         <div class="config-grid">
@@ -275,7 +306,7 @@
         </div>
 
         <!-- Collapsible Advanced Render Options Drawer -->
-        <div id="advRenderDrawer" class="ai-drawer" style="display:none; margin-top:10px;">
+        <div id="advRenderDrawer" class="ai-drawer" style="display:none; margin-top:12px;">
           <div class="ai-drawer-grid">
             <div class="field-group">
               <label class="field-label">Merged Output Filename (for Merge Mode)</label>
@@ -342,7 +373,7 @@
 
       <button class="btn btn-primary render-btn" onclick="startClippingJob()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
-        Render Clips
+        Render Video Clips
       </button>
 
       <!-- Progress -->
@@ -361,24 +392,30 @@
     <div class="panel">
       <div class="tabs">
         <button class="tab-btn active" id="tabQueueBtn" onclick="switchTab('queue')">
-          Queue
+          <span>Clip Queue</span>
           <span class="count-chip" id="queueCount">0</span>
         </button>
         <button class="tab-btn" id="tabClipsBtn" onclick="switchTab('clips')">
-          Clips
+          <span>Rendered Clips</span>
           <span class="count-chip" id="clipsCount">0</span>
         </button>
       </div>
 
       <div id="tabQueue">
         <div class="segment-stack" id="segmentStack">
-          <div class="empty-state">No segments added yet. Use the trimmer on the left to set in/out points.</div>
+          <div class="empty-state">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.6;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 14"/></svg>
+            <span>No segments added yet. Use the trimmer or AI detection on the left.</span>
+          </div>
         </div>
       </div>
 
       <div id="tabClips" style="display:none;">
         <div class="clips-grid" id="clipsGrid">
-          <div class="empty-state">No rendered clips found.</div>
+          <div class="empty-state">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.6;"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+            <span>No rendered clips found in output directory.</span>
+          </div>
         </div>
       </div>
     </div>
@@ -411,7 +448,7 @@
         </div>
 
         <div class="sub-toolbar-group">
-          <select id="subTranslateLang" class="select-box" style="height:28px; font-size:11px; width:90px;">
+          <select id="subTranslateLang" class="select-box" style="height:30px; font-size:11.5px; width:100px;">
             <option value="id" selected>Indonesian</option>
             <option value="en">English</option>
             <option value="es">Spanish</option>
@@ -438,7 +475,7 @@
       <div class="sub-style-bar">
         <div class="sub-style-item">
           <label>Position</label>
-          <select id="subClipPosition" class="select-box" style="height:28px; font-size:11px;">
+          <select id="subClipPosition" class="select-box" style="height:30px; font-size:11.5px;">
             <option value="bottom" selected>Bottom (Standard)</option>
             <option value="middle">Middle (Center View)</option>
             <option value="top">Top (Head Title)</option>
@@ -446,7 +483,7 @@
         </div>
         <div class="sub-style-item">
           <label>Theme Preset</label>
-          <select id="subClipPreset" class="select-box" style="height:28px; font-size:11px;">
+          <select id="subClipPreset" class="select-box" style="height:30px; font-size:11.5px;">
             <option value="hormozi" selected>Hormozi Kinetic</option>
             <option value="minimal">Minimal Clean</option>
             <option value="neon">Neon Glow</option>
@@ -455,7 +492,7 @@
         </div>
         <div class="sub-style-item">
           <label>Font Size</label>
-          <input type="number" id="subClipFontSize" class="text-input" style="height:28px; font-size:11px; width:65px;" value="48" min="20" max="100" />
+          <input type="number" id="subClipFontSize" class="text-input" style="height:30px; font-size:11.5px; width:70px;" value="48" min="20" max="100" />
         </div>
       </div>
 
@@ -481,30 +518,32 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
-      <div style="padding:16px 18px; display:flex; flex-direction:column; gap:12px;">
+      <div style="padding:18px 20px; display:flex; flex-direction:column; gap:14px;">
         <div class="field-group">
           <label class="field-label">Gemini API Key</label>
           <input type="password" id="globalAIApiKey" class="text-input" placeholder="AIzaSy... (stored locally in browser)" oninput="saveGlobalAISettings()" />
-          <span style="font-size:10.5px; color:var(--text-muted); margin-top:2px;">Get a free API key at <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--text-main); text-decoration:underline;">Google AI Studio</a>.</span>
+          <span style="font-size:11px; color:var(--text-muted); margin-top:2px;">Get a free API key at <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--accent-primary); text-decoration:underline;">Google AI Studio</a>.</span>
         </div>
 
         <div class="field-group">
           <label class="field-label">Segment Generation Model (Highlights)</label>
           <select id="globalAISegmentModel" class="select-box" onchange="saveGlobalAISettings()">
-            <option value="gemini-3.8-flash" selected>gemini-3.8-flash (Recommended)</option>
-            <option value="gemini-3.7-flash">gemini-3.7-flash</option>
-            <option value="gemini-3.6-flash">gemini-3.6-flash</option>
-            <option value="gemini-2.5-pro">gemini-2.5-pro</option>
-            <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</option>
+            <option value="gemini-3.6-flash" selected>gemini-3.6-flash (Recommended)</option>
+            <option value="gemini-2.5-flash">gemini-2.5-flash (Fast & Smart)</option>
+            <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+            <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+            <option value="gemini-2.5-pro">gemini-2.5-pro (High Reasoning)</option>
+            <option value="gemini-1.5-pro">gemini-1.5-pro</option>
           </select>
         </div>
 
         <div class="field-group">
           <label class="field-label">Speech-to-Text Model (Audio Transcription)</label>
           <select id="globalAISTTModel" class="select-box" onchange="saveGlobalAISettings()">
-            <option value="gemini-3.5-transcribe" selected>gemini-3.5-transcribe (Recommended)</option>
-            <option value="gemini-3.5-live-translate-preview">gemini-3.5-live-translate-preview</option>
-            <option value="gemini-3.5-transcribe-live">gemini-3.5-transcribe-live</option>
+            <option value="gemini-3.6-flash" selected>gemini-3.6-flash (Recommended)</option>
+            <option value="gemini-2.5-flash">gemini-2.5-flash (Multimodal Audio)</option>
+            <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+            <option value="gemini-1.5-flash">gemini-1.5-flash</option>
           </select>
         </div>
       </div>

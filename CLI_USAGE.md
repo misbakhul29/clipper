@@ -107,7 +107,7 @@ Contoh berkas konfigurasi lengkap:
   "ai_config": {
     "api_router": "gemini",
     "api_key": "YOUR_GEMINI_API_KEY",
-    "model": "gemini-3.8-flash"
+    "model": "gemini-2.5-flash"
   },
   "segments": [
     {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/misbakhul29/clipper/pkg/transcriber"
@@ -45,8 +46,18 @@ type GeminiError struct {
 	Status  string `json:"status"`
 }
 
+// NormalizeGeminiModel sanitizes or aliases outdated/invalid model names to supported Google Gemini models.
+func NormalizeGeminiModel(model string) string {
+	m := strings.TrimSpace(model)
+	if m == "" || m == "default" || strings.EqualFold(m, "gemini-3.8-flash") || strings.EqualFold(m, "gemini-3.5-transcribe") {
+		return "gemini-3.6-flash"
+	}
+	return m
+}
+
 // callGeminiGenerate sends text generation prompt to Google Gemini REST API.
 func callGeminiGenerate(apiKey, model, prompt string) (string, error) {
+	model = NormalizeGeminiModel(model)
 	reqBody := GeminiRequest{
 		Contents: []GeminiContent{
 			{
@@ -83,7 +94,9 @@ func callGeminiGenerate(apiKey, model, prompt string) (string, error) {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("Gemini API returned HTTP status %d: %s", resp.StatusCode, string(respBytes))
+		errResp := fmt.Sprintf("Gemini API returned HTTP status %d: %s", resp.StatusCode, string(respBytes))
+		fmt.Printf("[AI ERROR] %s (model: %s)\n", errResp, model)
+		return "", fmt.Errorf("%s", errResp)
 	}
 
 	var geminiResp GeminiResponse
@@ -104,6 +117,7 @@ func callGeminiGenerate(apiKey, model, prompt string) (string, error) {
 
 // callGeminiAudioSTT sends audio bytes and transcription prompt to Google Gemini Multimodal REST API.
 func callGeminiAudioSTT(apiKey, model, prompt string, mimeType string, audioBase64 string) (string, error) {
+	model = NormalizeGeminiModel(model)
 	reqBody := GeminiRequest{
 		Contents: []GeminiContent{
 			{
@@ -148,7 +162,9 @@ func callGeminiAudioSTT(apiKey, model, prompt string, mimeType string, audioBase
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("Gemini API returned HTTP status %d: %s", resp.StatusCode, string(respBytes))
+		errResp := fmt.Sprintf("Gemini API returned HTTP status %d: %s", resp.StatusCode, string(respBytes))
+		fmt.Printf("[AI ERROR] %s (model: %s)\n", errResp, model)
+		return "", fmt.Errorf("%s", errResp)
 	}
 
 	var geminiResp GeminiResponse
@@ -169,7 +185,7 @@ func callGeminiAudioSTT(apiKey, model, prompt string, mimeType string, audioBase
 
 // TranscribeAudioGemini transcribes audio data to time-aligned subtitle cues using Gemini Audio API.
 func TranscribeAudioGemini(apiKey, model, targetLang string, audioBytes []byte, mimeType string) ([]AudioSubtitleCue, error) {
-	resolvedKey, resolvedModel, err := resolveAPIKeyAndModel(apiKey, "GEMINI_API_KEY", model, "gemini-3.5-transcribe", "Gemini")
+	resolvedKey, resolvedModel, err := resolveAPIKeyAndModel(apiKey, "GEMINI_API_KEY", model, "gemini-3.6-flash", "Gemini")
 	if err != nil {
 		return nil, err
 	}
@@ -192,7 +208,7 @@ func TranscribeAudioGemini(apiKey, model, targetLang string, audioBytes []byte, 
 
 // AnalyzeHighlightsGemini sends transcript entries to Google Gemini REST API.
 func AnalyzeHighlightsGemini(entries []transcriber.SubtitleEntry, apiKey, model, targetLang string, isShorts bool) ([]AIHighlight, error) {
-	resolvedKey, resolvedModel, err := resolveAPIKeyAndModel(apiKey, "GEMINI_API_KEY", model, "gemini-3.8-flash", "Gemini")
+	resolvedKey, resolvedModel, err := resolveAPIKeyAndModel(apiKey, "GEMINI_API_KEY", model, "gemini-3.6-flash", "Gemini")
 	if err != nil {
 		return nil, err
 	}
@@ -210,7 +226,7 @@ func TranslateSubtitlesGemini(entries []transcriber.SubtitleEntry, apiKey, model
 	if len(entries) == 0 || targetLang == "" {
 		return entries, nil
 	}
-	resolvedKey, resolvedModel, err := resolveAPIKeyAndModel(apiKey, "GEMINI_API_KEY", model, "gemini-3.8-flash", "Gemini")
+	resolvedKey, resolvedModel, err := resolveAPIKeyAndModel(apiKey, "GEMINI_API_KEY", model, "gemini-3.6-flash", "Gemini")
 	if err != nil {
 		return entries, err
 	}

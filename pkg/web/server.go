@@ -67,6 +67,7 @@ func (s *Server) Router() http.Handler {
 	mux.HandleFunc("/api/transcribe", s.handleTranscribe)
 	mux.HandleFunc("/api/ai/subtitles", s.handleAISubtitles)
 	mux.HandleFunc("/api/clip", s.handleClip)
+	mux.HandleFunc("/api/render", s.handleClip)
 	mux.HandleFunc("/preview", s.handlePreview)
 
 	// Ensure output directory exists for static video serving
@@ -343,6 +344,11 @@ type clipRequestPayload struct {
 	TargetDuration   float64           `json:"target_duration"`
 	HWAccel          string            `json:"hwaccel"`
 	Concurrency      int               `json:"concurrency"`
+	AIConfig         *struct {
+		APIKey       string `json:"api_key"`
+		SegmentModel string `json:"segment_model"`
+		STTModel     string `json:"stt_model"`
+	} `json:"ai_config,omitempty"`
 }
 
 type autoDetectRequestPayload struct {
@@ -492,6 +498,14 @@ func (s *Server) handleClip(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.AIModel != "" {
 		cfg.AIConfig.Model = req.AIModel
+	}
+	if req.AIConfig != nil {
+		if req.AIConfig.APIKey != "" {
+			cfg.AIConfig.APIKey = req.AIConfig.APIKey
+		}
+		if req.AIConfig.SegmentModel != "" {
+			cfg.AIConfig.Model = req.AIConfig.SegmentModel
+		}
 	}
 	cfg.Shorts = req.Shorts
 	if req.ShortsStyle != "" {
@@ -676,7 +690,7 @@ func (s *Server) handleTranscribe(w http.ResponseWriter, r *http.Request) {
 				_ = os.Remove(tmpAudio)
 				model := req.Model
 				if model == "" {
-					model = "gemini-3.5-transcribe"
+					model = "gemini-3.6-flash"
 				}
 				geminiCues, gErr := ai.TranscribeAudioGemini(apiKey, model, lang, audioBytes, "audio/mp3")
 				if gErr == nil && len(geminiCues) > 0 {
@@ -721,7 +735,7 @@ func (s *Server) handleTranscribe(w http.ResponseWriter, r *http.Request) {
 						_ = os.Remove(tmpAudio)
 						model := req.Model
 						if model == "" {
-							model = "gemini-3.5-transcribe"
+							model = "gemini-3.6-flash"
 						}
 						geminiCues, gErr := ai.TranscribeAudioGemini(apiKey, model, lang, audioBytes, "audio/mp3")
 						if gErr == nil && len(geminiCues) > 0 {

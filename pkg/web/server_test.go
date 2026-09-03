@@ -106,15 +106,24 @@ func TestWebServerEndpoints(t *testing.T) {
 		}
 	})
 
-	t.Run("POST API Clip Validation", func(t *testing.T) {
-		// Empty payload should fail with 400 Bad Request
+	t.Run("POST API Clip and Render Validation", func(t *testing.T) {
+		// Empty payload on /api/clip should fail with 400 Bad Request
 		payload := []byte(`{"input_file":""}`)
 		req := httptest.NewRequest(http.MethodPost, "/api/clip", bytes.NewReader(payload))
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
 
 		if rec.Code != http.StatusBadRequest {
-			t.Errorf("expected status 400 for empty payload, got %d", rec.Code)
+			t.Errorf("expected status 400 for empty payload on /api/clip, got %d", rec.Code)
+		}
+
+		// Empty payload on /api/render should also fail with 400 Bad Request
+		reqRender := httptest.NewRequest(http.MethodPost, "/api/render", bytes.NewReader(payload))
+		recRender := httptest.NewRecorder()
+		handler.ServeHTTP(recRender, reqRender)
+
+		if recRender.Code != http.StatusBadRequest {
+			t.Errorf("expected status 400 for empty payload on /api/render, got %d", recRender.Code)
 		}
 	})
 
