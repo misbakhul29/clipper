@@ -70,7 +70,9 @@ func (s *Server) Router() http.Handler {
 
 	// Ensure output directory exists for static video serving
 	_ = os.MkdirAll(s.OutDir, 0755)
+	_ = os.MkdirAll("./shorts", 0755)
 	mux.Handle("/clips/", http.StripPrefix("/clips/", http.FileServer(http.Dir(s.OutDir))))
+	mux.Handle("/shorts/", http.StripPrefix("/shorts/", http.FileServer(http.Dir("./shorts"))))
 
 	return mux
 }
@@ -129,8 +131,8 @@ func (s *Server) handleClips(w http.ResponseWriter, r *http.Request) {
 
 	var items []ClipItem
 
-	// Search in OutDir and OutDir/shorts
-	dirsToScan := []string{s.OutDir, filepath.Join(s.OutDir, "shorts")}
+	// Search in OutDir, OutDir/shorts, and ./shorts
+	dirsToScan := []string{s.OutDir, filepath.Join(s.OutDir, "shorts"), "./shorts"}
 	seen := make(map[string]bool)
 
 	for _, dir := range dirsToScan {
@@ -489,7 +491,9 @@ func (s *Server) handleClip(w http.ResponseWriter, r *http.Request) {
 	if req.HWAccel != "" {
 		cfg.HWAccel = req.HWAccel
 	}
-	if cfg.OutputDir == "" {
+	if req.Shorts {
+		cfg.OutputDir = filepath.Join(s.OutDir, "shorts")
+	} else {
 		cfg.OutputDir = s.OutDir
 	}
 
