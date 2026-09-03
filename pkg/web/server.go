@@ -676,7 +676,7 @@ func (s *Server) handleTranscribe(w http.ResponseWriter, r *http.Request) {
 				_ = os.Remove(tmpAudio)
 				model := req.Model
 				if model == "" {
-					model = "gemini-2.5-flash"
+					model = "gemini-3.6-flash"
 				}
 				geminiCues, gErr := ai.TranscribeAudioGemini(apiKey, model, lang, audioBytes, "audio/mp3")
 				if gErr == nil && len(geminiCues) > 0 {
@@ -721,7 +721,7 @@ func (s *Server) handleTranscribe(w http.ResponseWriter, r *http.Request) {
 						_ = os.Remove(tmpAudio)
 						model := req.Model
 						if model == "" {
-							model = "gemini-2.5-flash"
+							model = "gemini-3.6-flash"
 						}
 						geminiCues, gErr := ai.TranscribeAudioGemini(apiKey, model, lang, audioBytes, "audio/mp3")
 						if gErr == nil && len(geminiCues) > 0 {

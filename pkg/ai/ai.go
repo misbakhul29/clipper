@@ -57,7 +57,7 @@ func AnalyzeHighlightsWithoutSubtitles(videoTitle string, durationSec float64, a
 	var err error
 
 	if router == "gemini" {
-		resolvedKey, resolvedModel, rErr := resolveAPIKeyAndModel(aiCfg.APIKey, "GEMINI_API_KEY", aiCfg.Model, "gemini-2.5-flash", "Gemini")
+		resolvedKey, resolvedModel, rErr := resolveAPIKeyAndModel(aiCfg.APIKey, "GEMINI_API_KEY", aiCfg.Model, "gemini-3.6-flash", "Gemini")
 		if rErr == nil {
 			fullPrompt := fmt.Sprintf("%s\n\n%s", sysPrompt, userPrompt)
 			content, err = callGeminiGenerate(resolvedKey, resolvedModel, fullPrompt)

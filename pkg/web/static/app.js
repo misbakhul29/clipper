@@ -879,8 +879,8 @@ function saveSubtitleStudio() {
 
 // Global AI Settings State & LocalStorage Persistence
 function sanitizeGeminiModelName(model, isSTT) {
-  if (!model || model.startsWith('gemini-3') || model === 'default') {
-    return 'gemini-2.5-flash';
+  if (!model || model === 'gemini-3.8-flash' || model === 'gemini-3.5-transcribe' || model === 'default') {
+    return 'gemini-3.6-flash';
   }
   return model;
 }
@@ -908,12 +908,12 @@ function getGlobalApiKey() {
 }
 
 function getGlobalSegmentModel() {
-  const m = document.getElementById('globalAISegmentModel')?.value || localStorage.getItem('clipper_ai_segment_model') || 'gemini-2.5-flash';
+  const m = document.getElementById('globalAISegmentModel')?.value || localStorage.getItem('clipper_ai_segment_model') || 'gemini-3.6-flash';
   return sanitizeGeminiModelName(m, false);
 }
 
 function getGlobalSTTModel() {
-  const m = document.getElementById('globalAISTTModel')?.value || localStorage.getItem('clipper_ai_stt_model') || 'gemini-2.5-flash';
+  const m = document.getElementById('globalAISTTModel')?.value || localStorage.getItem('clipper_ai_stt_model') || 'gemini-3.6-flash';
   return sanitizeGeminiModelName(m, true);
 }
 

@@ -46,11 +46,11 @@ type GeminiError struct {
 	Status  string `json:"status"`
 }
 
-// NormalizeGeminiModel sanitizes or aliases outdated/invalid model names to official Google Gemini models.
+// NormalizeGeminiModel sanitizes or aliases outdated/invalid model names to supported Google Gemini models.
 func NormalizeGeminiModel(model string) string {
-	m := strings.ToLower(strings.TrimSpace(model))
-	if m == "" || strings.HasPrefix(m, "gemini-3") || m == "default" {
-		return "gemini-2.5-flash"
+	m := strings.TrimSpace(model)
+	if m == "" || m == "default" || strings.EqualFold(m, "gemini-3.8-flash") || strings.EqualFold(m, "gemini-3.5-transcribe") {
+		return "gemini-3.6-flash"
 	}
 	return m
 }
@@ -185,7 +185,7 @@ func callGeminiAudioSTT(apiKey, model, prompt string, mimeType string, audioBase
 
 // TranscribeAudioGemini transcribes audio data to time-aligned subtitle cues using Gemini Audio API.
 func TranscribeAudioGemini(apiKey, model, targetLang string, audioBytes []byte, mimeType string) ([]AudioSubtitleCue, error) {
-	resolvedKey, resolvedModel, err := resolveAPIKeyAndModel(apiKey, "GEMINI_API_KEY", model, "gemini-2.5-flash", "Gemini")
+	resolvedKey, resolvedModel, err := resolveAPIKeyAndModel(apiKey, "GEMINI_API_KEY", model, "gemini-3.6-flash", "Gemini")
 	if err != nil {
 		return nil, err
 	}
@@ -208,7 +208,7 @@ func TranscribeAudioGemini(apiKey, model, targetLang string, audioBytes []byte, 
 
 // AnalyzeHighlightsGemini sends transcript entries to Google Gemini REST API.
 func AnalyzeHighlightsGemini(entries []transcriber.SubtitleEntry, apiKey, model, targetLang string, isShorts bool) ([]AIHighlight, error) {
-	resolvedKey, resolvedModel, err := resolveAPIKeyAndModel(apiKey, "GEMINI_API_KEY", model, "gemini-2.5-flash", "Gemini")
+	resolvedKey, resolvedModel, err := resolveAPIKeyAndModel(apiKey, "GEMINI_API_KEY", model, "gemini-3.6-flash", "Gemini")
 	if err != nil {
 		return nil, err
 	}
@@ -226,7 +226,7 @@ func TranslateSubtitlesGemini(entries []transcriber.SubtitleEntry, apiKey, model
 	if len(entries) == 0 || targetLang == "" {
 		return entries, nil
 	}
-	resolvedKey, resolvedModel, err := resolveAPIKeyAndModel(apiKey, "GEMINI_API_KEY", model, "gemini-2.5-flash", "Gemini")
+	resolvedKey, resolvedModel, err := resolveAPIKeyAndModel(apiKey, "GEMINI_API_KEY", model, "gemini-3.6-flash", "Gemini")
 	if err != nil {
 		return entries, err
 	}
