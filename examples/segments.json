@@ -1,15 +1,29 @@
 {
-  "input": "https://www.youtube.com/watch?v=xid1sE8lEec",
-  "output_dir": "./output_clips",
+  "input": "https://www.youtube.com/watch?v=4lQvrYZt1J8",
+  "output_dir": "./clips",
   "output": "merged_highlight.mp4",
   "mode": "split",
-  "strategy": "accurate",
+  "strategy": "fast",
   "shorts": true,
-  "shorts_style": "blur",
+  "shorts_style": "smart-crop",
   "quality": "1080p",
   "cache_dir": "./cache",
   "no_cache": false,
   "concurrency": 0,
+  "subtitles": true,
+  "sub_preset": "hormozi",
+  "sub_sdh_mode": "strip",
+  "sub_emoji": true,
+  "sub_font_size": 48,
+  "loudnorm": true,
+  "jump_cut": true,
+  "jump_cut_min_silence": 1.0,
+  "jump_cut_margin": 0.2,
+  "jump_cut_noise": -30.0,
+  "generate_metadata": true,
+  "extract_thumbnail": true,
+  "thumbnail_count": 1,
+  "hwaccel": "auto",
   "watermark": "",
   "watermark_pos": "top-right",
   "overlay_text": "",
@@ -17,29 +31,23 @@
   "font_size": 32,
   "font_color": "white",
   "auto_detect": "ai",
+  "target_duration": 30,
   "translate_lang": "id",
-  "subtitles": true,
-  "sub_style": "karaoke",
-  "sub_font_size": 54,
-  "sub_font_path": "",
-  "use_whisper": false,
-  "dry_run": false,
-  "batch_list": "",
   "ai_config": {
     "api_router": "gemini",
     "api_key": "YOUR_GEMINI_API_KEY",
-    "model": "gemini-3.6-flash"
+    "model": "gemini-3.8-flash"
   },
   "segments": [
     {
       "start": "00:00:10",
-      "end": "00:00:30",
-      "title": "Intro Highlight"
+      "end": "00:00:40",
+      "title": "Highlight Hook 1"
     },
     {
-      "start": "00:01:15",
-      "end": "00:01:45",
-      "title": "Main Conversation"
+      "start": "00:01:20",
+      "end": "00:01:50",
+      "title": "Highlight Peak 2"
     }
   ]
 }

@@ -26,8 +26,17 @@
       <span class="badge" id="portBadge">:8000</span>
     </div>
     <div class="header-right">
-      <button class="btn btn-secondary btn-sm" id="globalAISettingsBtn" onclick="toggleGlobalAISettings()" title="Global AI Configuration" style="height:28px; font-size:11px; display:inline-flex; align-items:center; gap:5px;">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px; height:13px;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <input type="file" id="configFileInput" accept=".json" style="display:none;" onchange="handleConfigFileImport(event)" />
+      <button class="btn btn-secondary btn-sm" onclick="document.getElementById('configFileInput').click()" title="Import existing config.json" style="height:28px; font-size:11px; display:inline-flex; align-items:center; gap:4px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px; height:12px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span>Import</span>
+      </button>
+      <button class="btn btn-secondary btn-sm" onclick="exportCurrentConfig()" title="Export current setup as config.json" style="height:28px; font-size:11px; display:inline-flex; align-items:center; gap:4px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px; height:12px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <span>Export</span>
+      </button>
+      <button class="btn btn-secondary btn-sm" id="globalAISettingsBtn" onclick="toggleGlobalAISettings()" title="Global AI Configuration" style="height:28px; font-size:11px; display:inline-flex; align-items:center; gap:4px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px; height:12px;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         <span>AI Settings</span>
       </button>
       <div class="badge" id="statusBadge">READY</div>
@@ -163,8 +172,9 @@
 
       <!-- Settings -->
       <div class="config-group">
-        <div class="panel-header">
+        <div class="panel-header" style="justify-content:space-between;">
           <span class="panel-title">Render Settings</span>
+          <button class="set-link" onclick="toggleAdvancedRenderOptions()" id="advOptionsToggle">[+ Advanced Options]</button>
         </div>
 
         <div class="config-grid">
@@ -188,8 +198,35 @@
             <select id="cfgSubPreset" class="select-box">
               <option value="hormozi" selected>Hormozi Kinetic</option>
               <option value="minimal">Minimal Clean</option>
-              <option value="neon">Neon Outline</option>
+              <option value="neon">Neon Glow</option>
               <option value="cinematic">Cinematic Soft</option>
+            </select>
+          </div>
+
+          <div class="config-item">
+            <label class="toggle-label">Mode</label>
+            <select id="cfgMode" class="select-box" onchange="onRenderModeChange()">
+              <option value="split" selected>Split (Individual Clips)</option>
+              <option value="merge">Merge (Single Video)</option>
+            </select>
+          </div>
+
+          <div class="config-item">
+            <label class="toggle-label">Strategy</label>
+            <select id="cfgStrategy" class="select-box">
+              <option value="fast" selected>Fast (Stream Copy)</option>
+              <option value="accurate">Accurate (Re-encode)</option>
+            </select>
+          </div>
+
+          <div class="config-item">
+            <label class="toggle-label">Quality</label>
+            <select id="cfgQuality" class="select-box">
+              <option value="best" selected>Best (1080p+)</option>
+              <option value="1080p">1080p</option>
+              <option value="720p">720p</option>
+              <option value="480p">480p</option>
+              <option value="360p">360p</option>
             </select>
           </div>
 
@@ -234,6 +271,71 @@
               <option value="qsv">Intel QuickSync</option>
               <option value="cpu">Software CPU</option>
             </select>
+          </div>
+        </div>
+
+        <!-- Collapsible Advanced Render Options Drawer -->
+        <div id="advRenderDrawer" class="ai-drawer" style="display:none; margin-top:10px;">
+          <div class="ai-drawer-grid">
+            <div class="field-group">
+              <label class="field-label">Merged Output Filename (for Merge Mode)</label>
+              <input type="text" id="cfgOutputFile" class="text-input" placeholder="merged_highlight.mp4" value="merged_highlight.mp4" />
+            </div>
+            <div class="field-group">
+              <label class="field-label">SDH Subtitle Context Handling</label>
+              <select id="cfgSubSDHMode" class="select-box">
+                <option value="strip" selected>Strip [...] (Clean Speech)</option>
+                <option value="top-box">Top Context Box</option>
+                <option value="keep">Keep As-is</option>
+              </select>
+            </div>
+            <div class="field-group">
+              <label class="field-label">Watermark Image Path (.png)</label>
+              <input type="text" id="cfgWatermark" class="text-input" placeholder="e.g. assets/logo.png" />
+            </div>
+            <div class="field-group">
+              <label class="field-label">Watermark Position</label>
+              <select id="cfgWatermarkPos" class="select-box">
+                <option value="top-right" selected>Top Right</option>
+                <option value="top-left">Top Left</option>
+                <option value="bottom-right">Bottom Right</option>
+                <option value="bottom-left">Bottom Left</option>
+                <option value="center">Center</option>
+              </select>
+            </div>
+            <div class="field-group">
+              <label class="field-label">Overlay Text Caption</label>
+              <input type="text" id="cfgOverlayText" class="text-input" placeholder="e.g. @mychannel" />
+            </div>
+            <div class="field-group">
+              <label class="field-label">Overlay Text Position & Color</label>
+              <div style="display:flex; gap:6px;">
+                <select id="cfgTextPos" class="select-box" style="flex:1;">
+                  <option value="bottom-center" selected>Bottom Center</option>
+                  <option value="top-center">Top Center</option>
+                  <option value="top-left">Top Left</option>
+                  <option value="bottom-left">Bottom Left</option>
+                </select>
+                <select id="cfgFontColor" class="select-box" style="width:85px;">
+                  <option value="white" selected>White</option>
+                  <option value="yellow">Yellow</option>
+                  <option value="cyan">Cyan</option>
+                  <option value="red">Red</option>
+                </select>
+              </div>
+            </div>
+            <div class="field-group">
+              <label class="field-label">Output Directory</label>
+              <input type="text" id="cfgOutputDir" class="text-input" value="./clips" placeholder="./clips" />
+            </div>
+            <div class="field-group">
+              <label class="field-label">Silence Removal (Jump-Cut) Tuning</label>
+              <div style="display:flex; gap:6px;">
+                <input type="number" step="0.1" id="cfgJumpCutMinSil" class="text-input" value="1.0" title="Min Silence (s)" placeholder="Min (1.0s)" style="width:70px;" />
+                <input type="number" step="0.1" id="cfgJumpCutMargin" class="text-input" value="0.2" title="Safety Margin (s)" placeholder="Margin (0.2s)" style="width:70px;" />
+                <input type="number" step="1" id="cfgJumpCutNoise" class="text-input" value="-30" title="Noise Floor (dB)" placeholder="Noise (-30dB)" style="width:70px;" />
+              </div>
+            </div>
           </div>
         </div>
       </div>

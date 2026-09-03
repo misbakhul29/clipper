@@ -3,420 +3,145 @@ package main
 import (
 	"bufio"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/misbakhul29/clipper/pkg/clipper"
 	"github.com/misbakhul29/clipper/pkg/web"
 )
 
+const Version = "v1.32.0"
+
+func printUsage() {
+	fmt.Printf(`CLIPPER %s — Minimalist AI Video Clipper & Shorts Engine
+
+USAGE:
+  clipper <command> [arguments]
+
+COMMANDS:
+  serve, -s, -serve [port]       Launch the Web Studio UI dashboard (default: :8000)
+                                 Examples:
+                                   clipper serve
+                                   clipper serve :8080
+                                   clipper -s 3000
+
+  config, -c, -config <file>     Run video clipping directly using a JSON config file
+                                 Examples:
+                                   clipper config config.json
+                                   clipper -c segments.json
+                                   clipper my_project.json
+
+  init, -i, -init [filename]     Create a starter config.json template or run interactive wizard
+                                 Examples:
+                                   clipper init
+                                   clipper init custom.json
+                                   clipper -i
+
+  version, -v, -version          Display current version information
+  help, -h, --help               Show this help message
+
+WEB STUDIO & CONFIGURATION:
+  All rendering parameters (Shorts 9:16, Subtitles, AI Highlights, Audio Normalization,
+  Silence Removal, Overlays, Watermark, and Hardware Acceleration) are managed visually
+  in the Web Studio or through a config.json file.
+`, Version)
+}
+
 func main() {
-	var (
-		configFile    string
-		initConfig    string
-		interactive   bool
-		inputFile     string
-		outputDir     string
-		outputFile    string
-		modeStr       string
-		stratStr      string
-		isShorts      bool
-		shortsStyle   string
-		quality       string
-		cacheDir      string
-		noCache       bool
-		concurrency   int
-		watermarkPath string
-		watermarkPos  string
-		overlayText   string
-		textPos       string
-		fontSize      int
-		fontColor     string
-		autoDetect     string
-		clipDuration   float64
-		translateLang  string
-		subtitles     bool
-		subStyle      string
-		subFontSize   int
-		subFontPath   string
-		useWhisper    bool
-		dryRun        bool
-		batchList     string
-		cleanCache    bool
-		cleanDays     int
-		openRouterKey string
-		aiModel       string
-		segments      string
-		faceTracking  bool
-		panDuration   float64
-		loudnorm      bool
-		loudnormI     float64
-		loudnormLRA   float64
-		loudnormTP    float64
-		jumpCut       bool
-		jumpCutMinSil float64
-		jumpCutMargin float64
-		jumpCutNoise  float64
-		subPreset     string
-		subSDHMode    string
-		subEmoji      bool
-		metadata      bool
-		extractThumb  bool
-		thumbCount    int
-		hwaccel       string
-		showProgress  bool
-		serveAddr     string
-	)
-
-	flag.StringVar(&serveAddr, "serve", "", "Run local web UI studio dashboard (e.g. -serve :8080 or -serve 8080)")
-	flag.StringVar(&configFile, "config", "", "Path to JSON configuration file")
-	flag.StringVar(&initConfig, "init-config", "", "Generate a JSON configuration file (e.g. -init-config config.json)")
-	flag.BoolVar(&interactive, "i", false, "Run interactive config generator wizard")
-	flag.BoolVar(&interactive, "interactive", false, "Run interactive config generator wizard")
-
-	flag.StringVar(&inputFile, "input", "", "Path to source input video file, YouTube URL, or comma-separated URLs")
-	flag.StringVar(&outputDir, "outdir", ".", "Output directory for cut videos")
-	flag.StringVar(&outputFile, "output", "", "Output filename (used in merge mode)")
-	flag.StringVar(&modeStr, "mode", "split", "Operation mode: 'split' (separate files) or 'merge' (combined file)")
-	flag.StringVar(&stratStr, "strategy", "fast", "Cut strategy: 'fast' (stream copy) or 'accurate' (re-encode)")
-	flag.BoolVar(&isShorts, "shorts", false, "Convert cut videos to 9:16 Shorts/Reels/TikTok format")
-	flag.StringVar(&shortsStyle, "shorts-style", "crop", "Shorts aspect ratio style: 'crop' (center crop 9:16), 'blur' (blurred background), or 'smart-crop'")
-	flag.StringVar(&quality, "quality", "best", "YouTube download quality ('best', '1080p', '720p', '480p', '360p', 'worst')")
-	flag.StringVar(&cacheDir, "cache-dir", "./cache", "Directory for caching downloaded YouTube videos")
-	flag.BoolVar(&noCache, "no-cache", false, "Disable YouTube download cache and force re-download")
-	flag.IntVar(&concurrency, "concurrency", 0, "Number of parallel workers for rendering clips (default: CPU cores)")
-	flag.StringVar(&watermarkPath, "watermark", "", "Path to watermark image file (PNG)")
-	flag.StringVar(&watermarkPos, "watermark-pos", "top-right", "Watermark position ('top-right', 'top-left', 'bottom-right', 'bottom-left', 'center')")
-	flag.StringVar(&overlayText, "text", "", "Text caption to render on video clips")
-	flag.StringVar(&textPos, "text-pos", "bottom-center", "Text caption position ('bottom-center', 'top-center', 'center', 'top-left', 'bottom-left')")
-	flag.IntVar(&fontSize, "font-size", 32, "Font size for text caption")
-	flag.StringVar(&fontColor, "font-color", "white", "Font color for text caption ('white', 'yellow', 'cyan', 'red')")
-	flag.StringVar(&autoDetect, "auto-detect", "", "Smart auto-detection mode for segments ('silence', 'scene', or 'ai')")
-	flag.Float64Var(&clipDuration, "clip-duration", 0, "Target duration for auto-detected clips in seconds (e.g. 30, 60, 120, 300; default: 0 for auto)")
-	flag.Float64Var(&clipDuration, "target-duration", 0, "Alias for -clip-duration")
-	flag.StringVar(&translateLang, "translate-lang", "id", "Target language for AI titles and subtitle translation ('id', 'en', etc.)")
-	flag.BoolVar(&subtitles, "subtitles", false, "Include/burn-in subtitles on video clips (default: false)")
-	flag.BoolVar(&subtitles, "subtitle", false, "Include/burn-in subtitles on video clips")
-	flag.BoolVar(&subtitles, "burn-subtitles", false, "Legacy alias for -subtitles")
-	flag.StringVar(&subStyle, "sub-style", "karaoke", "Subtitle style for burnt-in captions ('karaoke' for TikTok 2-word chunks, or 'standard')")
-	flag.StringVar(&subPreset, "sub-preset", "hormozi", "Viral subtitle theme preset ('hormozi', 'minimal', 'devon', 'neon', 'cinematic')")
-	flag.StringVar(&subSDHMode, "sub-sdh-mode", "strip", "Handling for silent narrator & SDH brackets: 'strip' (clean speech), 'top-box' (dual-layer top banner), 'keep'")
-	flag.BoolVar(&subEmoji, "sub-emoji", true, "Auto-inject contextual emojis based on keywords into subtitle cues (default: true)")
-	flag.IntVar(&subFontSize, "sub-font-size", 48, "Subtitle font size for burnt-in captions")
-	flag.StringVar(&subFontPath, "sub-font-path", "", "Custom font file path (.ttf / .otf) for burnt-in captions")
-	flag.BoolVar(&useWhisper, "use-whisper", false, "Force local Whisper AI for speech-to-text transcription")
-	flag.BoolVar(&metadata, "metadata", false, "Generate companion social media metadata (metadata.json & .txt) for clips")
-	flag.BoolVar(&extractThumb, "thumbnail", false, "Extract high-resolution cover thumbnail and hook frames (.jpg)")
-	flag.BoolVar(&extractThumb, "thumb", false, "Extract high-resolution cover thumbnail and hook frames (.jpg)")
-	flag.IntVar(&thumbCount, "thumb-count", 1, "Number of candidate thumbnails to extract (1 to 3, default: 1)")
-	flag.StringVar(&hwaccel, "hwaccel", "auto", "Hardware acceleration mode ('auto', 'nvenc', 'videotoolbox', 'qsv', 'vaapi', 'amf', 'cpu')")
-	flag.BoolVar(&showProgress, "progress", true, "Show dynamic terminal progress bar during rendering (default: true)")
-	flag.BoolVar(&dryRun, "dry-run", false, "Analyze segments and preview commands without rendering video files")
-	flag.StringVar(&batchList, "batch-list", "", "Path to text file containing video URLs/files (one per line)")
-	flag.BoolVar(&cleanCache, "clean-cache", false, "Clean cache directory and exit")
-	flag.IntVar(&cleanDays, "clean-days", 0, "Retention threshold in days for cache cleanup (0 = delete all)")
-	var aiRouter, aiKey string
-	flag.StringVar(&aiRouter, "ai-router", "openrouter", "AI API Provider ('openrouter', 'gemini', 'deepseek', 'openai')")
-	flag.StringVar(&aiKey, "ai-key", "", "API Key for selected AI router (e.g. Gemini/DeepSeek/OpenAI key)")
-	flag.StringVar(&openRouterKey, "openrouter-key", "", "OpenRouter API Key for AI highlight detection (defaults to $OPENROUTER_API_KEY)")
-	flag.StringVar(&aiModel, "ai-model", "openrouter/free", "AI model name (e.g. 'openrouter/free', 'gemini-2.0-flash', 'deepseek-chat', 'gpt-4o-mini')")
-	flag.StringVar(&segments, "segments", "", "Comma-separated segment timestamps (e.g. '00:10-00:25,01:00-01:30')")
-	flag.BoolVar(&faceTracking, "face-tracking", true, "Enable dynamic active speaker / face tracking for smart-crop shorts")
-	flag.Float64Var(&panDuration, "pan-duration", 0.8, "Camera pan transition duration in seconds (default: 0.8s)")
-	flag.BoolVar(&loudnorm, "loudnorm", false, "Normalize audio loudness to EBU R128 standard (-af loudnorm=I=-14:LRA=7:TP=-2)")
-	flag.Float64Var(&loudnormI, "loudnorm-i", -14.0, "Integrated loudness target in LUFS (default: -14.0)")
-	flag.Float64Var(&loudnormLRA, "loudnorm-lra", 7.0, "Loudness range target in LU (default: 7.0)")
-	flag.Float64Var(&loudnormTP, "loudnorm-tp", -2.0, "Maximum true peak in dBTP (default: -2.0)")
-	flag.BoolVar(&jumpCut, "jump-cut", false, "Smart silence removal & jump-cut editing inside video clips")
-	flag.Float64Var(&jumpCutMinSil, "jump-cut-min-silence", 1.0, "Minimum silence pause duration to cut in seconds (default: 1.0s)")
-	flag.Float64Var(&jumpCutMargin, "jump-cut-margin", 0.2, "Speech margin/padding around speech in seconds (default: 0.2s)")
-	flag.Float64Var(&jumpCutNoise, "jump-cut-noise", -30.0, "Audio noise gate threshold for silence in dB (default: -30.0dB)")
-
-	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "Automated Video Cutting System in Go (Supports Local Videos, YouTube URLs, Shorts 9:16 & Auto-Detect)\n\n")
-		fmt.Fprintf(os.Stderr, "Options:\n")
-		flag.PrintDefaults()
-		fmt.Fprintf(os.Stderr, "\nExamples:\n")
-		fmt.Fprintf(os.Stderr, "  1. Generate JSON Config via Interactive Wizard:\n")
-		fmt.Fprintf(os.Stderr, "     %s -i\n\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  2. Generate JSON Config via Flags:\n")
-		fmt.Fprintf(os.Stderr, "     %s -init-config my_config.json -input video.mp4 -segments \"00:10-00:25\" -shorts\n\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  3. Process Video using JSON Config:\n")
-		fmt.Fprintf(os.Stderr, "     %s -config my_config.json\n\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  4. Smart Auto Silence Detection + Parallel Workers:\n")
-		fmt.Fprintf(os.Stderr, "     %s -input video.mp4 -auto-detect silence -concurrency 4 -shorts -outdir ./shorts_silence\n", os.Args[0])
-	}
-
-	flag.Parse()
-
-	// Handle Interactive Config Generator (-i / -interactive)
-	if interactive {
-		targetFile := initConfig
-		if targetFile == "" {
-			targetFile = "config.json"
-		}
-		runInteractiveWizard(targetFile)
+	args := os.Args[1:]
+	if len(args) == 0 {
+		printUsage()
 		return
 	}
 
-	// Handle Config File Generation via Flag (-init-config config.json)
-	if initConfig != "" {
-		parsedSegs, err := parseCLISegments(segments)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error parsing -segments flag: %v\n", err)
-			os.Exit(1)
-		}
-		genCfg := clipper.Config{
-			InputFile:     inputFile,
-			OutputDir:     outputDir,
-			OutputFile:    outputFile,
-			Mode:          clipper.Mode(modeStr),
-			Strategy:      clipper.CutStrategy(stratStr),
-			Shorts:        isShorts,
-			ShortsStyle:   shortsStyle,
-			Quality:       quality,
-			CacheDir:      cacheDir,
-			NoCache:       noCache,
-			Concurrency:   concurrency,
-			WatermarkPath: watermarkPath,
-			WatermarkPos:  watermarkPos,
-			OverlayText:   overlayText,
-			TextPos:       textPos,
-			FontSize:      fontSize,
-			FontColor:     fontColor,
-			AutoDetect:    autoDetect,
-			FaceTracking:  faceTracking,
-			PanDuration:   panDuration,
-			Loudnorm:      loudnorm,
-			LoudnormI:     loudnormI,
-			LoudnormLRA:   loudnormLRA,
-			LoudnormTP:    loudnormTP,
-			JumpCut:       jumpCut,
-			JumpCutMinSil: jumpCutMinSil,
-			JumpCutMargin: jumpCutMargin,
-			JumpCutNoise:  jumpCutNoise,
-			SubPreset:        subPreset,
-			SubSDHMode:       subSDHMode,
-			SubEmoji:         subEmoji,
-			GenerateMetadata: metadata,
-			ExtractThumbnail: extractThumb,
-			ThumbnailCount:   thumbCount,
-			HWAccel:          hwaccel,
-			ShowProgress:     showProgress,
-			Segments:         parsedSegs,
-		}
-		if err := saveConfig(initConfig, genCfg); err != nil {
-			fmt.Fprintf(os.Stderr, "Error generating config file '%s': %v\n", initConfig, err)
-			os.Exit(1)
-		}
-		fmt.Printf("Successfully generated configuration file: %s\n", initConfig)
+	cmd := strings.ToLower(strings.TrimSpace(args[0]))
+	switch cmd {
+	case "help", "-h", "--help", "-help":
+		printUsage()
 		return
-	}
 
-	var cfg clipper.Config
+	case "version", "-v", "--version", "-version":
+		fmt.Printf("Clipper %s\n", Version)
+		return
 
-	if configFile != "" {
-		data, err := os.ReadFile(configFile)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading config file '%s': %v\n", configFile, err)
-			os.Exit(1)
+	case "serve", "-s", "--serve", "-serve":
+		serveAddr := ":8000"
+		if len(args) > 1 {
+			addr := args[1]
+			if !strings.HasPrefix(addr, ":") && !strings.Contains(addr, ":") {
+				addr = ":" + addr
+			}
+			serveAddr = addr
 		}
-		if err := json.Unmarshal(data, &cfg); err != nil {
-			fmt.Fprintf(os.Stderr, "Error parsing JSON config file '%s': %v\n", configFile, err)
-			os.Exit(1)
-		}
-	}
-
-	// CLI flags override or supply missing values
-	// Override config values ONLY if flags were explicitly passed on CLI
-	if isFlagPassed("input") {
-		cfg.InputFile = inputFile
-	}
-	if isFlagPassed("outdir") || cfg.OutputDir == "" {
-		cfg.OutputDir = outputDir
-	}
-	if isFlagPassed("output") {
-		cfg.OutputFile = outputFile
-	}
-	if isFlagPassed("mode") {
-		cfg.Mode = clipper.Mode(modeStr)
-	}
-	if isFlagPassed("strategy") {
-		cfg.Strategy = clipper.CutStrategy(stratStr)
-	}
-	if isFlagPassed("shorts") {
-		cfg.Shorts = isShorts
-	}
-	if isFlagPassed("shorts-style") {
-		cfg.ShortsStyle = shortsStyle
-	}
-	if isFlagPassed("quality") {
-		cfg.Quality = quality
-	}
-	if isFlagPassed("cache-dir") {
-		cfg.CacheDir = cacheDir
-	}
-	if isFlagPassed("no-cache") {
-		cfg.NoCache = noCache
-	}
-	if isFlagPassed("concurrency") {
-		cfg.Concurrency = concurrency
-	}
-	if isFlagPassed("watermark") {
-		cfg.WatermarkPath = watermarkPath
-	}
-	if isFlagPassed("watermark-pos") {
-		cfg.WatermarkPos = watermarkPos
-	}
-	if isFlagPassed("text") {
-		cfg.OverlayText = overlayText
-	}
-	if isFlagPassed("text-pos") {
-		cfg.TextPos = textPos
-	}
-	if isFlagPassed("font-size") {
-		cfg.FontSize = fontSize
-	}
-	if isFlagPassed("font-color") {
-		cfg.FontColor = fontColor
-	}
-	if isFlagPassed("auto-detect") {
-		cfg.AutoDetect = autoDetect
-	}
-	if isFlagPassed("clip-duration") || isFlagPassed("target-duration") {
-		cfg.TargetDuration = clipDuration
-		cfg.AIConfig.TargetDuration = clipDuration
-	}
-	if isFlagPassed("translate-lang") {
-		cfg.TranslateLang = translateLang
-	}
-	if isFlagPassed("subtitles") || isFlagPassed("subtitle") || isFlagPassed("burn-subtitles") {
-		cfg.Subtitles = subtitles
-	}
-	if isFlagPassed("sub-style") {
-		cfg.SubStyle = subStyle
-	}
-	if isFlagPassed("sub-preset") {
-		cfg.SubPreset = subPreset
-	}
-	if isFlagPassed("sub-sdh-mode") {
-		cfg.SubSDHMode = subSDHMode
-	}
-	if isFlagPassed("sub-emoji") {
-		cfg.SubEmoji = subEmoji
-	}
-	if isFlagPassed("sub-font-size") {
-		cfg.SubFontSize = subFontSize
-	}
-	if isFlagPassed("sub-font-path") {
-		cfg.SubFontPath = subFontPath
-	}
-	if isFlagPassed("use-whisper") {
-		cfg.UseWhisper = useWhisper
-	}
-	if isFlagPassed("metadata") {
-		cfg.GenerateMetadata = metadata
-	}
-	if isFlagPassed("thumbnail") || isFlagPassed("thumb") {
-		cfg.ExtractThumbnail = extractThumb
-	}
-	if isFlagPassed("thumb-count") {
-		cfg.ThumbnailCount = thumbCount
-	}
-	if isFlagPassed("hwaccel") {
-		cfg.HWAccel = hwaccel
-	}
-	if isFlagPassed("progress") {
-		cfg.ShowProgress = showProgress
-	}
-	if isFlagPassed("dry-run") {
-		cfg.DryRun = dryRun
-	}
-	if isFlagPassed("batch-list") {
-		cfg.BatchList = batchList
-	}
-	if isFlagPassed("clean-cache") {
-		cfg.CleanCache = cleanCache
-	}
-	if isFlagPassed("clean-days") {
-		cfg.CleanDays = cleanDays
-	}
-	if isFlagPassed("ai-router") {
-		cfg.AIConfig.APIRouter = aiRouter
-	}
-	if isFlagPassed("ai-key") {
-		cfg.AIConfig.APIKey = aiKey
-	}
-	if isFlagPassed("openrouter-key") {
-		cfg.AIConfig.APIKey = openRouterKey
-		cfg.OpenRouterKey = openRouterKey
-	}
-	if isFlagPassed("ai-model") {
-		cfg.AIConfig.Model = aiModel
-		cfg.AIModel = aiModel
-	}
-	if isFlagPassed("face-tracking") {
-		cfg.FaceTracking = faceTracking
-	} else if cfg.ShortsStyle == "smart-crop" {
-		cfg.FaceTracking = true
-	}
-	if isFlagPassed("pan-duration") {
-		cfg.PanDuration = panDuration
-	}
-	if isFlagPassed("loudnorm") {
-		cfg.Loudnorm = loudnorm
-	} else if cfg.Shorts {
-		// Automatically enable EBU R128 audio normalization for vertical shorts
-		cfg.Loudnorm = true
-	}
-	if isFlagPassed("loudnorm-i") {
-		cfg.LoudnormI = loudnormI
-	}
-	if isFlagPassed("loudnorm-lra") {
-		cfg.LoudnormLRA = loudnormLRA
-	}
-	if isFlagPassed("loudnorm-tp") {
-		cfg.LoudnormTP = loudnormTP
-	}
-	if isFlagPassed("jump-cut") {
-		cfg.JumpCut = jumpCut
-	}
-	if isFlagPassed("jump-cut-min-silence") {
-		cfg.JumpCutMinSil = jumpCutMinSil
-	}
-	if isFlagPassed("jump-cut-margin") {
-		cfg.JumpCutMargin = jumpCutMargin
-	}
-	if isFlagPassed("jump-cut-noise") {
-		cfg.JumpCutNoise = jumpCutNoise
-	}
-
-	// Parse CLI segments string if provided
-	if segments != "" {
-		parsedSegs, err := parseCLISegments(segments)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error parsing -segments flag: %v\n", err)
-			os.Exit(1)
-		}
-		cfg.Segments = append(cfg.Segments, parsedSegs...)
-	}
-
-	if serveAddr != "" {
-		srv := web.NewServer(serveAddr, &cfg)
+		srv := web.NewServer(serveAddr, &clipper.Config{})
 		if err := srv.Start(); err != nil {
 			fmt.Fprintf(os.Stderr, "Web Studio error: %v\n", err)
 			os.Exit(1)
 		}
 		return
-	}
 
-	if !cfg.CleanCache && cfg.InputFile == "" && cfg.BatchList == "" {
-		flag.Usage()
+	case "init", "-i", "--init", "-init", "-interactive", "--interactive":
+		targetFile := "config.json"
+		if len(args) > 1 {
+			targetFile = args[1]
+		}
+		if cmd == "-i" || cmd == "-interactive" || cmd == "--interactive" || (len(args) > 1 && args[1] == "--wizard") {
+			runInteractiveWizard(targetFile)
+			return
+		}
+		if err := generateSampleConfigFile(targetFile); err != nil {
+			fmt.Fprintf(os.Stderr, "Error creating config file: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("✨ Created starter configuration template: %s\n", targetFile)
+		fmt.Printf("Edit %s or run:\n  clipper config %s\n", targetFile, targetFile)
+		return
+
+	case "config", "-c", "--config", "-config":
+		if len(args) < 2 {
+			fmt.Fprintln(os.Stderr, "Error: Config file path required.\nUsage: clipper config <path/to/config.json>")
+			os.Exit(1)
+		}
+		runConfig(args[1])
+		return
+
+	default:
+		// If user passes a flag or file directly: e.g. `clipper config.json` or `clipper -serve=:8000`
+		if strings.HasPrefix(cmd, "-s=") || strings.HasPrefix(cmd, "--serve=") || strings.HasPrefix(cmd, "-serve=") {
+			parts := strings.Split(cmd, "=")
+			serveAddr := parts[1]
+			if !strings.HasPrefix(serveAddr, ":") && !strings.Contains(serveAddr, ":") {
+				serveAddr = ":" + serveAddr
+			}
+			srv := web.NewServer(serveAddr, &clipper.Config{})
+			if err := srv.Start(); err != nil {
+				fmt.Fprintf(os.Stderr, "Web Studio error: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		}
+		if strings.HasPrefix(cmd, "-c=") || strings.HasPrefix(cmd, "--config=") || strings.HasPrefix(cmd, "-config=") {
+			parts := strings.Split(cmd, "=")
+			runConfig(parts[1])
+			return
+		}
+		if strings.HasSuffix(cmd, ".json") {
+			runConfig(args[0])
+			return
+		}
+
+		fmt.Fprintf(os.Stderr, "Unknown command or flag '%s'\n\n", args[0])
+		printUsage()
+		os.Exit(1)
+	}
+}
+
+func runConfig(cfgPath string) {
+	cfg, err := clipper.LoadConfig(cfgPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading configuration '%s': %v\n", cfgPath, err)
 		os.Exit(1)
 	}
 
@@ -426,7 +151,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := app.Process(&cfg); err != nil {
+	if err := app.Process(cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "Processing failed: %v\n", err)
 		os.Exit(1)
 	}
@@ -434,42 +159,46 @@ func main() {
 	fmt.Println("Done!")
 }
 
-func parseCLISegments(raw string) ([]clipper.Segment, error) {
-	pairs := strings.Split(raw, ",")
-	var result []clipper.Segment
-	for _, pair := range pairs {
-		pair = strings.TrimSpace(pair)
-		if pair == "" {
-			continue
-		}
-
-		title := ""
-		timePart := pair
-		dashIdx := strings.Index(pair, "-")
-		if dashIdx != -1 {
-			rest := pair[dashIdx+1:]
-			lastColon := strings.LastIndex(rest, ":")
-			if lastColon != -1 {
-				candidateTitle := strings.TrimSpace(rest[lastColon+1:])
-				// If candidateTitle is not numeric, it's a title! (e.g. 00:00-00:10:My Title)
-				if _, err := strconv.ParseFloat(candidateTitle, 64); err != nil && candidateTitle != "" {
-					title = candidateTitle
-					timePart = pair[:dashIdx+1+lastColon]
-				}
-			}
-		}
-
-		parts := strings.Split(timePart, "-")
-		if len(parts) != 2 {
-			return nil, fmt.Errorf("invalid segment pair '%s', expected format 'START-END' or 'START-END:TITLE'", pair)
-		}
-		result = append(result, clipper.Segment{
-			Start: strings.TrimSpace(parts[0]),
-			End:   strings.TrimSpace(parts[1]),
-			Title: strings.TrimSpace(title),
-		})
+func generateSampleConfigFile(filePath string) error {
+	sample := clipper.Config{
+		InputFile:        "https://www.youtube.com/watch?v=sample_video",
+		OutputDir:        "./clips",
+		OutputFile:       "merged_highlight.mp4",
+		Mode:             clipper.ModeSplit,
+		Strategy:         clipper.StrategyFast,
+		Shorts:           true,
+		ShortsStyle:      "blur",
+		Quality:          "1080p",
+		AutoDetect:       "ai",
+		TargetDuration:   30,
+		TranslateLang:    "id",
+		Subtitles:        true,
+		SubPreset:        "hormozi",
+		SubFontSize:      48,
+		SubEmoji:         true,
+		SubSDHMode:       "strip",
+		Loudnorm:         true,
+		JumpCut:          true,
+		GenerateMetadata: true,
+		ExtractThumbnail: true,
+		ThumbnailCount:   1,
+		HWAccel:          "auto",
+		ShowProgress:     true,
+		FaceTracking:     true,
+		Segments: []clipper.Segment{
+			{
+				Start: "00:00:10",
+				End:   "00:00:40",
+				Title: "Highlight 1 - Hook",
+			},
+			{
+				Start: "00:01:20",
+				End:   "00:01:50",
+				Title: "Highlight 2 - Peak Moment",
+			},
+		},
 	}
-	return result, nil
+	return saveConfig(filePath, sample)
 }
 
 func runInteractiveWizard(defaultFile string) {
@@ -478,7 +207,7 @@ func runInteractiveWizard(defaultFile string) {
 
 	fileOut := promptString(reader, "Output config filename", defaultFile)
 	inputFile := promptString(reader, "Input video file path or YouTube URL", "https://www.youtube.com/watch?v=sample")
-	outputDir := promptString(reader, "Output directory for clips", "./output_clips")
+	outputDir := promptString(reader, "Output directory for clips", "./clips")
 
 	fmt.Println("\nMode options:")
 	fmt.Println("  1. split (Cut into individual clip files)")
@@ -574,9 +303,8 @@ func runInteractiveWizard(defaultFile string) {
 	extractThumbnails := strings.ToLower(thumbChoice) == "y" || strings.ToLower(thumbChoice) == "yes"
 
 	hwChoice := promptString(reader, "\nHardware Acceleration mode (auto, nvenc, videotoolbox, qsv, vaapi, amf, cpu)", "auto")
-
 	quality := promptString(reader, "\nYouTube Video Download Quality (best, 1080p, 720p, 480p, 360p, worst)", "best")
-	autoDetect := promptString(reader, "\nAuto Detection Mode (press Enter to skip, or enter 'silence' / 'scene')", "")
+	autoDetect := promptString(reader, "\nAuto Detection Mode (press Enter to skip, or enter 'ai' / 'silence' / 'scene')", "")
 
 	var segments []clipper.Segment
 	if autoDetect == "" {
@@ -605,19 +333,19 @@ func runInteractiveWizard(defaultFile string) {
 	}
 
 	cfg := clipper.Config{
-		InputFile:    inputFile,
-		OutputDir:    outputDir,
-		OutputFile:   outputFile,
-		Mode:         mode,
-		Strategy:     strategy,
-		Shorts:       isShorts,
-		ShortsStyle:  shortsStyle,
-		Quality:      quality,
-		AutoDetect:    autoDetect,
-		Loudnorm:      loudnormEnabled,
-		JumpCut:       jumpCutEnabled,
+		InputFile:        inputFile,
+		OutputDir:        outputDir,
+		OutputFile:       outputFile,
+		Mode:             mode,
+		Strategy:         strategy,
+		Shorts:           isShorts,
+		ShortsStyle:      shortsStyle,
+		Quality:          quality,
+		AutoDetect:       autoDetect,
+		Loudnorm:         loudnormEnabled,
+		JumpCut:          jumpCutEnabled,
 		Subtitles:        burnSubs,
-		SubPreset:     subPresetChoice,
+		SubPreset:        subPresetChoice,
 		SubSDHMode:       subSDHChoice,
 		SubEmoji:         subEmojiChoice,
 		GenerateMetadata: generateMeta,
@@ -665,14 +393,4 @@ func saveConfig(filePath string, cfg clipper.Config) error {
 	}
 
 	return os.WriteFile(filePath, data, 0644)
-}
-
-func isFlagPassed(name string) bool {
-	found := false
-	flag.Visit(func(f *flag.Flag) {
-		if f.Name == name {
-			found = true
-		}
-	})
-	return found
 }

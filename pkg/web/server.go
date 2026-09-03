@@ -309,6 +309,11 @@ func (s *Server) handlePreview(w http.ResponseWriter, r *http.Request) {
 
 type clipRequestPayload struct {
 	InputFile        string            `json:"input_file"`
+	OutputDir        string            `json:"output_dir"`
+	OutputFile       string            `json:"output"`
+	Mode             clipper.Mode        `json:"mode"`
+	Strategy         clipper.CutStrategy `json:"strategy"`
+	Quality          string              `json:"quality"`
 	Segments         []clipper.Segment `json:"segments"`
 	AutoDetect       string            `json:"auto_detect"`
 	AIRouter         string            `json:"ai_router"`
@@ -319,14 +324,25 @@ type clipRequestPayload struct {
 	Subtitles        *bool             `json:"subtitles,omitempty"`
 	BurnSubtitles    *bool             `json:"burn_subtitles,omitempty"`
 	SubPreset        string            `json:"sub_preset"`
+	SubSDHMode       string            `json:"sub_sdh_mode"`
 	SubEmoji         bool              `json:"sub_emoji"`
 	Loudnorm         bool              `json:"loudnorm"`
 	JumpCut          bool              `json:"jump_cut"`
+	JumpCutMinSil    float64           `json:"jump_cut_min_silence"`
+	JumpCutMargin    float64           `json:"jump_cut_margin"`
+	JumpCutNoise     float64           `json:"jump_cut_noise"`
+	Watermark        string            `json:"watermark"`
+	WatermarkPos     string            `json:"watermark_pos"`
+	OverlayText      string            `json:"overlay_text"`
+	TextPos          string            `json:"text_pos"`
+	FontSize         int               `json:"font_size"`
+	FontColor        string            `json:"font_color"`
 	GenerateMetadata bool              `json:"generate_metadata"`
 	ExtractThumbnail bool              `json:"extract_thumbnail"`
 	ThumbnailCount   int               `json:"thumbnail_count"`
 	TargetDuration   float64           `json:"target_duration"`
 	HWAccel          string            `json:"hwaccel"`
+	Concurrency      int               `json:"concurrency"`
 }
 
 type autoDetectRequestPayload struct {
@@ -452,6 +468,18 @@ func (s *Server) handleClip(w http.ResponseWriter, r *http.Request) {
 	cfg.InputFile = req.InputFile
 	cfg.Segments = req.Segments
 	cfg.AutoDetect = req.AutoDetect
+	if req.Mode != "" {
+		cfg.Mode = req.Mode
+	}
+	if req.OutputFile != "" {
+		cfg.OutputFile = req.OutputFile
+	}
+	if req.Strategy != "" {
+		cfg.Strategy = req.Strategy
+	}
+	if req.Quality != "" {
+		cfg.Quality = req.Quality
+	}
 	if req.TargetDuration > 0 {
 		cfg.TargetDuration = req.TargetDuration
 		cfg.AIConfig.TargetDuration = req.TargetDuration
@@ -477,9 +505,31 @@ func (s *Server) handleClip(w http.ResponseWriter, r *http.Request) {
 	if req.SubPreset != "" {
 		cfg.SubPreset = req.SubPreset
 	}
+	if req.SubSDHMode != "" {
+		cfg.SubSDHMode = req.SubSDHMode
+	}
 	cfg.SubEmoji = req.SubEmoji
 	cfg.Loudnorm = req.Loudnorm
 	cfg.JumpCut = req.JumpCut
+	if req.JumpCutMinSil > 0 {
+		cfg.JumpCutMinSil = req.JumpCutMinSil
+	}
+	if req.JumpCutMargin > 0 {
+		cfg.JumpCutMargin = req.JumpCutMargin
+	}
+	if req.JumpCutNoise != 0 {
+		cfg.JumpCutNoise = req.JumpCutNoise
+	}
+	if req.Watermark != "" {
+		cfg.WatermarkPath = req.Watermark
+		cfg.WatermarkPos = req.WatermarkPos
+	}
+	if req.OverlayText != "" {
+		cfg.OverlayText = req.OverlayText
+		cfg.TextPos = req.TextPos
+		cfg.FontSize = req.FontSize
+		cfg.FontColor = req.FontColor
+	}
 	cfg.GenerateMetadata = req.GenerateMetadata
 	cfg.ExtractThumbnail = req.ExtractThumbnail
 	if req.ThumbnailCount > 0 {
@@ -490,7 +540,12 @@ func (s *Server) handleClip(w http.ResponseWriter, r *http.Request) {
 	if req.HWAccel != "" {
 		cfg.HWAccel = req.HWAccel
 	}
-	if cfg.OutputDir == "" {
+	if req.Concurrency > 0 {
+		cfg.Concurrency = req.Concurrency
+	}
+	if req.OutputDir != "" {
+		cfg.OutputDir = req.OutputDir
+	} else if cfg.OutputDir == "" {
 		cfg.OutputDir = s.OutDir
 	}
 

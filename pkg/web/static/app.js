@@ -397,6 +397,27 @@ async function loadClipsGallery() {
   }
 }
 
+function toggleAdvancedRenderOptions() {
+  const drawer = document.getElementById('advRenderDrawer');
+  const toggleBtn = document.getElementById('advOptionsToggle');
+  if (!drawer) return;
+  const isHidden = drawer.style.display === 'none';
+  drawer.style.display = isHidden ? 'block' : 'none';
+  if (toggleBtn) {
+    toggleBtn.textContent = isHidden ? '[- Advanced Options]' : '[+ Advanced Options]';
+  }
+}
+
+function onRenderModeChange() {
+  const mode = document.getElementById('cfgMode')?.value;
+  if (mode === 'merge') {
+    const drawer = document.getElementById('advRenderDrawer');
+    if (drawer && drawer.style.display === 'none') {
+      toggleAdvancedRenderOptions();
+    }
+  }
+}
+
 async function startClippingJob() {
   const input = document.getElementById('videoSource').value.trim();
   if (!input) {
@@ -411,17 +432,31 @@ async function startClippingJob() {
   const payload = {
     input_file: input,
     segments: segments,
+    mode: document.getElementById('cfgMode')?.value || 'split',
+    output: document.getElementById('cfgOutputFile')?.value.trim() || 'merged_highlight.mp4',
+    strategy: document.getElementById('cfgStrategy')?.value || 'fast',
+    quality: document.getElementById('cfgQuality')?.value || 'best',
     shorts: document.getElementById('cfgShorts').checked,
     shorts_style: document.getElementById('cfgShortsStyle').value,
     subtitles: document.getElementById('cfgBurnSubs').checked,
     sub_preset: document.getElementById('cfgSubPreset').value,
+    sub_sdh_mode: document.getElementById('cfgSubSDHMode')?.value || 'strip',
     sub_emoji: true,
     loudnorm: document.getElementById('cfgLoudnorm').checked,
     jump_cut: document.getElementById('cfgJumpCut').checked,
+    jump_cut_min_silence: parseFloat(document.getElementById('cfgJumpCutMinSil')?.value || '1.0'),
+    jump_cut_margin: parseFloat(document.getElementById('cfgJumpCutMargin')?.value || '0.2'),
+    jump_cut_noise: parseFloat(document.getElementById('cfgJumpCutNoise')?.value || '-30'),
+    watermark: document.getElementById('cfgWatermark')?.value.trim() || '',
+    watermark_pos: document.getElementById('cfgWatermarkPos')?.value || 'top-right',
+    overlay_text: document.getElementById('cfgOverlayText')?.value.trim() || '',
+    text_pos: document.getElementById('cfgTextPos')?.value || 'bottom-center',
+    font_color: document.getElementById('cfgFontColor')?.value || 'white',
     generate_metadata: document.getElementById('cfgMetadata').checked,
     extract_thumbnail: document.getElementById('cfgThumbnail').checked,
     thumbnail_count: 1,
-    hwaccel: document.getElementById('cfgHwaccel').value
+    hwaccel: document.getElementById('cfgHwaccel').value,
+    output_dir: document.getElementById('cfgOutputDir')?.value.trim() || './clips'
   };
 
   try {
@@ -442,6 +477,130 @@ async function startClippingJob() {
   } catch (err) {
     alert('Network error: ' + err);
   }
+}
+
+function exportCurrentConfig() {
+  const input = document.getElementById('videoSource')?.value.trim() || '';
+  const config = {
+    input: input,
+    output_dir: document.getElementById('cfgOutputDir')?.value.trim() || './clips',
+    output: document.getElementById('cfgOutputFile')?.value.trim() || 'merged_highlight.mp4',
+    mode: document.getElementById('cfgMode')?.value || 'split',
+    strategy: document.getElementById('cfgStrategy')?.value || 'fast',
+    shorts: document.getElementById('cfgShorts')?.checked ?? true,
+    shorts_style: document.getElementById('cfgShortsStyle')?.value || 'smart-crop',
+    quality: document.getElementById('cfgQuality')?.value || 'best',
+    subtitles: document.getElementById('cfgBurnSubs')?.checked ?? true,
+    sub_preset: document.getElementById('cfgSubPreset')?.value || 'hormozi',
+    sub_sdh_mode: document.getElementById('cfgSubSDHMode')?.value || 'strip',
+    sub_emoji: true,
+    sub_font_size: 48,
+    loudnorm: document.getElementById('cfgLoudnorm')?.checked ?? true,
+    jump_cut: document.getElementById('cfgJumpCut')?.checked ?? false,
+    jump_cut_min_silence: parseFloat(document.getElementById('cfgJumpCutMinSil')?.value || '1.0'),
+    jump_cut_margin: parseFloat(document.getElementById('cfgJumpCutMargin')?.value || '0.2'),
+    jump_cut_noise: parseFloat(document.getElementById('cfgJumpCutNoise')?.value || '-30'),
+    watermark: document.getElementById('cfgWatermark')?.value.trim() || '',
+    watermark_pos: document.getElementById('cfgWatermarkPos')?.value || 'top-right',
+    overlay_text: document.getElementById('cfgOverlayText')?.value.trim() || '',
+    text_pos: document.getElementById('cfgTextPos')?.value || 'bottom-center',
+    font_color: document.getElementById('cfgFontColor')?.value || 'white',
+    generate_metadata: document.getElementById('cfgMetadata')?.checked ?? true,
+    extract_thumbnail: document.getElementById('cfgThumbnail')?.checked ?? true,
+    thumbnail_count: 1,
+    hwaccel: document.getElementById('cfgHwaccel')?.value || 'auto',
+    show_progress: true,
+    face_tracking: true,
+    ai_config: {
+      api_router: 'gemini',
+      api_key: getGlobalApiKey(),
+      model: getGlobalSegmentModel()
+    },
+    segments: segments
+  };
+
+  const jsonStr = JSON.stringify(config, null, 2);
+  const blob = new Blob([jsonStr], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'config.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function handleConfigFileImport(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const cfg = JSON.parse(e.target.result);
+      applyImportedConfig(cfg);
+    } catch (err) {
+      alert('Failed to parse JSON configuration file: ' + err);
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+function applyImportedConfig(cfg) {
+  if (cfg.input || cfg.input_file) {
+    const srcInput = document.getElementById('videoSource');
+    if (srcInput) {
+      srcInput.value = cfg.input || cfg.input_file;
+      loadSource();
+    }
+  }
+
+  if (Array.isArray(cfg.segments)) {
+    segments = cfg.segments.map(s => ({
+      start: String(s.start || '00:00'),
+      end: String(s.end || '00:30'),
+      title: s.title || '',
+      subtitles: s.subtitles || null,
+      sub_position: s.sub_position || 'bottom',
+      sub_preset: s.sub_preset || 'hormozi',
+      sub_font_size: s.sub_font_size || 48
+    }));
+    renderSegments();
+  }
+
+  // Render settings
+  if (cfg.mode && document.getElementById('cfgMode')) document.getElementById('cfgMode').value = cfg.mode;
+  if (cfg.output && document.getElementById('cfgOutputFile')) document.getElementById('cfgOutputFile').value = cfg.output;
+  if (cfg.output_dir && document.getElementById('cfgOutputDir')) document.getElementById('cfgOutputDir').value = cfg.output_dir;
+  if (cfg.strategy && document.getElementById('cfgStrategy')) document.getElementById('cfgStrategy').value = cfg.strategy;
+  if (cfg.quality && document.getElementById('cfgQuality')) document.getElementById('cfgQuality').value = cfg.quality;
+  if (typeof cfg.shorts === 'boolean' && document.getElementById('cfgShorts')) document.getElementById('cfgShorts').checked = cfg.shorts;
+  if (cfg.shorts_style && document.getElementById('cfgShortsStyle')) document.getElementById('cfgShortsStyle').value = cfg.shorts_style;
+  if (typeof cfg.subtitles === 'boolean' && document.getElementById('cfgBurnSubs')) document.getElementById('cfgBurnSubs').checked = cfg.subtitles;
+  if (cfg.sub_preset && document.getElementById('cfgSubPreset')) document.getElementById('cfgSubPreset').value = cfg.sub_preset;
+  if (cfg.sub_sdh_mode && document.getElementById('cfgSubSDHMode')) document.getElementById('cfgSubSDHMode').value = cfg.sub_sdh_mode;
+  if (typeof cfg.loudnorm === 'boolean' && document.getElementById('cfgLoudnorm')) document.getElementById('cfgLoudnorm').checked = cfg.loudnorm;
+  if (typeof cfg.jump_cut === 'boolean' && document.getElementById('cfgJumpCut')) document.getElementById('cfgJumpCut').checked = cfg.jump_cut;
+  if (cfg.jump_cut_min_silence && document.getElementById('cfgJumpCutMinSil')) document.getElementById('cfgJumpCutMinSil').value = cfg.jump_cut_min_silence;
+  if (cfg.jump_cut_margin && document.getElementById('cfgJumpCutMargin')) document.getElementById('cfgJumpCutMargin').value = cfg.jump_cut_margin;
+  if (cfg.jump_cut_noise && document.getElementById('cfgJumpCutNoise')) document.getElementById('cfgJumpCutNoise').value = cfg.jump_cut_noise;
+  if (cfg.watermark && document.getElementById('cfgWatermark')) document.getElementById('cfgWatermark').value = cfg.watermark;
+  if (cfg.watermark_pos && document.getElementById('cfgWatermarkPos')) document.getElementById('cfgWatermarkPos').value = cfg.watermark_pos;
+  if (cfg.overlay_text && document.getElementById('cfgOverlayText')) document.getElementById('cfgOverlayText').value = cfg.overlay_text;
+  if (cfg.text_pos && document.getElementById('cfgTextPos')) document.getElementById('cfgTextPos').value = cfg.text_pos;
+  if (cfg.font_color && document.getElementById('cfgFontColor')) document.getElementById('cfgFontColor').value = cfg.font_color;
+  if (typeof cfg.generate_metadata === 'boolean' && document.getElementById('cfgMetadata')) document.getElementById('cfgMetadata').checked = cfg.generate_metadata;
+  if (typeof cfg.extract_thumbnail === 'boolean' && document.getElementById('cfgThumbnail')) document.getElementById('cfgThumbnail').checked = cfg.extract_thumbnail;
+  if (cfg.hwaccel && document.getElementById('cfgHwaccel')) document.getElementById('cfgHwaccel').value = cfg.hwaccel;
+
+  if (cfg.ai_config?.api_key) {
+    localStorage.setItem('clipper_gemini_api_key', cfg.ai_config.api_key);
+    initGlobalAISettings();
+  }
+
+  alert(`✓ Configuration successfully loaded (${segments.length} segments)`);
 }
 
 function startPollingStatus() {

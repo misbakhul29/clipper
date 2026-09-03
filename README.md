@@ -1,40 +1,75 @@
-# Automated Video Clipping System (Golang + FFmpeg)
+# Clipper — Minimalist AI Video Clipper & Shorts Engine (Golang + FFmpeg)
 
-Sistem pemotong video otomatis berbasis **Go (Golang)** yang terintegrasi dengan **FFmpeg**, **Multi-Provider AI (Google Gemini, DeepSeek, OpenAI, OpenRouter)**, dan **Local Whisper AI**. Sistem ini dirancang untuk memotong video, mendeteksi klip paling menarik/viral secara otomatis, merender format vertikal 9:16 (Shorts/Reels/TikTok), dan menempelkan subtitle animasi interaktif.
+Sistem pemotong video dan generator Shorts otomatis berbasis **Go (Golang)** dan **FFmpeg**, ditenagai **Google Gemini AI Audio Speech-to-Text** dan **Multi-Provider AI Highlight Detection**.
 
-## 🚀 Fitur Utama
+---
 
-- 🎤 **TikTok & Instagram Reels Karaoke Subtitles (`-sub-style karaoke`)**: Subtitle animasi cepat per 2–3 kata berlatar kuning menyala + font Impact tebal atau font kustom (`-sub-font-path`).
-- 📂 **Per-Video Cache Isolation & Auto-Cleanup (`-clean-cache`)**: Struktur cache berbasis subfolder per video (`./cache/<video_id>/`) untuk mencegah bentrok subtitle, dilengkapi pembersih cache berdasar umur retensi (`-clean-days N`).
-- 📑 **Batch Processing Queue (`-batch-list urls.txt`)**: Pemrosesan banyak video sekaligus dari daftar URL/file secara otomatis dalam satu antrean.
-- 🔍 **Dry-Run Preview Mode (`-dry-run`)**: Mode simulasi untuk mengecek kalkulasi segmen, hasil auto-detection AI, dan perintah FFmpeg tanpa merender video.
-- 🤖 **Multi-Provider AI Highlight Detection**: Dukungan provider AI ganda (**Google Gemini**, **DeepSeek**, **OpenAI**, **OpenRouter**) untuk analisis klip paling viral dari transkrip video.
-- 🎙️ **Local Whisper Speech-to-Text (`-use-whisper`)**: Ekstraksi subtitle AI secara otomatis dan offline dari audio video menggunakan Whisper AI.
-- 👤 **Dynamic Speaker Auto-Framing & Face Tracking (`-shorts-style smart-crop`)**: Pemotongan vertikal 9:16 otomatis yang melacak wajah pembicara aktif (*Active Speaker Tracking*) berbasis pure Go AI detector (`pigo`) dengan transisi pergerakan kamera halus (*temporal camera easing & deadband*).
-- 🔊 **Auto Audio Normalization (`-loudnorm`)**: Penyetaraan volume suara standar industri EBU R128 (-14 LUFS target Shorts/TikTok/Reels) otomatis tanpa distorsi (*True Peak -2 dBTP*).
-- ✂️ **Smart Silence Removal / Jump-Cut (`-jump-cut`)**: Otomatis memotong jeda hening / diam 2–4 detik di tengah percakapan dengan margin wicara aman (*anti-clipping speech margin*) untuk tempo video yang padat (*snappy*).
-- 🎨 **Preset Tema Subtitle Viral (`-sub-preset`)**: Gaya subtitle ASS siap pakai ala CapCut/OpusClip (`hormozi` pop-in bounce, `minimal`/`devon` clean white, `neon` glowing cyan, `cinematic` soft ivory).
-- 🏷️ **Pemisah Silent Narrator & SDH (`-sub-sdh-mode`)**: Penanganan cerdas untuk deskripsi situasi `[...]` (alur cerita/movie recap) dengan mode `strip` (bersihkan dialog) atau `top-box` (banner statis di atas frame).
-- 🤩 **Auto Contextual Emoji Injection (`-sub-emoji`)**: Injeksi otomatis emoji kontekstual cerdas pada teks takarir berdasarkan kata kunci semantik (misal: "uang" ➔ 💰, "api/viral" ➔ 🔥, "ide" ➔ 💡) dengan sistem anti-spam & anti-duplikasi beruntun.
-- 📋 **AI Social Metadata Generator (`-metadata`)**: Otomatis menghasilkan berkas pendamping `metadata.json` dan `.txt` berisi judul hook viral (*high-CTR*), deskripsi, *call-to-action*, trending hashtags, dan skor viralitas (1–100) beserta alasannya untuk mempermudah upload ke TikTok, YouTube Shorts, dan Reels.
-- 🖼️ **Thumbnail & Hook Frame Auto-Extractor (`-thumbnail`)**: Otomatis mengekstrak frame beresolusi tinggi (`.jpg`) dari detik pembuka dengan ekspresi wajah terbaik, lengkap dengan overlay teks judul hook viral untuk sampul Instagram Reels / YouTube Shorts.
-- 🚀 **Hardware Acceleration Auto-Detection (`-hwaccel`)**: Akselerasi rendering video hingga 5x–10x lebih cepat dengan auto-detect GPU: NVIDIA NVENC (`h264_nvenc`), Apple Silicon VideoToolbox (`h264_videotoolbox`), Intel QuickSync (`h264_qsv`), AMD AMF (`h264_amf`), dan Linux VA-API (`h264_vaapi`).
-- 🌐 **Local Web Studio Dashboard (`-serve`)**: Antarmuka web visual interaktif modern (`clipper -serve :8080`) dengan HTML5 video player, pembuat segmen visual (*visual trimmer*), kontrol toggle Shorts/Subtitles/AI, dan galeri pemutar klip video hasil ekspor.
-- 📊 **Terminal Interactive Progress Bar (`-progress`)**: Visualisasi progress bar dinamis (*percentage, speed, ETA*) saat mengunduh YouTube dan merender segmen FFmpeg secara real-time.
-- 🎙️ **Smart Silence & Scene Auto-Detection**: Deteksi otomatis bagian percakapan/suara (`-auto-detect silence`) atau perpindahan adegan (`-auto-detect scene`).
-- ⚡ **Parallel Concurrency Engine**: Render banyak klip sekaligus secara paralel via Goroutines worker pool.
-- 🎨 **Watermark Image & Text Overlay**: Penambahan logo watermark PNG & caption teks otomatis pada klip.
-- 📱 **YouTube Shorts / TikTok / Reels (9:16)**: Format vertikal dengan style *center crop*, *smart crop*, atau *blurred background*.
+## ⚡ 3 Cara Utama Menggunakan Clipper
+
+Clipper didesain sangat intuitif dengan 3 perintah utama:
+
+### 1. 🌐 Web Studio Dashboard (`clipper serve`)
+Jalankan studio visual lengkap dengan video preview player, AI highlight detector, in-queue custom subtitle editor, dan rendering engine:
+```bash
+clipper serve
+# atau tentukan port kustom
+clipper serve :8080
+# atau gunakan shortcut
+clipper -s
+```
+Buka **http://localhost:8000** di browser Anda.
+
+---
+
+### 2. ⚙️ Eksekusi via Berkas Konfigurasi (`clipper config`)
+Jalankan proses pemotongan dan rendering video langsung dari berkas JSON:
+```bash
+clipper config config.json
+# atau gunakan shortcut
+clipper -c segments.json
+# atau langsung sebut nama filenya
+clipper my_project.json
+```
+
+---
+
+### 3. 📝 Buat Berkas Konfigurasi Baru (`clipper init`)
+Buat template `config.json` siap pakai atau jalankan panduan interaktif:
+```bash
+# Membuat template config.json siap pakai
+clipper init
+clipper init my_config.json
+
+# Menjalankan panduan interaktif (wizard)
+clipper -i
+clipper init --wizard
+```
+
+---
+
+## 🚀 Fitur Unggulan
+
+- 🌐 **Interactive Web Studio**: HTML5 video trimmer, pratinjau real-time, import/export `config.json`.
+- 🎙️ **Gemini Multimodal Speech-to-Text (STT)**: Transkripsi audio langsung ke subtitle akurat per-detik via Google Gemini API tanpa beban CPU/RAM.
+- 🎨 **Viral Subtitle Theme Presets**:
+  - `hormozi` (Pop-in bounce kuning viral)
+  - `minimal` (Clean white ala Ali Abdaal / Devon)
+  - `neon` (Electric cyan glowing magenta)
+  - `cinematic` (Soft ivory classic)
+- 👤 **Smart-Crop (Active Speaker Tracking)**: Konversi otomatis ke vertikal 9:16 dengan pelacak wajah dan panning kamera halus.
+- ✂️ **Smart Silence Removal (Jump-Cut)**: Memotong jeda hening di tengah video secara otomatis.
+- 🔊 **EBU R128 Audio Normalization**: Penyetaraan volume standar broadcast (-14 LUFS).
+- 📋 **AI Social Metadata & Thumbnail Extractor**: Menghasilkan judul hook, deskripsi, hashtags, dan cover JPG otomatis.
+- ⚡ **Hardware Acceleration Auto-Detect**: Dukungan otomatis untuk NVIDIA NVENC, Apple VideoToolbox, Intel QSV, dan CPU.
 
 ---
 
 ## 📦 Instalasi
 
-### Install Langsung via Go (`go install`)
+### Install via Go
 ```bash
 go install github.com/misbakhul29/clipper@latest
 ```
-*Pastikan `$GOPATH/bin` (misal: `~/go/bin`) sudah terdaftar di environment variable `PATH` OS Anda agar perintah `clipper` dapat langsung dijalankan dari terminal manapun.*
 
 ### Build dari Source Code
 ```bash
@@ -45,47 +80,6 @@ go build -o bin/clipper .
 
 ---
 
-## 📖 Dokumentasi & Konfigurasi
+## 📖 Referensi Contoh `config.json`
 
-- 📑 **[CLI_USAGE.md](CLI_USAGE.md)**: Dokumentasi lengkap baris perintah (*CLI Flags*), opsi Multi-Provider AI, dan contoh skenario penggunaan.
-- ⚙️ **[EXAMPLE_CONFIG.md](EXAMPLE_CONFIG.md)**: Contoh lengkap berkas konfigurasi `config.json` dan kamus referensi parameter JSON.
-
----
-
-## ⚡ Contoh Perintah Cepat
-
-### 1. Render Shorts 9:16 Blur + TikTok Karaoke Subtitles
-```bash
-clipper -input "https://www.youtube.com/watch?v=xxx" \
-  -auto-detect ai \
-  -shorts -shorts-style blur \
-  -subtitles -sub-style karaoke -sub-font-size 54 \
-  -translate-lang id \
-  -ai-router gemini -ai-key "YOUR_GEMINI_API_KEY" \
-  -outdir ./yt_karaoke_shorts
-```
-
-### 2. Dry-Run Simulation (Pratinjau Segmen Tanpa Render Video)
-```bash
-clipper -input "https://www.youtube.com/watch?v=xxx" -auto-detect silence -shorts -dry-run
-```
-
-### 3. Pemrosesan Antrean Banyak Video (Batch Queue)
-```bash
-clipper -batch-list my_urls.txt -auto-detect ai -shorts -subtitles -sub-style karaoke
-```
-
-### 4. Bersihkan Cache yang Berumur Lebih dari 7 Hari
-```bash
-clipper -clean-cache -clean-days 7
-```
-
-### 5. Local Whisper Speech-to-Text Offline
-```bash
-clipper -input "my_local_video.mp4" -auto-detect ai -use-whisper -shorts -subtitles -sub-style karaoke
-```
-
-### 6. Mode Interaktif Wizard
-```bash
-clipper -i
-```
+Lihat [examples/segments.json](examples/segments.json) untuk contoh lengkap seluruh opsi konfigurasi.

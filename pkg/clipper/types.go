@@ -141,6 +141,21 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// LoadConfig reads and parses a Config from a JSON file.
+func LoadConfig(filePath string) (*Config, error) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file '%s': %w", filePath, err)
+	}
+
+	var cfg Config
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse JSON in config file '%s': %w", filePath, err)
+	}
+
+	return &cfg, nil
+}
+
 // GetBatchInputs parses multiple input URLs or file paths from BatchList or comma-separated InputFile.
 func (c *Config) GetBatchInputs() []string {
 	var inputs []string
