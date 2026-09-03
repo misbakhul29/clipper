@@ -1,10 +1,12 @@
 package clipper
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 
@@ -84,67 +86,13 @@ func (c *Clipper) Process(cfg *Config) error {
 	// Auto Detection if segments are empty
 	if len(cfg.Segments) == 0 && cfg.AutoDetect != "" {
 		fmt.Printf("Auto-detecting segments using '%s' detection mode...\n", cfg.AutoDetect)
-		switch cfg.AutoDetect {
-		case "ai", "transcript":
-			fmt.Printf("Fetching subtitles for AI analysis...\n")
-			lang := cfg.TranslateLang
-			if lang == "" {
-				lang = "id"
-			}
-			var subEntries []transcriber.SubtitleEntry
-			var err error
-			if cfg.UseWhisper {
-				subEntries, err = transcriber.TranscribeWithWhisper(cfg.InputFile, cfg.CacheDir, lang)
-			} else {
-				subEntries, err = transcriber.FetchSubtitles(originalInput, cfg.CacheDir, lang)
-				if err != nil || len(subEntries) == 0 {
-					fmt.Printf("YouTube subtitles unavailable (%v), falling back to local Whisper AI...\n", err)
-					subEntries, err = transcriber.TranscribeWithWhisper(cfg.InputFile, cfg.CacheDir, lang)
-				}
-			}
-			if err != nil {
-				return fmt.Errorf("failed to fetch or transcribe subtitles: %w", err)
-			}
-			cachedSubEntries = subEntries
-			cfg.AIConfig.IsShorts = cfg.Shorts
-			fmt.Printf("Analyzing %d subtitle entries via AI (%s / %s, is_shorts: %v, target lang: %s)...\n", len(subEntries), cfg.AIConfig.APIRouter, cfg.AIConfig.Model, cfg.Shorts, lang)
-			highlights, err := ai.AnalyzeHighlightsMultiProvider(subEntries, cfg.AIConfig, lang)
-			if err != nil {
-				return fmt.Errorf("AI highlight analysis failed: %w", err)
-			}
-			for _, h := range highlights {
-				cfg.Segments = append(cfg.Segments, Segment{
-					Start: h.Start,
-					End:   h.End,
-					Title: h.Title,
-				})
-			}
-		case "silence":
-			detected, err := detector.DetectSilence(c.runner.FFmpegPath, cfg.InputFile, -30, 0.5)
-			if err != nil {
-				return fmt.Errorf("silence auto detection failed: %w", err)
-			}
-			for _, d := range detected {
-				cfg.Segments = append(cfg.Segments, Segment{
-					Start: d.Start,
-					End:   d.End,
-					Title: d.Title,
-				})
-			}
-		case "scene":
-			detected, err := detector.DetectScenes(c.runner.FFmpegPath, cfg.InputFile, 0.3)
-			if err != nil {
-				return fmt.Errorf("scene auto detection failed: %w", err)
-			}
-			for _, d := range detected {
-				cfg.Segments = append(cfg.Segments, Segment{
-					Start: d.Start,
-					End:   d.End,
-					Title: d.Title,
-				})
-			}
-		default:
-			return fmt.Errorf("unrecognized auto_detect mode '%s', expected 'silence', 'scene', or 'ai'", cfg.AutoDetect)
+		detected, subs, err := c.DetectSegmentsWithSubs(cfg, originalInput)
+		if err != nil {
+			return err
+		}
+		cfg.Segments = append(cfg.Segments, detected...)
+		if len(subs) > 0 {
+			cachedSubEntries = subs
 		}
 		fmt.Printf("Auto-detected %d segments!\n", len(cfg.Segments))
 	}
@@ -172,6 +120,17 @@ func (c *Clipper) Process(cfg *Config) error {
 		fmt.Printf("Output Dir    : %s\n", outputDir)
 		fmt.Printf("Total Segments: %d\n", len(cfg.Segments))
 		fmt.Printf("Mode          : %s, Strategy: %s, Shorts: %v (style: %s)\n", cfg.Mode, cfg.Strategy, cfg.Shorts, cfg.ShortsStyle)
+		if cfg.JumpCut {
+			minSil := cfg.JumpCutMinSil
+			if minSil <= 0 {
+				minSil = 1.0
+			}
+			margin := cfg.JumpCutMargin
+			if margin <= 0 {
+				margin = 0.2
+			}
+			fmt.Printf("Jump-Cut      : Enabled (Min Silence: %.1fs, Margin: %.1fs)\n", minSil, margin)
+		}
 		if cfg.SubFontPath != "" {
 			fmt.Printf("Custom Font   : %s\n", cfg.SubFontPath)
 		}
@@ -203,12 +162,12 @@ func (c *Clipper) Process(cfg *Config) error {
 	}
 
 	var allSubEntries []transcriber.SubtitleEntry
-	if cfg.BurnSubtitles {
+	if cfg.Subtitles || cfg.GenerateMetadata {
 		if len(cachedSubEntries) > 0 {
 			allSubEntries = cachedSubEntries
-			fmt.Printf("Reusing %d cached subtitle entries for burn-in captions!\n", len(allSubEntries))
+			fmt.Printf("Reusing %d cached subtitle entries for video clips!\n", len(allSubEntries))
 		} else {
-			fmt.Printf("Fetching subtitles for burnt-in captions...\n")
+			fmt.Printf("Fetching subtitles for video clips...\n")
 			lang := cfg.TranslateLang
 			if lang == "" {
 				lang = "id"
@@ -225,7 +184,7 @@ func (c *Clipper) Process(cfg *Config) error {
 			}
 			if err == nil && len(subs) > 0 {
 				allSubEntries = subs
-				fmt.Printf("Loaded %d subtitle entries for burn-in captions!\n", len(allSubEntries))
+				fmt.Printf("Loaded %d subtitle entries for video clips!\n", len(allSubEntries))
 			}
 		}
 	}
@@ -238,12 +197,64 @@ func (c *Clipper) Process(cfg *Config) error {
 	if cfg.OverlayText != "" {
 		fmt.Printf("Overlay Text: '%s' (pos: %s)\n", cfg.OverlayText, cfg.TextPos)
 	}
-	if cfg.BurnSubtitles {
-		fmt.Printf("Burnt-in Subtitles: Enabled\n")
+	if cfg.Subtitles {
+		preset := cfg.SubPreset
+		if preset == "" {
+			preset = "hormozi"
+		}
+		sdh := cfg.SubSDHMode
+		if sdh == "" {
+			sdh = "strip"
+		}
+		emojiStatus := "Enabled"
+		if !cfg.SubEmoji {
+			emojiStatus = "Disabled"
+		}
+		fmt.Printf("Burnt-in Subtitles: Enabled (Theme: %s, SDH: %s, Emojis: %s)\n", preset, sdh, emojiStatus)
+	}
+	if cfg.GenerateMetadata {
+		fmt.Println("Social Metadata: Enabled (metadata.json & .txt companion)")
+	}
+	if cfg.ExtractThumbnail {
+		tCount := cfg.ThumbnailCount
+		if tCount <= 0 {
+			tCount = 1
+		}
+		fmt.Printf("Thumbnail Extractor: Enabled (Hook cover & clean frames, count: %d)\n", tCount)
+	}
+	hwProf := DetectHardwareEncoder(c.runner.FFmpegPath, cfg.HWAccel)
+	if hwProf.IsHardware {
+		fmt.Printf("Hardware Acceleration: %s [5x-10x speedup]\n", hwProf.DisplayName)
+	} else {
+		fmt.Printf("Hardware Acceleration: Software CPU (%s)\n", hwProf.Encoder)
+	}
+	if cfg.Loudnorm {
+		targetI := cfg.LoudnormI
+		if targetI == 0 {
+			targetI = -14.0
+		}
+		fmt.Printf("Audio Normalization: EBU R128 (Target: %.1f LUFS)\n", targetI)
+	}
+	if cfg.JumpCut {
+		minSil := cfg.JumpCutMinSil
+		if minSil <= 0 {
+			minSil = 1.0
+		}
+		margin := cfg.JumpCutMargin
+		if margin <= 0 {
+			margin = 0.2
+		}
+		noise := cfg.JumpCutNoise
+		if noise == 0 {
+			noise = -30.0
+		}
+		fmt.Printf("Smart Silence Removal (Jump-Cut): Enabled (Min Silence: %.1fs, Margin: %.1fs, Noise: %.1fdB)\n",
+			minSil, margin, noise)
 	}
 
 	type job struct {
 		index       int
+		seg         Segment
 		startSec    float64
 		durationSec float64
 		segPath     string
@@ -254,6 +265,7 @@ func (c *Clipper) Process(cfg *Config) error {
 		index   int
 		segPath string
 		isTemp  bool
+		meta    *ai.SocialMetadata
 		err     error
 	}
 
@@ -284,6 +296,7 @@ func (c *Clipper) Process(cfg *Config) error {
 
 		jobs <- job{
 			index:       i,
+			seg:         seg,
 			startSec:    startSec,
 			durationSec: durationSec,
 			segPath:     segPath,
@@ -299,15 +312,86 @@ func (c *Clipper) Process(cfg *Config) error {
 		go func() {
 			defer wg.Done()
 			for j := range jobs {
+				effectiveInput := cfg.InputFile
+				effectiveStart := j.startSec
+				effectiveDuration := j.durationSec
+				var jumpCutTemp string
+				var removedGaps []detector.SilenceGap
+
+				if cfg.JumpCut {
+					minSil := cfg.JumpCutMinSil
+					if minSil <= 0 {
+						minSil = 1.0
+					}
+					margin := cfg.JumpCutMargin
+					if margin <= 0 {
+						margin = 0.2
+					}
+					noise := cfg.JumpCutNoise
+					if noise == 0 {
+						noise = -30.0
+					}
+
+					rawGaps, _ := detector.DetectSilenceGaps(c.runner.FFmpegPath, cfg.InputFile, j.startSec, j.durationSec, noise, minSil)
+					keptIntervals, actualRemoved := detector.CalculateJumpCutIntervals(j.durationSec, rawGaps, margin)
+
+					if len(actualRemoved) > 0 && len(keptIntervals) >= 1 {
+						var totalRemoved float64
+						for _, r := range actualRemoved {
+							totalRemoved += r.Duration()
+						}
+						newDur := j.durationSec - totalRemoved
+						fmt.Printf("[%d/%d] Jump-Cut: Excising %d silence pauses (-%.2fs) -> Snappy duration: %.2fs (was %.2fs)\n",
+							j.index+1, len(cfg.Segments), len(actualRemoved), totalRemoved, newDur, j.durationSec)
+
+						jumpCutTemp = filepath.Join(outputDir, fmt.Sprintf(".jc_pre_%03d.mp4", j.index+1))
+						if jcErr := c.runner.ApplyJumpCut(cfg.InputFile, j.startSec, j.durationSec, keptIntervals, jumpCutTemp); jcErr == nil {
+							effectiveInput = jumpCutTemp
+							effectiveStart = 0.0
+							effectiveDuration = newDur
+							removedGaps = actualRemoved
+						} else {
+							fmt.Printf("[%d/%d] Jump-Cut warning: %v, falling back to original clip\n", j.index+1, len(cfg.Segments), jcErr)
+							_ = os.Remove(jumpCutTemp)
+							jumpCutTemp = ""
+						}
+					}
+				}
+
 				fmt.Printf("[%d/%d] Cutting segment: %.2fs -> duration %.2fs -> %s\n",
-					j.index+1, len(cfg.Segments), j.startSec, j.durationSec, j.segPath)
+					j.index+1, len(cfg.Segments), effectiveStart, effectiveDuration, j.segPath)
+				if cfg.Shorts && cfg.ShortsStyle == "smart-crop" && cfg.FaceTracking {
+					fmt.Printf("[%d/%d] Analyzing active speaker & face tracking for smart-crop auto-framing...\n", j.index+1, len(cfg.Segments))
+				}
 
 				subPath := ""
-				if len(allSubEntries) > 0 {
-					sliced := transcriber.SliceSubtitles(allSubEntries, j.startSec, j.startSec+j.durationSec)
+				var segSubEntries []transcriber.SubtitleEntry
+				if len(j.seg.Subtitles) > 0 {
+					// Use custom segment subtitle cues configured in studio!
+					for _, cue := range j.seg.Subtitles {
+						segSubEntries = append(segSubEntries, transcriber.SubtitleEntry{
+							Start: ai.FormatSecondsToTime(cue.Start),
+							End:   ai.FormatSecondsToTime(cue.End),
+							Text:  cue.Text,
+						})
+					}
+				} else if len(allSubEntries) > 0 {
+					segSubEntries = transcriber.SliceSubtitles(allSubEntries, j.startSec, j.startSec+j.durationSec)
+					if len(removedGaps) > 0 {
+						segSubEntries = transcriber.AdjustSubtitlesForJumpCuts(segSubEntries, removedGaps)
+					}
+				}
+
+				if cfg.Subtitles && len(segSubEntries) > 0 {
+					sliced := segSubEntries
+					sdhMode := cfg.SubSDHMode
+					if sdhMode == "" {
+						sdhMode = "strip"
+					}
+					sliced = transcriber.FilterSDHEntries(sliced, sdhMode)
 					if len(sliced) > 0 {
-						// On-demand token-saving translation for this specific clip segment
-						if cfg.TranslateLang != "" && (cfg.AIConfig.APIKey != "" || os.Getenv("OPENROUTER_API_KEY") != "" || os.Getenv("GEMINI_API_KEY") != "" || os.Getenv("DEEPSEEK_API_KEY") != "" || os.Getenv("OPENAI_API_KEY") != "") {
+						// On-demand token-saving translation for this specific clip segment (only when not already custom edited)
+						if len(j.seg.Subtitles) == 0 && cfg.TranslateLang != "" && (cfg.AIConfig.APIKey != "" || os.Getenv("OPENROUTER_API_KEY") != "" || os.Getenv("GEMINI_API_KEY") != "" || os.Getenv("DEEPSEEK_API_KEY") != "" || os.Getenv("OPENAI_API_KEY") != "") {
 							fmt.Printf("[%d/%d] Translating %d subtitle cues to '%s' via AI (%s / %s)...\n",
 								j.index+1, len(cfg.Segments), len(sliced), cfg.TranslateLang, cfg.AIConfig.APIRouter, cfg.AIConfig.Model)
 							translated, transErr := ai.TranslateSubtitlesMultiProvider(sliced, cfg.AIConfig, cfg.TranslateLang)
@@ -318,34 +402,140 @@ func (c *Clipper) Process(cfg *Config) error {
 							}
 						}
 
-						if cfg.SubStyle == "karaoke" {
-							sliced = transcriber.ChunkSubtitlesToWords(sliced, 3)
-						}
 						tmpSubFile := filepath.Join(outputDir, fmt.Sprintf(".sub_%03d.ass", j.index+1))
 						fontName := ""
 						if cfg.SubFontPath != "" {
 							fontName = strings.TrimSuffix(filepath.Base(cfg.SubFontPath), filepath.Ext(cfg.SubFontPath))
 						}
-						var exportErr error
-						if cfg.SubStyle == "karaoke" {
-							exportErr = transcriber.ExportKaraokeASSWithFont(sliced, tmpSubFile, cfg.SubFontSize, cfg.Shorts, fontName)
-						} else {
-							exportErr = transcriber.ExportASSWithFont(sliced, tmpSubFile, cfg.SubFontSize, cfg.Shorts, fontName)
+
+						preset := cfg.SubPreset
+						if j.seg.SubPreset != "" {
+							preset = j.seg.SubPreset
 						}
+						if preset == "" {
+							if cfg.SubStyle == "standard" {
+								preset = "minimal"
+							} else {
+								preset = "hormozi"
+							}
+						}
+
+						subFontSize := cfg.SubFontSize
+						if j.seg.SubFontSize > 0 {
+							subFontSize = j.seg.SubFontSize
+						}
+
+						subPosition := j.seg.SubPosition
+						if subPosition == "" {
+							subPosition = "bottom"
+						}
+
+						exportErr := transcriber.ExportPresetASSWithPosition(sliced, tmpSubFile, preset, subFontSize, cfg.Shorts, fontName, sdhMode, cfg.SubEmoji, subPosition)
 						if exportErr == nil {
 							subPath = tmpSubFile
 						}
 					}
 				}
 
-				err := c.runner.CutSegment(cfg, j.startSec, j.durationSec, j.segPath, subPath)
+				segCfg := *cfg
+				segCfg.InputFile = effectiveInput
+				if numWorkers > 1 {
+					segCfg.ShowProgress = false
+				}
+				err := c.runner.CutSegment(&segCfg, effectiveStart, effectiveDuration, j.segPath, subPath)
+				if numWorkers > 1 && err == nil {
+					fmt.Printf("[%d/%d] Finished rendering: %s\n", j.index+1, len(cfg.Segments), j.segPath)
+				}
+				if jumpCutTemp != "" {
+					_ = os.Remove(jumpCutTemp)
+				}
 				if subPath != "" {
 					_ = os.Remove(subPath)
 				}
+				var segMeta *ai.SocialMetadata
+				if err == nil && cfg.GenerateMetadata && !j.isTemp {
+					var transcriptBuilder strings.Builder
+					for _, entry := range segSubEntries {
+						cleanText, _ := transcriber.ExtractSDHAndSpeech(entry.Text)
+						if cleanText != "" {
+							transcriptBuilder.WriteString(cleanText)
+							transcriptBuilder.WriteString(" ")
+						}
+					}
+					clipTranscript := strings.TrimSpace(transcriptBuilder.String())
+
+					// Try AI multi-provider if key is configured
+					if cfg.AIConfig.APIKey != "" || os.Getenv("OPENROUTER_API_KEY") != "" || os.Getenv("GEMINI_API_KEY") != "" || os.Getenv("DEEPSEEK_API_KEY") != "" || os.Getenv("OPENAI_API_KEY") != "" {
+						aiMeta, aiErr := ai.GenerateSocialMetadataMultiProvider(clipTranscript, cfg.AIConfig, cfg.TranslateLang, cfg.Shorts)
+						if aiErr == nil && aiMeta != nil {
+							segMeta = aiMeta
+						}
+					}
+					if segMeta == nil {
+						segMeta = ai.GenerateHeuristicSocialMetadata(clipTranscript, j.seg.Title, cfg.TranslateLang, cfg.Shorts)
+					}
+
+					segMeta.SegmentIndex = j.index + 1
+					segMeta.StartTime = j.seg.Start
+					segMeta.EndTime = j.seg.End
+					segMeta.DurationSec = effectiveDuration
+					segMeta.VideoFile = filepath.Base(j.segPath)
+
+					baseWithoutExt := strings.TrimSuffix(j.segPath, filepath.Ext(j.segPath))
+					metaJSONPath := baseWithoutExt + "_metadata.json"
+					metaTXTPath := baseWithoutExt + "_metadata.txt"
+
+					if jsonData, mErr := json.MarshalIndent(segMeta, "", "  "); mErr == nil {
+						_ = os.WriteFile(metaJSONPath, jsonData, 0644)
+					}
+					_ = os.WriteFile(metaTXTPath, []byte(ai.FormatMetadataText(segMeta)), 0644)
+				}
+
+				if err == nil && cfg.ExtractThumbnail && !j.isTemp {
+					thumbCount := cfg.ThumbnailCount
+					if thumbCount <= 0 {
+						thumbCount = 1
+					}
+					if thumbCount > 3 {
+						thumbCount = 3
+					}
+					bestTimes, bErr := detector.FindBestHookFrames(c.runner.FFmpegPath, j.segPath, effectiveDuration, thumbCount)
+					if bErr == nil && len(bestTimes) > 0 {
+						baseWithoutExt := strings.TrimSuffix(j.segPath, filepath.Ext(j.segPath))
+						cleanThumbPath := baseWithoutExt + "_thumb_clean.jpg"
+						hookThumbPath := baseWithoutExt + "_thumb_hook.jpg"
+
+						titleText := ""
+						if segMeta != nil && segMeta.HookTitle != "" {
+							titleText = segMeta.HookTitle
+						} else if j.seg.Title != "" {
+							titleText = j.seg.Title
+						} else if len(segSubEntries) > 0 {
+							firstSentence, _ := transcriber.ExtractSDHAndSpeech(segSubEntries[0].Text)
+							titleText = strings.TrimSpace(firstSentence)
+						}
+
+						// 1. Primary clean frame
+						_ = detector.ExtractThumbnail(c.runner.FFmpegPath, j.segPath, bestTimes[0], cleanThumbPath)
+
+						// 2. Hook cover with title overlay
+						_ = detector.ExtractThumbnailWithHook(c.runner.FFmpegPath, j.segPath, bestTimes[0], titleText, cfg.Shorts, hookThumbPath)
+
+						// 3. Optional alternative frames
+						for tIdx := 1; tIdx < len(bestTimes); tIdx++ {
+							altThumbPath := fmt.Sprintf("%s_thumb_%d.jpg", baseWithoutExt, tIdx+1)
+							_ = detector.ExtractThumbnail(c.runner.FFmpegPath, j.segPath, bestTimes[tIdx], altThumbPath)
+						}
+						fmt.Printf("[%d/%d] Extracted cover thumbnail: %s (best expression at %.2fs)\n",
+							j.index+1, len(cfg.Segments), filepath.Base(hookThumbPath), bestTimes[0])
+					}
+				}
+
 				results <- jobResult{
 					index:   j.index,
 					segPath: j.segPath,
 					isTemp:  j.isTemp,
+					meta:    segMeta,
 					err:     err,
 				}
 			}
@@ -358,6 +548,7 @@ func (c *Clipper) Process(cfg *Config) error {
 	// Collect results in order
 	createdFiles := make([]string, len(cfg.Segments))
 	isTempFiles := make([]bool, len(cfg.Segments))
+	var allMetas []*ai.SocialMetadata
 
 	for r := range results {
 		if r.err != nil {
@@ -366,6 +557,20 @@ func (c *Clipper) Process(cfg *Config) error {
 		}
 		createdFiles[r.index] = r.segPath
 		isTempFiles[r.index] = r.isTemp
+		if r.meta != nil {
+			allMetas = append(allMetas, r.meta)
+		}
+	}
+
+	if cfg.GenerateMetadata && len(allMetas) > 0 {
+		sort.Slice(allMetas, func(i, j int) bool {
+			return allMetas[i].SegmentIndex < allMetas[j].SegmentIndex
+		})
+		summaryFile := filepath.Join(outputDir, "metadata.json")
+		if sumData, mErr := json.MarshalIndent(allMetas, "", "  "); mErr == nil {
+			_ = os.WriteFile(summaryFile, sumData, 0644)
+			fmt.Printf("Generated social metadata companion files in: %s\n", outputDir)
+		}
 	}
 
 	if cfg.Mode == ModeMerge {
@@ -398,4 +603,144 @@ func (c *Clipper) cleanupFiles(files []string, isTemp []bool) {
 			os.Remove(f)
 		}
 	}
+}
+
+// DetectSegments performs automated segment detection (ai, silence, or scene) on the input media and returns the detected segments.
+func (c *Clipper) DetectSegments(cfg *Config) ([]Segment, error) {
+	segs, _, err := c.DetectSegmentsWithSubs(cfg, cfg.InputFile)
+	return segs, err
+}
+
+// DetectSegmentsWithSubs performs automated segment detection and returns any cached subtitles retrieved during detection.
+func (c *Clipper) DetectSegmentsWithSubs(cfg *Config, originalInput string) ([]Segment, []transcriber.SubtitleEntry, error) {
+	if cfg.InputFile == "" {
+		return nil, nil, fmt.Errorf("input file is required for segment detection")
+	}
+
+	if originalInput == "" {
+		originalInput = cfg.InputFile
+	}
+
+	// If InputFile is a YouTube URL, ensure it is downloaded to local cache first
+	if downloader.IsYouTubeURL(cfg.InputFile) {
+		cacheDir := cfg.CacheDir
+		if cacheDir == "" {
+			cacheDir = "./cache"
+		}
+		localPath, err := downloader.DownloadYouTubeVideo(cfg.InputFile, cacheDir, cfg.Quality, cfg.NoCache)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to download YouTube video: %w", err)
+		}
+		cfg.InputFile = localPath
+	}
+
+	if _, err := os.Stat(cfg.InputFile); os.IsNotExist(err) {
+		return nil, nil, fmt.Errorf("input file does not exist: %s", cfg.InputFile)
+	}
+
+	mode := strings.ToLower(strings.TrimSpace(cfg.AutoDetect))
+	if mode == "" {
+		mode = "ai"
+	}
+
+	var segments []Segment
+	var cachedSubs []transcriber.SubtitleEntry
+
+	switch mode {
+	case "ai", "transcript":
+		lang := cfg.TranslateLang
+		if lang == "" {
+			lang = "id"
+		}
+		var subEntries []transcriber.SubtitleEntry
+
+		// If user explicitly enabled Whisper, try it
+		if cfg.UseWhisper {
+			subEntries, _ = transcriber.TranscribeWithWhisper(cfg.InputFile, cfg.CacheDir, lang)
+		} else {
+			// Check if subtitles are already cached or readily available on YouTube
+			subEntries, _ = transcriber.FetchSubtitles(originalInput, cfg.CacheDir, lang)
+			if len(subEntries) == 0 {
+				subEntries, _ = transcriber.FetchSubtitles(originalInput, cfg.CacheDir, "en")
+			}
+		}
+
+		cfg.AIConfig.IsShorts = cfg.Shorts
+		if cfg.TargetDuration > 0 {
+			cfg.AIConfig.TargetDuration = cfg.TargetDuration
+		}
+
+		// If subtitles were retrieved, analyze highlights from transcript
+		if len(subEntries) > 0 {
+			cachedSubs = subEntries
+			highlights, err := ai.AnalyzeHighlightsMultiProvider(subEntries, cfg.AIConfig, lang)
+			if err == nil && len(highlights) > 0 {
+				for _, h := range highlights {
+					segments = append(segments, Segment{
+						Start: h.Start,
+						End:   h.End,
+						Title: h.Title,
+					})
+				}
+				return segments, cachedSubs, nil
+			}
+		}
+
+		// NO SUBTITLES REQUIRED: Generate smart segment list directly from video duration & metadata!
+		durationSec, _ := c.runner.GetVideoDuration(cfg.InputFile)
+		if durationSec <= 0 {
+			durationSec = 180.0
+		}
+		title := filepath.Base(cfg.InputFile)
+		if originalInput != "" && !strings.HasPrefix(originalInput, "/") {
+			title = originalInput
+		}
+
+		highlights, aiErr := ai.AnalyzeHighlightsWithoutSubtitles(title, durationSec, cfg.AIConfig, lang)
+		if aiErr == nil && len(highlights) > 0 {
+			for _, h := range highlights {
+				segments = append(segments, Segment{
+					Start: h.Start,
+					End:   h.End,
+					Title: h.Title,
+				})
+			}
+			return segments, nil, nil
+		}
+		for _, h := range highlights {
+			segments = append(segments, Segment{
+				Start: h.Start,
+				End:   h.End,
+				Title: h.Title,
+			})
+		}
+	case "silence":
+		detected, err := detector.DetectSilence(c.runner.FFmpegPath, cfg.InputFile, -30, 0.5)
+		if err != nil {
+			return nil, nil, fmt.Errorf("silence auto detection failed: %w", err)
+		}
+		for _, d := range detected {
+			segments = append(segments, Segment{
+				Start: d.Start,
+				End:   d.End,
+				Title: d.Title,
+			})
+		}
+	case "scene":
+		detected, err := detector.DetectScenes(c.runner.FFmpegPath, cfg.InputFile, 0.3)
+		if err != nil {
+			return nil, nil, fmt.Errorf("scene auto detection failed: %w", err)
+		}
+		for _, d := range detected {
+			segments = append(segments, Segment{
+				Start: d.Start,
+				End:   d.End,
+				Title: d.Title,
+			})
+		}
+	default:
+		return nil, nil, fmt.Errorf("unrecognized auto_detect mode '%s', expected 'silence', 'scene', or 'ai'", mode)
+	}
+
+	return segments, cachedSubs, nil
 }

@@ -1,12 +1,18 @@
 package clipper
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
+
+	"github.com/misbakhul29/clipper/pkg/detector"
+	"github.com/misbakhul29/clipper/pkg/ui"
 )
 
 // FFmpegRunner handles invoking the ffmpeg executable.
@@ -35,7 +41,7 @@ func (f *FFmpegRunner) CutSegment(cfg *Config, startSec, durationSec float64, ou
 	hasWatermark := cfg.WatermarkPath != ""
 	hasOverlayText := cfg.OverlayText != ""
 	hasSubtitles := subPath != ""
-	needsReencode := cfg.Shorts || hasWatermark || hasOverlayText || hasSubtitles || cfg.Strategy == StrategyAccurate
+	needsReencode := cfg.Shorts || hasWatermark || hasOverlayText || hasSubtitles || cfg.Strategy == StrategyAccurate || cfg.Loudnorm
 
 	if !needsReencode {
 		// Fast copy mode without re-encoding
@@ -64,7 +70,18 @@ func (f *FFmpegRunner) CutSegment(cfg *Config, startSec, durationSec float64, ou
 
 	args = append(args, "-t", durStr)
 
-	filterGraph := buildFilterGraph(cfg, hasWatermark, hasOverlayText, subPath)
+	dynamicCropFilter := ""
+	if cfg.Shorts && cfg.ShortsStyle == "smart-crop" && cfg.FaceTracking {
+		ft := detector.NewFaceTracker(f.FFmpegPath)
+		if cfg.PanDuration > 0 {
+			ft.PanDuration = cfg.PanDuration
+		}
+		if cropFilter, err := ft.TrackFacesInSegment(cfg.InputFile, startSec, durationSec); err == nil && cropFilter != "" {
+			dynamicCropFilter = cropFilter
+		}
+	}
+
+	filterGraph := buildFilterGraph(cfg, hasWatermark, hasOverlayText, subPath, dynamicCropFilter)
 	if filterGraph != "" {
 		if hasWatermark || cfg.ShortsStyle == "blur" {
 			args = append(args, "-filter_complex", filterGraph)
@@ -73,8 +90,13 @@ func (f *FFmpegRunner) CutSegment(cfg *Config, startSec, durationSec float64, ou
 		}
 	}
 
-	vEncArgs := selectVideoEncoderArgs(f.FFmpegPath)
+	vEncArgs := selectVideoEncoderArgs(f.FFmpegPath, cfg.HWAccel)
 	args = append(args, vEncArgs...)
+
+	if cfg.Loudnorm {
+		args = append(args, "-af", BuildLoudnormFilter(cfg))
+	}
+
 	args = append(args,
 		"-c:a", "aac",
 		"-b:a", "320k",
@@ -83,55 +105,220 @@ func (f *FFmpegRunner) CutSegment(cfg *Config, startSec, durationSec float64, ou
 		outputPath,
 	)
 
+	if cfg.ShowProgress {
+		title := fmt.Sprintf("Rendering %s", filepath.Base(outputPath))
+		return f.runFFmpegWithProgress(args, title, durationSec)
+	}
 	return f.runFFmpeg(args)
 }
 
+// HWAccelProfile represents a probed and validated hardware encoder configuration.
+type HWAccelProfile struct {
+	Name        string   `json:"name"`
+	Encoder     string   `json:"encoder"`
+	DisplayName string   `json:"display_name"`
+	IsHardware  bool     `json:"is_hardware"`
+	Args        []string `json:"args"`
+}
+
+var (
+	hwCacheMu  sync.RWMutex
+	hwCacheMap = make(map[string]HWAccelProfile)
+)
+
 func isEncoderWorking(ffmpegPath, encoder string) bool {
-	cmd := exec.Command(ffmpegPath, "-f", "lavfi", "-i", "color=c=black:s=16x16:d=0.1", "-c:v", encoder, "-f", "null", "-")
+	cmd := exec.Command(ffmpegPath, "-f", "lavfi", "-i", "color=c=black:s=64x64:d=0.1", "-c:v", encoder, "-f", "null", "-")
 	return cmd.Run() == nil
 }
 
-func selectVideoEncoderArgs(ffmpegPath string) []string {
-	if isEncoderWorking(ffmpegPath, "libx264") {
-		return []string{
-			"-c:v", "libx264",
-			"-crf", "16",
-			"-preset", "slow",
-			"-pix_fmt", "yuv420p",
-			"-movflags", "+faststart",
+// DetectHardwareEncoder probes FFmpeg for available hardware-accelerated video encoders.
+func DetectHardwareEncoder(ffmpegPath, preferredMode string) HWAccelProfile {
+	if ffmpegPath == "" {
+		ffmpegPath = "ffmpeg"
+	}
+	preferredMode = strings.ToLower(strings.TrimSpace(preferredMode))
+	if preferredMode == "" {
+		preferredMode = "auto"
+	}
+
+	cacheKey := ffmpegPath + ":" + preferredMode
+	hwCacheMu.RLock()
+	if prof, ok := hwCacheMap[cacheKey]; ok {
+		hwCacheMu.RUnlock()
+		return prof
+	}
+	hwCacheMu.RUnlock()
+
+	hwCacheMu.Lock()
+	defer hwCacheMu.Unlock()
+
+	// Double check after lock
+	if prof, ok := hwCacheMap[cacheKey]; ok {
+		return prof
+	}
+
+	profiles := map[string]HWAccelProfile{
+		"nvenc": {
+			Name:        "nvenc",
+			Encoder:     "h264_nvenc",
+			DisplayName: "NVIDIA NVENC (h264_nvenc)",
+			IsHardware:  true,
+			Args: []string{
+				"-c:v", "h264_nvenc",
+				"-preset", "p6",
+				"-tune", "hq",
+				"-cq", "18",
+				"-pix_fmt", "yuv420p",
+				"-movflags", "+faststart",
+			},
+		},
+		"videotoolbox": {
+			Name:        "videotoolbox",
+			Encoder:     "h264_videotoolbox",
+			DisplayName: "Apple Silicon VideoToolbox (h264_videotoolbox)",
+			IsHardware:  true,
+			Args: []string{
+				"-c:v", "h264_videotoolbox",
+				"-q:v", "65",
+				"-pix_fmt", "yuv420p",
+				"-movflags", "+faststart",
+			},
+		},
+		"qsv": {
+			Name:        "qsv",
+			Encoder:     "h264_qsv",
+			DisplayName: "Intel QuickSync (h264_qsv)",
+			IsHardware:  true,
+			Args: []string{
+				"-c:v", "h264_qsv",
+				"-preset", "veryfast",
+				"-global_quality", "20",
+				"-pix_fmt", "yuv420p",
+				"-movflags", "+faststart",
+			},
+		},
+		"amf": {
+			Name:        "amf",
+			Encoder:     "h264_amf",
+			DisplayName: "AMD AMF (h264_amf)",
+			IsHardware:  true,
+			Args: []string{
+				"-c:v", "h264_amf",
+				"-quality", "quality",
+				"-rc", "cqp",
+				"-qp_i", "18",
+				"-qp_p", "18",
+				"-pix_fmt", "yuv420p",
+				"-movflags", "+faststart",
+			},
+		},
+		"vaapi": {
+			Name:        "vaapi",
+			Encoder:     "h264_vaapi",
+			DisplayName: "Linux VA-API (h264_vaapi)",
+			IsHardware:  true,
+			Args: []string{
+				"-c:v", "h264_vaapi",
+				"-qp", "18",
+				"-movflags", "+faststart",
+			},
+		},
+		"libx264": {
+			Name:        "libx264",
+			Encoder:     "libx264",
+			DisplayName: "Software CPU (libx264)",
+			IsHardware:  false,
+			Args: []string{
+				"-c:v", "libx264",
+				"-crf", "16",
+				"-preset", "slow",
+				"-pix_fmt", "yuv420p",
+				"-movflags", "+faststart",
+			},
+		},
+		"libopenh264": {
+			Name:        "libopenh264",
+			Encoder:     "libopenh264",
+			DisplayName: "Software CPU (libopenh264)",
+			IsHardware:  false,
+			Args: []string{
+				"-c:v", "libopenh264",
+				"-b:v", "20M",
+				"-pix_fmt", "yuv420p",
+				"-movflags", "+faststart",
+			},
+		},
+		"mpeg4": {
+			Name:        "mpeg4",
+			Encoder:     "mpeg4",
+			DisplayName: "Universal Fallback (mpeg4)",
+			IsHardware:  false,
+			Args: []string{
+				"-c:v", "mpeg4",
+				"-q:v", "1",
+				"-b:v", "25M",
+				"-mbd", "rd",
+				"-flags", "+mv4+aic",
+				"-cmp", "2",
+				"-subcmp", "2",
+				"-movflags", "+faststart",
+			},
+		},
+	}
+
+	cpuFallbacks := []string{"libx264", "libopenh264", "mpeg4"}
+
+	// 1. User forced a specific hardware mode
+	if prof, ok := profiles[preferredMode]; ok && prof.IsHardware {
+		if isEncoderWorking(ffmpegPath, prof.Encoder) {
+			hwCacheMap[cacheKey] = prof
+			return prof
+		}
+		// Preferred hardware encoder not functional on host -> fallback to CPU
+		fmt.Printf("Hardware encoder '%s' requested but not functional on this host. Falling back to CPU.\n", prof.DisplayName)
+	}
+
+	// 2. User forced CPU mode
+	if preferredMode == "cpu" || preferredMode == "none" {
+		for _, name := range cpuFallbacks {
+			if isEncoderWorking(ffmpegPath, profiles[name].Encoder) {
+				hwCacheMap[cacheKey] = profiles[name]
+				return profiles[name]
+			}
+		}
+		hwCacheMap[cacheKey] = profiles["mpeg4"]
+		return profiles["mpeg4"]
+	}
+
+	// 3. Auto-detection: probe hardware encoders first in priority order
+	hwPriority := []string{"nvenc", "videotoolbox", "qsv", "amf", "vaapi"}
+	for _, name := range hwPriority {
+		prof := profiles[name]
+		if isEncoderWorking(ffmpegPath, prof.Encoder) {
+			hwCacheMap[cacheKey] = prof
+			return prof
 		}
 	}
-	if isEncoderWorking(ffmpegPath, "h264_nvenc") {
-		return []string{
-			"-c:v", "h264_nvenc",
-			"-cq", "16",
-			"-preset", "p6",
-			"-pix_fmt", "yuv420p",
-			"-movflags", "+faststart",
+
+	// 4. Fallback to CPU encoders
+	for _, name := range cpuFallbacks {
+		prof := profiles[name]
+		if isEncoderWorking(ffmpegPath, prof.Encoder) {
+			hwCacheMap[cacheKey] = prof
+			return prof
 		}
 	}
-	if isEncoderWorking(ffmpegPath, "libopenh264") {
-		return []string{
-			"-c:v", "libopenh264",
-			"-b:v", "20M",
-			"-pix_fmt", "yuv420p",
-			"-movflags", "+faststart",
-		}
-	}
-	// Fallback to MPEG-4 Ultra-HD Quality Scale (-q:v 1, -b:v 25M, -mbd rd -flags +mv4+aic)
-	return []string{
-		"-c:v", "mpeg4",
-		"-q:v", "1",
-		"-b:v", "25M",
-		"-mbd", "rd",
-		"-flags", "+mv4+aic",
-		"-cmp", "2",
-		"-subcmp", "2",
-		"-movflags", "+faststart",
-	}
+
+	hwCacheMap[cacheKey] = profiles["mpeg4"]
+	return profiles["mpeg4"]
 }
 
-func buildFilterGraph(cfg *Config, hasWatermark, hasOverlayText bool, subPath string) string {
+func selectVideoEncoderArgs(ffmpegPath, hwaccelMode string) []string {
+	prof := DetectHardwareEncoder(ffmpegPath, hwaccelMode)
+	return prof.Args
+}
+
+func buildFilterGraph(cfg *Config, hasWatermark, hasOverlayText bool, subPath string, dynamicCropFilter string) string {
 	var filters []string
 
 	// 1. Shorts Aspect Ratio Filter (High Quality Lanczos Resampling)
@@ -155,7 +342,7 @@ func buildFilterGraph(cfg *Config, hasWatermark, hasOverlayText bool, subPath st
 				if fontSize <= 0 {
 					fontSize = 32
 				}
-				escapedText := strings.ReplaceAll(cfg.OverlayText, "'", "'\\''")
+				escapedText := escapeDrawtext(cfg.OverlayText)
 				drawtext := fmt.Sprintf("drawtext=text='%s':%s:fontsize=%d:fontcolor=%s:box=1:boxcolor=black@0.5:boxborderw=5",
 					escapedText, textPos, fontSize, fontColor)
 				graph = fmt.Sprintf("%s,%s", graph, drawtext)
@@ -167,8 +354,12 @@ func buildFilterGraph(cfg *Config, hasWatermark, hasOverlayText bool, subPath st
 			}
 			return graph
 		} else if cfg.ShortsStyle == "smart-crop" {
-			// Smart Subject Motion Auto-Crop
-			filters = append(filters, "crop=w='ih*(9/16)':h='ih':x='(iw-ow)/2':y=0,scale=1080:1920:flags=lanczos")
+			// Smart Subject Motion Auto-Crop with Face & Speaker Tracking
+			if dynamicCropFilter != "" {
+				filters = append(filters, dynamicCropFilter)
+			} else {
+				filters = append(filters, detector.DefaultCenterCropFilter())
+			}
 		} else {
 			filters = append(filters, "crop=ih*(9/16):ih,scale=1080:1920:flags=lanczos")
 		}
@@ -192,8 +383,7 @@ func buildFilterGraph(cfg *Config, hasWatermark, hasOverlayText bool, subPath st
 		if fontSize <= 0 {
 			fontSize = 32
 		}
-		// Escape single quotes for drawtext
-		escapedText := strings.ReplaceAll(cfg.OverlayText, "'", "'\\''")
+		escapedText := escapeDrawtext(cfg.OverlayText)
 		drawtext := fmt.Sprintf("drawtext=text='%s':%s:fontsize=%d:fontcolor=%s:box=1:boxcolor=black@0.5:boxborderw=5",
 			escapedText, textPos, fontSize, fontColor)
 		filters = append(filters, drawtext)
@@ -258,6 +448,72 @@ func (f *FFmpegRunner) runFFmpeg(args []string) error {
 	return nil
 }
 
+func (f *FFmpegRunner) runFFmpegWithProgress(args []string, title string, durationSec float64) error {
+	if len(args) == 0 {
+		return fmt.Errorf("empty ffmpeg args")
+	}
+
+	progressArgs := make([]string, 0, len(args)+2)
+	progressArgs = append(progressArgs, args[:len(args)-1]...)
+	progressArgs = append(progressArgs, "-progress", "pipe:1", args[len(args)-1])
+
+	cmd := exec.Command(f.FFmpegPath, progressArgs...)
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		return f.runFFmpeg(args)
+	}
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed starting ffmpeg: %w", err)
+	}
+
+	bar := ui.NewProgressBar(title, durationSec)
+	scanner := bufio.NewScanner(stdoutPipe)
+
+	var currentOutSec float64
+	var currentSpeed string
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if strings.HasPrefix(line, "out_time_us=") {
+			usStr := strings.TrimPrefix(line, "out_time_us=")
+			if us, err := strconv.ParseFloat(usStr, 64); err == nil {
+				currentOutSec = us / 1000000.0
+				etaStr := computeETA(currentOutSec, durationSec, currentSpeed)
+				bar.Update(currentOutSec, currentSpeed, etaStr)
+			}
+		} else if strings.HasPrefix(line, "speed=") {
+			currentSpeed = strings.TrimPrefix(line, "speed=")
+		} else if line == "progress=end" {
+			bar.Update(durationSec, currentSpeed, "00:00")
+		}
+	}
+
+	if err := cmd.Wait(); err != nil {
+		bar.Finish("Failed")
+		return fmt.Errorf("ffmpeg execution failed: %w\nOutput: %s", err, stderr.String())
+	}
+
+	bar.Finish("Done!")
+	return nil
+}
+
+func computeETA(currentSec, totalSec float64, speedStr string) string {
+	if totalSec <= currentSec {
+		return "00:00"
+	}
+	speedStr = strings.TrimSuffix(strings.TrimSpace(speedStr), "x")
+	sp, err := strconv.ParseFloat(speedStr, 64)
+	if err != nil || sp <= 0.05 {
+		return "--:--"
+	}
+	remainSec := (totalSec - currentSec) / sp
+	return ui.FormatDuration(remainSec)
+}
+
 // MergeSegments concatenates multiple video files into a single outputFile using FFmpeg concat demuxer.
 func (f *FFmpegRunner) MergeSegments(segmentFiles []string, outputFile string) error {
 	if len(segmentFiles) == 0 {
@@ -307,4 +563,91 @@ func (f *FFmpegRunner) MergeSegments(segmentFiles []string, outputFile string) e
 	}
 
 	return nil
+}
+
+// BuildLoudnormFilter constructs the FFmpeg loudnorm audio filter string.
+func BuildLoudnormFilter(cfg *Config) string {
+	targetI := cfg.LoudnormI
+	if targetI == 0 {
+		targetI = -14.0
+	}
+	targetLRA := cfg.LoudnormLRA
+	if targetLRA == 0 {
+		targetLRA = 7.0
+	}
+	targetTP := cfg.LoudnormTP
+	if targetTP == 0 {
+		targetTP = -2.0
+	}
+	return fmt.Sprintf("loudnorm=I=%.1f:LRA=%.1f:TP=%.1f", targetI, targetLRA, targetTP)
+}
+
+// ApplyJumpCut trims and concatenates kept speech intervals from inputFile to outputPath.
+func (f *FFmpegRunner) ApplyJumpCut(inputFile string, startSec, durationSec float64, intervals []detector.KeptInterval, outputPath string) error {
+	filterGraph := detector.BuildJumpCutFilter(intervals)
+	if filterGraph == "" {
+		return fmt.Errorf("empty jump-cut filter graph")
+	}
+
+	startStr := FormatSeconds(startSec)
+	durStr := FormatSeconds(durationSec)
+
+	args := []string{
+		"-y",
+		"-ss", startStr,
+		"-t", durStr,
+		"-i", inputFile,
+		"-filter_complex", filterGraph,
+		"-map", "[vout]",
+		"-map", "[aout]",
+	}
+
+	vEncArgs := selectVideoEncoderArgs(f.FFmpegPath, "")
+	args = append(args, vEncArgs...)
+	args = append(args,
+		"-c:a", "aac",
+		"-b:a", "320k",
+		"-ar", "48000",
+		outputPath,
+	)
+
+	return f.runFFmpeg(args)
+}
+
+func escapeDrawtext(text string) string {
+	text = strings.ReplaceAll(text, "\\", "/")
+	text = strings.ReplaceAll(text, "'", "'\\''")
+	text = strings.ReplaceAll(text, ":", "\\:")
+	text = strings.ReplaceAll(text, "%", "％")
+	return text
+}
+
+// GetVideoDuration returns the duration of a video in seconds using ffprobe or ffmpeg.
+func (f *FFmpegRunner) GetVideoDuration(videoPath string) (float64, error) {
+	if ffprobePath, err := exec.LookPath("ffprobe"); err == nil {
+		cmd := exec.Command(ffprobePath, "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", videoPath)
+		out, err := cmd.Output()
+		if err == nil {
+			val := strings.TrimSpace(string(out))
+			if sec, err := strconv.ParseFloat(val, 64); err == nil && sec > 0 {
+				return sec, nil
+			}
+		}
+	}
+
+	cmd := exec.Command(f.FFmpegPath, "-i", videoPath)
+	out, _ := cmd.CombinedOutput()
+	lines := strings.Split(string(out), "\n")
+	for _, l := range lines {
+		if idx := strings.Index(l, "Duration: "); idx != -1 {
+			rem := l[idx+len("Duration: "):]
+			if comma := strings.Index(rem, ","); comma != -1 {
+				timeStr := strings.TrimSpace(rem[:comma])
+				if sec, err := ParseTimeSeconds(timeStr); err == nil && sec > 0 {
+					return sec, nil
+				}
+			}
+		}
+	}
+	return 0, fmt.Errorf("could not determine video duration for %s", videoPath)
 }

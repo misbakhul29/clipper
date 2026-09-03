@@ -38,10 +38,18 @@ Skenario paling umum untuk mengunduh video YouTube, menganalisis klip menarik me
   "concurrency": 0,
   "auto_detect": "ai",
   "translate_lang": "id",
-  "burn_subtitles": true,
+  "subtitles": true,
+  "sub_preset": "hormozi",
+  "sub_sdh_mode": "strip",
+  "sub_emoji": true,
   "sub_style": "karaoke",
   "sub_font_size": 54,
   "use_whisper": false,
+  "generate_metadata": true,
+  "extract_thumbnail": true,
+  "thumbnail_count": 1,
+  "hwaccel": "auto",
+  "show_progress": true,
   "dry_run": false,
   "ai_config": {
     "api_router": "gemini",
@@ -68,7 +76,7 @@ Gunakan konfigurasi ini untuk memproses video lokal tanpa subtitle YouTube bawaa
   "cache_dir": "./cache",
   "auto_detect": "ai",
   "translate_lang": "id",
-  "burn_subtitles": true,
+  "subtitles": true,
   "sub_style": "karaoke",
   "sub_font_size": 48,
   "sub_font_path": "./fonts/Montserrat-Bold.ttf",
@@ -98,7 +106,7 @@ Gunakan `batch_list` untuk memproses daftar banyak URL video dari berkas `urls.t
   "shorts_style": "blur",
   "auto_detect": "ai",
   "translate_lang": "id",
-  "burn_subtitles": true,
+  "subtitles": true,
   "sub_style": "karaoke",
   "sub_font_size": 54,
   "ai_config": {
@@ -125,7 +133,7 @@ Gunakan konfigurasi ini jika Anda ingin menentukan timestamp segmen awal dan akh
   "shorts_style": "crop",
   "watermark": "./assets/logo.png",
   "watermark_pos": "top-right",
-  "burn_subtitles": true,
+  "subtitles": true,
   "sub_style": "standard",
   "sub_font_size": 48,
   "segments": [
@@ -208,12 +216,23 @@ Gunakan konfigurasi ini jika Anda ingin menentukan timestamp segmen awal dan akh
 | `font_size` | `int` | `32` | Ukuran font teks overlay |
 | `font_color` | `string` | `"white"` | Warna font teks overlay |
 | `auto_detect` | `string` | `""` | `"ai"` (AI highlights), `"silence"`, atau `"scene"` |
+| `target_duration` | `float` | `0` | Target durasi klip auto-detect dalam detik (`30`, `60`, `120`, `300`; `0` = auto) |
 | `translate_lang` | `string` | `"id"` | Bahasa sasaran terjemahan judul & subtitle (misal: `"id"`, `"en"`) |
-| `burn_subtitles` | `bool` | `false` | Hardcode subtitle permanen pada video |
+| `subtitles` | `bool` | `false` | Sertakan subtitle pada video klip (alias legacy: `burn_subtitles`) |
 | `sub_style` | `string` | `"karaoke"` | `"karaoke"` (animasi 2 kata kuning) atau `"standard"` |
 | `sub_font_size` | `int` | `48` | Ukuran font subtitle terjemahan |
 | `sub_font_path` | `string` | `""` | Path berkas font kustom (`.ttf`/`.otf`) |
 | `use_whisper` | `bool` | `false` | Paksa transkripsi offline menggunakan Whisper AI |
 | `dry_run` | `bool` | `false` | Pratinjau segmen tanpa merender video |
+| `face_tracking` | `bool` | `true` | Pelacak wajah & pembicara aktif pada mode `smart-crop` |
+| `pan_duration` | `float` | `0.8` | Durasi pergeseran kamera halus (pan easing) dalam detik |
+| `loudnorm` | `bool` | `false` | Normalisasi audio EBU R128 (-14 LUFS, auto-aktif pada Shorts) |
+| `loudnorm_i` | `float` | `-14.0` | Target Integrated Loudness dalam LUFS |
+| `loudnorm_lra` | `float` | `7.0` | Target Loudness Range dalam LU |
+| `loudnorm_tp` | `float` | `-2.0` | Batas maksimum True Peak dalam dBTP |
+| `jump_cut` | `bool` | `false` | Smart silence removal / jump-cut pemotong hening di tengah klip |
+| `jump_cut_min_silence` | `float` | `1.0` | Ambang hening minimum dalam detik yang akan dipotong |
+| `jump_cut_margin` | `float` | `0.2` | Padding wicara aman di sekitar jeda hening dalam detik |
+| `jump_cut_noise` | `float` | `-30.0` | Ambang batas kebisingan hening (noise gate) dalam dB |
 | `ai_config` | `object` | `{}` | Konfigurasi AI Provider (`api_router`, `api_key`, `model`) |
 | `segments` | `array` | `[]` | Daftar segmen manual (`start`, `end`, `title`) |

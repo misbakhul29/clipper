@@ -2,6 +2,7 @@ package transcriber
 
 import (
 	"fmt"
+	"html"
 	"math"
 	"os"
 	"os/exec"
@@ -10,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/misbakhul29/clipper/pkg/detector"
 	"github.com/misbakhul29/clipper/pkg/downloader"
 )
 
@@ -20,7 +22,52 @@ type SubtitleEntry struct {
 	Text  string `json:"text"`
 }
 
-var vttTimeRegex = regexp.MustCompile(`(\d{2}:\d{2}:\d{2}[\.\,]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[\.\,]\d{3})`)
+var vttTimeRegex = regexp.MustCompile(`((?:\d{1,2}:)?\d{2}:\d{2}[\.\,]\d{3})\s*-->\s*((?:\d{1,2}:)?\d{2}:\d{2}[\.\,]\d{3})`)
+var sdhBracketRegex = regexp.MustCompile(`(?s)\[(.*?)\]`)
+var htmlTagRegex = regexp.MustCompile(`<[^>]*>`)
+
+// ExtractSDHAndSpeech separates silent narrator context / sound effect descriptions inside brackets [...]
+// from actual spoken dialogue text.
+func ExtractSDHAndSpeech(text string) (speechText string, sdhText string) {
+	matches := sdhBracketRegex.FindAllStringSubmatch(text, -1)
+	var sdhParts []string
+	for _, m := range matches {
+		if len(m) >= 2 {
+			clean := strings.TrimSpace(m[1])
+			if clean != "" {
+				sdhParts = append(sdhParts, clean)
+			}
+		}
+	}
+	sdhText = strings.Join(sdhParts, " | ")
+
+	// Strip brackets to get spoken speech
+	speech := sdhBracketRegex.ReplaceAllString(text, "")
+	speech = strings.TrimSpace(speech)
+	speech = strings.ReplaceAll(speech, "\n", " ")
+	for strings.Contains(speech, "  ") {
+		speech = strings.ReplaceAll(speech, "  ", " ")
+	}
+
+	return speech, sdhText
+}
+
+// FilterSDHEntries filters or cleans subtitle entries according to sdhMode ("strip", "top-box", "keep").
+// In "strip" mode, it removes [...] brackets and drops any cues that become empty.
+func FilterSDHEntries(entries []SubtitleEntry, sdhMode string) []SubtitleEntry {
+	if sdhMode != "strip" {
+		return entries
+	}
+	var cleaned []SubtitleEntry
+	for _, entry := range entries {
+		speech, _ := ExtractSDHAndSpeech(entry.Text)
+		if speech != "" {
+			entry.Text = speech
+			cleaned = append(cleaned, entry)
+		}
+	}
+	return cleaned
+}
 
 // ParseVTT parses VTT or SRT subtitle file content into a slice of SubtitleEntry.
 func ParseVTT(content string) ([]SubtitleEntry, error) {
@@ -140,6 +187,19 @@ func FetchSubtitles(inputStr, outputDir, lang string) ([]SubtitleEntry, error) {
 		return ParseVTT(string(data))
 	}
 
+	// Case 1b: Check for local companion .srt or .vtt file next to the video
+	baseNoExt := strings.TrimSuffix(inputStr, filepath.Ext(inputStr))
+	if fileExists(baseNoExt + ".srt") {
+		if data, err := os.ReadFile(baseNoExt + ".srt"); err == nil && len(data) > 0 {
+			return ParseVTT(string(data))
+		}
+	}
+	if fileExists(baseNoExt + ".vtt") {
+		if data, err := os.ReadFile(baseNoExt + ".vtt"); err == nil && len(data) > 0 {
+			return ParseVTT(string(data))
+		}
+	}
+
 	videoCacheDir := downloader.GetVideoCacheDir(outputDir, inputStr)
 	if err := os.MkdirAll(videoCacheDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create subtitle cache dir: %w", err)
@@ -238,6 +298,9 @@ func FetchSubtitles(inputStr, outputDir, lang string) ([]SubtitleEntry, error) {
 }
 
 func findYtDlpBinary() string {
+	if bin, err := downloader.EnsureYtDlpBinary(); err == nil && bin != "" {
+		return bin
+	}
 	if path, err := exec.LookPath("yt-dlp"); err == nil {
 		return path
 	}
@@ -264,13 +327,27 @@ func findYtDlpBinary() string {
 }
 
 func normalizeTimestamp(ts string) string {
-	return strings.ReplaceAll(ts, ",", ".")
+	ts = strings.ReplaceAll(ts, ",", ".")
+	parts := strings.Split(ts, ":")
+	if len(parts) == 2 {
+		return "00:" + ts
+	}
+	return ts
 }
 
 func cleanSubtitleText(text string) string {
-	// Strip HTML tags like <c>, </c>, <b>, etc.
-	re := regexp.MustCompile(`<[^>]*>`)
-	return re.ReplaceAllString(text, "")
+	// Strip HTML tags like <c>, </c>, <b>, inline timestamps, etc.
+	text = htmlTagRegex.ReplaceAllString(text, "")
+	// Unescape HTML entities (&amp;, &quot;, &#39;, &lt;, &gt;, etc.)
+	text = html.UnescapeString(text)
+	// Replace non-breaking spaces (\u00a0) with regular space to prevent missing glyph boxes in fonts
+	text = strings.ReplaceAll(text, "\u00a0", " ")
+	// Normalize multiple whitespace
+	text = strings.TrimSpace(text)
+	for strings.Contains(text, "  ") {
+		text = strings.ReplaceAll(text, "  ", " ")
+	}
+	return text
 }
 
 func isNumeric(s string) bool {
@@ -338,10 +415,14 @@ func ExportASSWithFont(entries []SubtitleEntry, outputPath string, fontSize int,
 	}
 
 	var sb strings.Builder
-	sb.WriteString("[Script Info]\n")
-	sb.WriteString("ScriptType: v4.00+\n")
-	sb.WriteString("PlayResX: 1080\n")
-	sb.WriteString("PlayResY: 1920\n")
+	playResX := 1920
+	playResY := 1080
+	if isShorts {
+		playResX = 1080
+		playResY = 1920
+	}
+	sb.WriteString(fmt.Sprintf("PlayResX: %d\n", playResX))
+	sb.WriteString(fmt.Sprintf("PlayResY: %d\n", playResY))
 	sb.WriteString("ScaledBorderAndShadow: yes\n\n")
 
 	sb.WriteString("[V4+ Styles]\n")
@@ -353,7 +434,9 @@ func ExportASSWithFont(entries []SubtitleEntry, outputPath string, fontSize int,
 
 	for _, entry := range entries {
 		cleanText := strings.ReplaceAll(entry.Text, "\n", "\\N")
-		sb.WriteString(fmt.Sprintf("Dialogue: 0,%s,%s,Default,,0,0,0,,%s\n", entry.Start, entry.End, cleanText))
+		startSec := parseTimestampToSec(entry.Start)
+		endSec := parseTimestampToSec(entry.End)
+		sb.WriteString(fmt.Sprintf("Dialogue: 0,%s,%s,Default,,0,0,0,,%s\n", formatASSTime(startSec), formatASSTime(endSec), cleanText))
 	}
 
 	dir := filepath.Dir(outputPath)
@@ -365,6 +448,7 @@ func ExportASSWithFont(entries []SubtitleEntry, outputPath string, fontSize int,
 }
 
 func parseTimestampToSec(ts string) float64 {
+	ts = strings.TrimSpace(ts)
 	ts = strings.ReplaceAll(ts, ",", ".")
 	parts := strings.Split(ts, ":")
 	if len(parts) == 3 {
@@ -408,7 +492,13 @@ func ChunkSubtitlesToWords(entries []SubtitleEntry, maxWords int) []SubtitleEntr
 	for _, entry := range entries {
 		words := strings.Fields(entry.Text)
 		if len(words) <= maxWords {
-			chunked = append(chunked, entry)
+			startSec := parseTimestampToSec(entry.Start)
+			endSec := parseTimestampToSec(entry.End)
+			chunked = append(chunked, SubtitleEntry{
+				Start: formatASSTime(startSec),
+				End:   formatASSTime(endSec),
+				Text:  entry.Text,
+			})
 			continue
 		}
 
@@ -442,44 +532,318 @@ func ChunkSubtitlesToWords(entries []SubtitleEntry, maxWords int) []SubtitleEntr
 	return chunked
 }
 
-// ExportKaraokeASS exports subtitle entries into TikTok-style ASS format with yellow active word styling and thick outline.
-func ExportKaraokeASS(entries []SubtitleEntry, outputPath string, fontSize int, isShorts bool) error {
-	return ExportKaraokeASSWithFont(entries, outputPath, fontSize, isShorts, "Impact")
+// SubtitlePreset defines visual, timing, and animation parameters for ASS subtitles.
+type SubtitlePreset struct {
+	Name           string
+	FontName       string
+	FontSize       int
+	PrimaryColor   string
+	SecondaryColor string
+	OutlineColor   string
+	BackColor      string
+	Bold           int
+	Outline        float64
+	Shadow         float64
+	BorderStyle    int
+	Spacing        float64
+	ScaleX         int
+	ScaleY         int
+	MarginV        int
+	TransformTag   string
+	MaxWords       int
+	Uppercase      bool
 }
 
-// ExportKaraokeASSWithFont exports subtitle entries into TikTok-style ASS format with custom font name.
-func ExportKaraokeASSWithFont(entries []SubtitleEntry, outputPath string, fontSize int, isShorts bool, fontName string) error {
-	if fontSize <= 0 {
-		fontSize = 54
-	}
-	if fontName == "" {
-		fontName = "Impact"
-	}
-
-	marginV := 180
+// GetSubtitlePreset returns the preset theme configuration for ASS subtitle rendering.
+func GetSubtitlePreset(name string, isShorts bool) SubtitlePreset {
+	norm := strings.ToLower(strings.TrimSpace(name))
+	marginV := 160
 	if isShorts {
 		marginV = 440 // Centered in lower third of 9:16 frame
 	}
 
+	switch norm {
+	case "minimal", "devon":
+		fontSize := 46
+		if !isShorts {
+			fontSize = 36
+			marginV = 120
+		}
+		return SubtitlePreset{
+			Name:           "minimal",
+			FontName:       "Arial",
+			FontSize:       fontSize,
+			PrimaryColor:   "&H00FFFFFF", // Crisp white
+			SecondaryColor: "&H00FFFFFF",
+			OutlineColor:   "&H00111111", // Subtle clean dark outline
+			BackColor:      "&H80000000",
+			Bold:           -1,
+			Outline:        2.0,
+			Shadow:         1.0,
+			BorderStyle:    1,
+			Spacing:        0.5,
+			ScaleX:         100,
+			ScaleY:         100,
+			MarginV:        marginV,
+			TransformTag:   "",
+			MaxWords:       3,
+			Uppercase:      false,
+		}
+
+	case "neon":
+		fontSize := 54
+		if !isShorts {
+			fontSize = 42
+			marginV = 140
+		}
+		return SubtitlePreset{
+			Name:           "neon",
+			FontName:       "Impact",
+			FontSize:       fontSize,
+			PrimaryColor:   "&H00FFFF00", // Electric Cyan (&HAABBGGRR: Blue FF, Green FF)
+			SecondaryColor: "&H00FFFF00",
+			OutlineColor:   "&H008000FF", // Neon Violet/Magenta glow
+			BackColor:      "&H00000000",
+			Bold:           -1,
+			Outline:        4.5,
+			Shadow:         2.0,
+			BorderStyle:    1,
+			Spacing:        1.0,
+			ScaleX:         105,
+			ScaleY:         105,
+			MarginV:        marginV,
+			TransformTag:   `{\blur3}`,
+			MaxWords:       3,
+			Uppercase:      true,
+		}
+
+	case "cinematic":
+		fontSize := 38
+		if isShorts {
+			fontSize = 42
+		} else {
+			marginV = 100
+		}
+		return SubtitlePreset{
+			Name:           "cinematic",
+			FontName:       "Georgia",
+			FontSize:       fontSize,
+			PrimaryColor:   "&H00F0F0F0", // Soft Ivory White
+			SecondaryColor: "&H00F0F0F0",
+			OutlineColor:   "&H00151515", // Gentle filmic shadow
+			BackColor:      "&H90000000",
+			Bold:           0,
+			Outline:        1.5,
+			Shadow:         1.2,
+			BorderStyle:    1,
+			Spacing:        1.5,
+			ScaleX:         100,
+			ScaleY:         100,
+			MarginV:        marginV,
+			TransformTag:   "",
+			MaxWords:       7,
+			Uppercase:      false,
+		}
+
+	case "hormozi", "default", "":
+		fallthrough
+	default:
+		fontSize := 56
+		if !isShorts {
+			fontSize = 44
+			marginV = 160
+		}
+		return SubtitlePreset{
+			Name:           "hormozi",
+			FontName:       "Impact",
+			FontSize:       fontSize,
+			PrimaryColor:   "&H0000FFFF", // Vibrant Neon Yellow (&HAABBGGRR: Green FF, Red FF)
+			SecondaryColor: "&H0000FF55", // Lime Accent
+			OutlineColor:   "&H00000000", // Thick black outline
+			BackColor:      "&H90000000",
+			Bold:           -1,
+			Outline:        5.0,
+			Shadow:         2.5,
+			BorderStyle:    1,
+			Spacing:        1.0,
+			ScaleX:         105,
+			ScaleY:         105,
+			MarginV:        marginV,
+			TransformTag:   `{\fscx115\fscy115\t(0,100,\fscx105\fscy105)}`, // Pop-in bounce animation
+			MaxWords:       2,
+			Uppercase:      true,
+		}
+	}
+}
+
+// ExportPresetASS exports subtitle entries using a named visual preset with optional custom font, size, SDH separation, and auto contextual emojis.
+func ExportPresetASS(entries []SubtitleEntry, outputPath string, presetName string, fontSize int, isShorts bool, customFont string, sdhMode string, enableEmoji bool) error {
+	return ExportPresetASSWithPosition(entries, outputPath, presetName, fontSize, isShorts, customFont, sdhMode, enableEmoji, "bottom")
+}
+
+// ExportPresetASSWithPosition renders ASS subtitle files with customizable vertical placement (bottom, middle, top).
+func ExportPresetASSWithPosition(entries []SubtitleEntry, outputPath string, presetName string, fontSize int, isShorts bool, customFont string, sdhMode string, enableEmoji bool, position string) error {
+	preset := GetSubtitlePreset(presetName, isShorts)
+
+	if fontSize > 0 {
+		preset.FontSize = fontSize
+	}
+	if customFont != "" {
+		preset.FontName = customFont
+	}
+
+	sdhMode = strings.ToLower(strings.TrimSpace(sdhMode))
+	if sdhMode == "" {
+		sdhMode = "strip"
+	}
+
+	var speechEntries []SubtitleEntry
+	var sdhEntries []SubtitleEntry
+
+	for _, entry := range entries {
+		switch sdhMode {
+		case "top-box":
+			speech, sdh := ExtractSDHAndSpeech(entry.Text)
+			if speech != "" {
+				speechEntries = append(speechEntries, SubtitleEntry{
+					Start: entry.Start,
+					End:   entry.End,
+					Text:  speech,
+				})
+			}
+			if sdh != "" {
+				sdhEntries = append(sdhEntries, SubtitleEntry{
+					Start: entry.Start,
+					End:   entry.End,
+					Text:  sdh,
+				})
+			}
+		case "keep":
+			speechEntries = append(speechEntries, entry)
+		case "strip":
+			fallthrough
+		default:
+			speech, _ := ExtractSDHAndSpeech(entry.Text)
+			if speech != "" {
+				speechEntries = append(speechEntries, SubtitleEntry{
+					Start: entry.Start,
+					End:   entry.End,
+					Text:  speech,
+				})
+			}
+		}
+	}
+
+	// Micro-chunk words if preset defines MaxWords
+	var formattedSpeech []SubtitleEntry
+	if preset.MaxWords > 0 {
+		formattedSpeech = ChunkSubtitlesToWords(speechEntries, preset.MaxWords)
+	} else {
+		formattedSpeech = speechEntries
+	}
+
+	if enableEmoji {
+		formattedSpeech = InjectContextualEmojis(formattedSpeech)
+	}
+
+	if len(formattedSpeech) == 0 && len(sdhEntries) == 0 {
+		return fmt.Errorf("no dialogue or narrator entries to render")
+	}
+
 	var sb strings.Builder
+	playResX := 1920
+	playResY := 1080
+	if isShorts {
+		playResX = 1080
+		playResY = 1920
+	}
 	sb.WriteString("[Script Info]\n")
 	sb.WriteString("ScriptType: v4.00+\n")
-	sb.WriteString("PlayResX: 1080\n")
-	sb.WriteString("PlayResY: 1920\n")
+	sb.WriteString(fmt.Sprintf("PlayResX: %d\n", playResX))
+	sb.WriteString(fmt.Sprintf("PlayResY: %d\n", playResY))
 	sb.WriteString("ScaledBorderAndShadow: yes\n\n")
 
 	sb.WriteString("[V4+ Styles]\n")
 	sb.WriteString("Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n")
-	// Style: Vibrant Yellow (&H0000FFFF) text with thick black outline (&H00000000) and shadow
-	sb.WriteString(fmt.Sprintf("Style: Default,%s,%d,&H0000FFFF,&H00000000,&H00000000,&H90000000,-1,0,0,0,105,105,1,0,1,5,2,2,40,40,%d,1\n\n", fontName, fontSize, marginV))
+
+	alignment := 2
+	marginV := preset.MarginV
+	switch strings.ToLower(strings.TrimSpace(position)) {
+	case "middle", "center":
+		alignment = 5
+		marginV = 0
+	case "top":
+		alignment = 8
+		marginV = 100
+		if isShorts {
+			marginV = 180
+		}
+	default:
+		alignment = 2
+	}
+
+	// Primary dialogue style
+	sb.WriteString(fmt.Sprintf("Style: Default,%s,%d,%s,%s,%s,%s,%d,0,0,0,%d,%d,%.1f,0,%d,%.1f,%.1f,%d,40,40,%d,1\n",
+		preset.FontName,
+		preset.FontSize,
+		preset.PrimaryColor,
+		preset.SecondaryColor,
+		preset.OutlineColor,
+		preset.BackColor,
+		preset.Bold,
+		preset.ScaleX,
+		preset.ScaleY,
+		preset.Spacing,
+		preset.BorderStyle,
+		preset.Outline,
+		preset.Shadow,
+		alignment,
+		marginV,
+	))
+
+	// Narrator context style (Top-Center Alignment 8, Italic, soft white)
+	if sdhMode == "top-box" && len(sdhEntries) > 0 {
+		narratorFont := "Arial"
+		narratorSize := 32
+		narratorMarginV := 80
+		if isShorts {
+			narratorSize = 36
+			narratorMarginV = 120
+		}
+		sb.WriteString(fmt.Sprintf("Style: Narrator,%s,%d,&H00F0F0F0,&H00000000,&H00000000,&H90000000,-1,-1,0,0,100,100,0.5,0,1,2.0,1.2,8,60,60,%d,1\n",
+			narratorFont, narratorSize, narratorMarginV))
+	}
+	sb.WriteString("\n")
 
 	sb.WriteString("[Events]\n")
 	sb.WriteString("Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")
 
-	for _, entry := range entries {
-		upperText := strings.ToUpper(strings.TrimSpace(entry.Text))
-		cleanText := strings.ReplaceAll(upperText, "\n", " ")
-		sb.WriteString(fmt.Sprintf("Dialogue: 0,%s,%s,Default,,0,0,0,,%s\n", entry.Start, entry.End, cleanText))
+	// Write static Narrator cues if top-box enabled
+	for _, sdh := range sdhEntries {
+		cleanText := strings.TrimSpace(sdh.Text)
+		cleanText = strings.ReplaceAll(cleanText, "\n", " ")
+		startSec := parseTimestampToSec(sdh.Start)
+		endSec := parseTimestampToSec(sdh.End)
+		sb.WriteString(fmt.Sprintf("Dialogue: 0,%s,%s,Narrator,,0,0,0,,[%s]\n",
+			formatASSTime(startSec), formatASSTime(endSec), cleanText))
+	}
+
+	// Write spoken dialogue cues
+	for _, entry := range formattedSpeech {
+		text := strings.TrimSpace(entry.Text)
+		if preset.Uppercase {
+			text = strings.ToUpper(text)
+		}
+		text = strings.ReplaceAll(text, "\n", " ")
+
+		if preset.TransformTag != "" {
+			text = preset.TransformTag + text
+		}
+
+		startSec := parseTimestampToSec(entry.Start)
+		endSec := parseTimestampToSec(entry.End)
+		sb.WriteString(fmt.Sprintf("Dialogue: 0,%s,%s,Default,,0,0,0,,%s\n",
+			formatASSTime(startSec), formatASSTime(endSec), text))
 	}
 
 	dir := filepath.Dir(outputPath)
@@ -488,4 +852,54 @@ func ExportKaraokeASSWithFont(entries []SubtitleEntry, outputPath string, fontSi
 	}
 
 	return os.WriteFile(outputPath, []byte(sb.String()), 0644)
+}
+
+// ExportKaraokeASS exports subtitle entries into TikTok-style ASS format with yellow active word styling and thick outline.
+func ExportKaraokeASS(entries []SubtitleEntry, outputPath string, fontSize int, isShorts bool) error {
+	return ExportKaraokeASSWithFont(entries, outputPath, fontSize, isShorts, "Impact")
+}
+
+// ExportKaraokeASSWithFont exports subtitle entries into TikTok-style ASS format with custom font name.
+func ExportKaraokeASSWithFont(entries []SubtitleEntry, outputPath string, fontSize int, isShorts bool, fontName string) error {
+	return ExportPresetASS(entries, outputPath, "hormozi", fontSize, isShorts, fontName, "strip", true)
+}
+
+// AdjustSubtitlesForJumpCuts shifts and filters subtitle entries after silence intervals have been excised.
+func AdjustSubtitlesForJumpCuts(entries []SubtitleEntry, gaps []detector.SilenceGap) []SubtitleEntry {
+	if len(gaps) == 0 || len(entries) == 0 {
+		return entries
+	}
+
+	var adjusted []SubtitleEntry
+
+	for _, entry := range entries {
+		tStart := parseTimestampToSec(entry.Start)
+		tEnd := parseTimestampToSec(entry.End)
+
+		newStart, _ := mapTimeAfterJumpCuts(tStart, gaps)
+		newEnd, _ := mapTimeAfterJumpCuts(tEnd, gaps)
+
+		// If the entry has a positive duration after cut
+		if newEnd-newStart >= 0.08 {
+			adjusted = append(adjusted, SubtitleEntry{
+				Start: formatASSTime(newStart),
+				End:   formatASSTime(newEnd),
+				Text:  entry.Text,
+			})
+		}
+	}
+
+	return adjusted
+}
+
+func mapTimeAfterJumpCuts(t float64, gaps []detector.SilenceGap) (float64, bool) {
+	shift := 0.0
+	for _, g := range gaps {
+		if t >= g.EndSec {
+			shift += g.Duration()
+		} else if t > g.StartSec && t < g.EndSec {
+			return g.StartSec - shift, true
+		}
+	}
+	return t - shift, false
 }

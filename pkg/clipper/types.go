@@ -1,6 +1,7 @@
 package clipper
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"runtime"
@@ -37,11 +38,22 @@ const (
 	StrategyAccurate CutStrategy = "accurate" // re-encode for frame-accurate cuts
 )
 
+// SubtitleCue represents an individual timestamped subtitle text entry inside a clip.
+type SubtitleCue struct {
+	Start float64 `json:"start"` // start offset in seconds relative to segment (e.g. 1.2)
+	End   float64 `json:"end"`   // end offset in seconds relative to segment (e.g. 3.5)
+	Text  string  `json:"text"`  // caption text
+}
+
 // Segment represents a video cut specification.
 type Segment struct {
-	Start string `json:"start"` // e.g. "00:00:10", "10", "01:15.5"
-	End   string `json:"end"`   // e.g. "00:00:25", "25", "01:30.0"
-	Title string `json:"title,omitempty"`
+	Start       string        `json:"start"` // e.g. "00:00:10", "10", "01:15.5"
+	End         string        `json:"end"`   // e.g. "00:00:25", "25", "01:30.0"
+	Title       string        `json:"title,omitempty"`
+	Subtitles   []SubtitleCue `json:"subtitles,omitempty"`     // Custom cue list for this segment
+	SubPreset   string        `json:"sub_preset,omitempty"`   // Override preset per segment
+	SubFontSize int           `json:"sub_font_size,omitempty"` // Override font size per segment
+	SubPosition string        `json:"sub_position,omitempty"`  // "bottom", "middle", "top"
 }
 
 // Config holds options for the video cutting job.
@@ -63,21 +75,85 @@ type Config struct {
 	TextPos       string              `json:"text_pos"`     // Position for overlay text
 	FontSize      int                 `json:"font_size"`    // Font size for overlay text
 	FontColor     string              `json:"font_color"`   // Font color for overlay text (e.g. "white", "yellow")
-	AutoDetect    string              `json:"auto_detect"`  // Auto detection mode: "silence", "scene", or "ai"
-	TranslateLang string              `json:"translate_lang"`// Target language for subtitle translation (e.g. "id", "en")
-	BurnSubtitles bool                `json:"burn_subtitles"`// Hardcode/burn-in subtitles directly onto video clips
-	SubStyle      string              `json:"sub_style"`    // Subtitle style: "karaoke" (TikTok 2-word chunks) or "standard"
+	AutoDetect     string              `json:"auto_detect"`     // Auto detection mode: "silence", "scene", or "ai"
+	TargetDuration float64             `json:"target_duration"` // Desired segment clip duration in seconds (0 = auto)
+	TranslateLang  string              `json:"translate_lang"`  // Target language for subtitle translation (e.g. "id", "en")
+	Subtitles     bool                `json:"subtitles"`     // Include captions/subtitles on video clips
+	SubStyle      string              `json:"sub_style"`     // Subtitle style: 'karaoke' or 'standard'
+	SubPreset     string              `json:"sub_preset"`    // Viral subtitle theme preset: 'hormozi', 'minimal', 'devon', 'neon', 'cinematic'
+	SubSDHMode    string              `json:"sub_sdh_mode"`  // Handling for silent narrator & SDH brackets: 'strip', 'top-box', 'keep'
+	SubEmoji      bool                `json:"sub_emoji"`     // Auto-inject contextual emojis based on keywords into subtitle cues
 	SubFontSize   int                 `json:"sub_font_size"` // Subtitle font size for burnt-in captions (default: 48)
 	SubFontPath   string              `json:"sub_font_path"`// Path to custom font file (.ttf / .otf) for burnt-in captions
-	UseWhisper    bool                `json:"use_whisper"`   // Force local Whisper AI for speech-to-text transcription
-	AIConfig      ai.AIProviderConfig `json:"ai_config"`    // Multi-provider AI config
+	UseWhisper       bool                `json:"use_whisper"`       // Force local Whisper AI for speech-to-text transcription
+	GenerateMetadata bool                `json:"generate_metadata"` // Generate companion social metadata (metadata.json / .txt) for clips
+	ExtractThumbnail bool                `json:"extract_thumbnail"` // Extract high-resolution cover thumbnail & hook frame (.jpg)
+	ThumbnailCount   int                 `json:"thumbnail_count"`   // Number of candidate thumbnails to extract (1 to 3, default: 1)
+	HWAccel          string              `json:"hwaccel"`           // Hardware acceleration mode: 'auto', 'nvenc', 'videotoolbox', 'qsv', 'vaapi', 'amf', 'cpu'
+	ShowProgress     bool                `json:"show_progress"`     // Display interactive terminal progress bar during rendering (default: true)
+	AIConfig         ai.AIProviderConfig `json:"ai_config"`        // Multi-provider AI config
 	OpenRouterKey string              `json:"openrouter_key"`// OpenRouter API Key (legacy fallback)
 	AIModel       string              `json:"ai_model"`     // AI model name (legacy fallback)
 	DryRun        bool                `json:"dry_run"`      // Dry-run mode: analyze & preview commands without rendering video
 	BatchList     string              `json:"batch_list"`    // Path to text file containing list of video URLs/files (one per line)
 	CleanCache    bool                `json:"clean_cache"`   // Clean cache directory
 	CleanDays     int                 `json:"clean_days"`    // Delete cache files older than N days (0 = clean all)
+	FaceTracking  bool                `json:"face_tracking"` // Dynamic active speaker / face tracking for smart-crop
+	PanDuration   float64             `json:"pan_duration"`  // Duration of camera pan interpolation in seconds (default: 0.8)
+	Loudnorm      bool                `json:"loudnorm"`      // EBU R128 audio normalization (-af loudnorm)
+	LoudnormI     float64             `json:"loudnorm_i"`    // Integrated loudness target in LUFS (default: -14)
+	LoudnormLRA   float64             `json:"loudnorm_lra"`  // Loudness range target in LU (default: 7)
+	LoudnormTP    float64             `json:"loudnorm_tp"`   // Maximum true peak in dBTP (default: -2)
+	JumpCut       bool                `json:"jump_cut"`      // Smart silence removal & snappy jump-cuts inside clips
+	JumpCutMinSil float64             `json:"jump_cut_min_silence"` // Minimum silence pause to cut in seconds (default: 1.0)
+	JumpCutMargin float64             `json:"jump_cut_margin"` // Padding margin around speech in seconds (default: 0.2)
+	JumpCutNoise  float64             `json:"jump_cut_noise"`  // Silence noise gate threshold in dB (default: -30.0)
 	Segments      []Segment           `json:"segments"`
+}
+
+// UnmarshalJSON implements custom unmarshaling to support "subtitles", "subtitle", "burn_subtitles", and "burn_subtitle" config keys.
+func (c *Config) UnmarshalJSON(data []byte) error {
+	type Alias Config
+	aux := &struct {
+		Subtitles     *bool `json:"subtitles"`
+		Subtitle      *bool `json:"subtitle"`
+		BurnSubtitles *bool `json:"burn_subtitles"`
+		BurnSubtitle  *bool `json:"burn_subtitle"`
+		*Alias
+	}{
+		Alias: (*Alias)(c),
+	}
+
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+
+	if aux.Subtitles != nil {
+		c.Subtitles = *aux.Subtitles
+	} else if aux.Subtitle != nil {
+		c.Subtitles = *aux.Subtitle
+	} else if aux.BurnSubtitles != nil {
+		c.Subtitles = *aux.BurnSubtitles
+	} else if aux.BurnSubtitle != nil {
+		c.Subtitles = *aux.BurnSubtitle
+	}
+
+	return nil
+}
+
+// LoadConfig reads and parses a Config from a JSON file.
+func LoadConfig(filePath string) (*Config, error) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file '%s': %w", filePath, err)
+	}
+
+	var cfg Config
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse JSON in config file '%s': %w", filePath, err)
+	}
+
+	return &cfg, nil
 }
 
 // GetBatchInputs parses multiple input URLs or file paths from BatchList or comma-separated InputFile.

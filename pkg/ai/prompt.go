@@ -305,3 +305,210 @@ func containsText(slice []string, text string) bool {
 	}
 	return false
 }
+
+// BuildMetadataHighlightPrompts constructs system and user prompts to generate video segments from metadata and duration without subtitles.
+func BuildMetadataHighlightPrompts(videoTitle string, durationSec float64, targetDuration float64, targetLang string, isShorts bool) (systemPrompt string, userPrompt string) {
+	durStr := FormatSecondsToTime(durationSec)
+	langInstruction := ""
+	if targetLang == "id" || strings.HasPrefix(strings.ToLower(targetLang), "ind") {
+		langInstruction = "The 'title' field MUST be written in Bahasa Indonesia (Indonesian)."
+	} else if targetLang != "" {
+		langInstruction = fmt.Sprintf("The 'title' field MUST be written in %s language.", targetLang)
+	}
+
+	var clipRules string
+	if targetDuration > 0 {
+		clipRules = fmt.Sprintf("Each clip should be approximately %.0f seconds long (±15 seconds).", targetDuration)
+	} else if isShorts {
+		clipRules = "Each clip should be between 25 seconds and 55 seconds long, optimized for Shorts/Reels/TikTok."
+	} else {
+		clipRules = "Each clip should be between 1 minute and 4 minutes long, optimized for YouTube video highlights."
+	}
+
+	systemPrompt = fmt.Sprintf(`You are an expert video editor and social media viral content strategist.
+Given a video's title and total duration, propose 2 to 5 high-impact viral segment timestamps (start, end, and title).
+
+CRITICAL RULES:
+1. %s
+2. The first segment MUST capture an opening hook starting at "00:00".
+3. The "start" and "end" timestamps must be formatted as "MM:SS" or "HH:MM:SS" and MUST NOT exceed the total duration (%s).
+4. %s
+
+Respond ONLY with a valid JSON array of objects with keys: "start", "end", "title".
+No markdown, no explanation, only raw JSON.`, clipRules, durStr, langInstruction)
+
+	userPrompt = fmt.Sprintf("Video Title: %s\nTotal Duration: %s (%.0f seconds)", videoTitle, durStr, durationSec)
+	return systemPrompt, userPrompt
+}
+
+// GenerateHeuristicHighlights produces intelligently spaced segment intervals across a video's duration without requiring subtitles.
+func GenerateHeuristicHighlights(durationSec float64, isShorts bool, targetDuration float64, targetLang string) []AIHighlight {
+	if durationSec <= 10 {
+		return []AIHighlight{
+			{Start: "00:00", End: FormatSecondsToTime(durationSec), Title: "Full Video Highlight"},
+		}
+	}
+
+	clipLength := targetDuration
+	if clipLength <= 0 {
+		if isShorts {
+			clipLength = 35.0
+		} else {
+			if durationSec <= 180 {
+				clipLength = 45.0
+			} else if durationSec <= 600 {
+				clipLength = 90.0 // 1.5 min
+			} else if durationSec <= 1800 {
+				clipLength = 150.0 // 2.5 min
+			} else {
+				clipLength = 240.0 // 4 min
+			}
+		}
+	}
+
+	if durationSec < clipLength {
+		return []AIHighlight{
+			{Start: "00:00", End: FormatSecondsToTime(durationSec), Title: "Opening Highlight"},
+		}
+	}
+
+	isIndo := targetLang == "id" || strings.HasPrefix(strings.ToLower(targetLang), "ind")
+	tHook := "Opening Viral Hook"
+	tInsight := "Key Core Insight"
+	tClimax := "Peak Climax Moment"
+	tOutro := "Actionable Conclusion"
+	if isIndo {
+		tHook = "Hook Pembuka Menarik"
+		tInsight = "Poin Inti & Pembahasan Utama"
+		tClimax = "Momen Puncak & Klimaks"
+		tOutro = "Kesimpulan & Penutup"
+	}
+
+	var highlights []AIHighlight
+	// 1. Opening Hook
+	hookEnd := clipLength
+	if hookEnd > durationSec {
+		hookEnd = durationSec
+	}
+	highlights = append(highlights, AIHighlight{
+		Start: "00:00",
+		End:   FormatSecondsToTime(hookEnd),
+		Title: tHook,
+	})
+
+	// 2. Middle highlight
+	if durationSec > clipLength*2.5 {
+		midStart := durationSec * 0.35
+		midEnd := midStart + clipLength
+		if midEnd < durationSec {
+			highlights = append(highlights, AIHighlight{
+				Start: FormatSecondsToTime(midStart),
+				End:   FormatSecondsToTime(midEnd),
+				Title: tInsight,
+			})
+		}
+	}
+
+	// 3. Climax
+	if durationSec > clipLength*4.0 {
+		climaxStart := durationSec * 0.65
+		climaxEnd := climaxStart + clipLength
+		if climaxEnd < durationSec {
+			highlights = append(highlights, AIHighlight{
+				Start: FormatSecondsToTime(climaxStart),
+				End:   FormatSecondsToTime(climaxEnd),
+				Title: tClimax,
+			})
+		}
+	}
+
+	// 4. Conclusion / CTA
+	if durationSec > clipLength*2.0 {
+		finalEnd := durationSec
+		finalStart := durationSec - clipLength
+		if finalStart > hookEnd+10 {
+			highlights = append(highlights, AIHighlight{
+				Start: FormatSecondsToTime(finalStart),
+				End:   FormatSecondsToTime(finalEnd),
+				Title: tOutro,
+			})
+		}
+	}
+
+	return highlights
+}
+
+// FormatSecondsToTime formats float seconds into MM:SS or HH:MM:SS.
+func FormatSecondsToTime(sec float64) string {
+	totalSec := int(sec)
+	h := totalSec / 3600
+	m := (totalSec % 3600) / 60
+	s := totalSec % 60
+	if h > 0 {
+		return fmt.Sprintf("%02d:%02d:%02d", h, m, s)
+	}
+	return fmt.Sprintf("%02d:%02d", m, s)
+}
+
+// AudioSubtitleCue represents a single timestamped subtitle cue from Speech-to-Text.
+type AudioSubtitleCue struct {
+	Start float64 `json:"start"`
+	End   float64 `json:"end"`
+	Text  string  `json:"text"`
+}
+
+// BuildGeminiAudioSTTPrompt constructs the prompt for Gemini Audio transcription.
+func BuildGeminiAudioSTTPrompt(targetLang string) (systemPrompt string, userPrompt string) {
+	langRule := ""
+	if targetLang == "id" || strings.HasPrefix(strings.ToLower(targetLang), "ind") {
+		langRule = "Transcribe the audio accurately in Bahasa Indonesia."
+	} else if targetLang != "" {
+		langRule = fmt.Sprintf("Transcribe the audio accurately in %s language.", targetLang)
+	} else {
+		langRule = "Transcribe the audio in its original spoken language."
+	}
+
+	systemPrompt = fmt.Sprintf(`You are an expert speech-to-text audio transcriber.
+%s
+Listen carefully to the audio file provided and generate precise, time-aligned subtitle cues.
+Split sentences into natural subtitle phrases (each cue around 1.0 to 4.0 seconds long).
+The timestamps (start and end in seconds, float format) MUST be relative to the beginning of the audio clip (starting at 0.0).
+
+OUTPUT FORMAT:
+Output ONLY a valid JSON array of objects with the following schema:
+[
+  {
+    "start": 0.0,
+    "end": 2.5,
+    "text": "Transcribed speech phrase here"
+  }
+]
+Do not wrap in explanations. Output pure JSON only.`, langRule)
+
+	userPrompt = "Please transcribe this audio clip into precise timestamped subtitle cues JSON."
+	return systemPrompt, userPrompt
+}
+
+// ParseGeminiAudioSTTResponse parses Gemini STT output into a list of AudioSubtitleCue.
+func ParseGeminiAudioSTTResponse(responseText string) ([]AudioSubtitleCue, error) {
+	clean := strings.TrimSpace(responseText)
+	clean = strings.TrimPrefix(clean, "```json")
+	clean = strings.TrimPrefix(clean, "```")
+	clean = strings.TrimSuffix(clean, "```")
+	clean = strings.TrimSpace(clean)
+
+	startIdx := strings.Index(clean, "[")
+	endIdx := strings.LastIndex(clean, "]")
+	if startIdx == -1 || endIdx == -1 || endIdx <= startIdx {
+		return nil, fmt.Errorf("no valid JSON array found in Gemini Audio response: %s", responseText)
+	}
+	jsonStr := clean[startIdx : endIdx+1]
+
+	var cues []AudioSubtitleCue
+	if err := json.Unmarshal([]byte(jsonStr), &cues); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal Gemini Audio cues: %w", err)
+	}
+
+	return cues, nil
+}
+

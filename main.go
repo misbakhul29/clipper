@@ -3,285 +3,145 @@ package main
 import (
 	"bufio"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/misbakhul29/clipper/pkg/clipper"
+	"github.com/misbakhul29/clipper/pkg/web"
 )
 
+const Version = "v1.32.1"
+
+func printUsage() {
+	fmt.Printf(`CLIPPER %s — Minimalist AI Video Clipper & Shorts Engine
+
+USAGE:
+  clipper <command> [arguments]
+
+COMMANDS:
+  serve, -s, -serve [port]       Launch the Web Studio UI dashboard (default: :8000)
+                                 Examples:
+                                   clipper serve
+                                   clipper serve :8080
+                                   clipper -s 3000
+
+  config, -c, -config <file>     Run video clipping directly using a JSON config file
+                                 Examples:
+                                   clipper config config.json
+                                   clipper -c segments.json
+                                   clipper my_project.json
+
+  init, -i, -init [filename]     Create a starter config.json template or run interactive wizard
+                                 Examples:
+                                   clipper init
+                                   clipper init custom.json
+                                   clipper -i
+
+  version, -v, -version          Display current version information
+  help, -h, --help               Show this help message
+
+WEB STUDIO & CONFIGURATION:
+  All rendering parameters (Shorts 9:16, Subtitles, AI Highlights, Audio Normalization,
+  Silence Removal, Overlays, Watermark, and Hardware Acceleration) are managed visually
+  in the Web Studio or through a config.json file.
+`, Version)
+}
+
 func main() {
-	var (
-		configFile    string
-		initConfig    string
-		interactive   bool
-		inputFile     string
-		outputDir     string
-		outputFile    string
-		modeStr       string
-		stratStr      string
-		isShorts      bool
-		shortsStyle   string
-		quality       string
-		cacheDir      string
-		noCache       bool
-		concurrency   int
-		watermarkPath string
-		watermarkPos  string
-		overlayText   string
-		textPos       string
-		fontSize      int
-		fontColor     string
-		autoDetect    string
-		translateLang string
-		burnSubtitles bool
-		subStyle      string
-		subFontSize   int
-		subFontPath   string
-		useWhisper    bool
-		dryRun        bool
-		batchList     string
-		cleanCache    bool
-		cleanDays     int
-		openRouterKey string
-		aiModel       string
-		segments      string
-	)
-
-	flag.StringVar(&configFile, "config", "", "Path to JSON configuration file")
-	flag.StringVar(&initConfig, "init-config", "", "Generate a JSON configuration file (e.g. -init-config config.json)")
-	flag.BoolVar(&interactive, "i", false, "Run interactive config generator wizard")
-	flag.BoolVar(&interactive, "interactive", false, "Run interactive config generator wizard")
-
-	flag.StringVar(&inputFile, "input", "", "Path to source input video file, YouTube URL, or comma-separated URLs")
-	flag.StringVar(&outputDir, "outdir", ".", "Output directory for cut videos")
-	flag.StringVar(&outputFile, "output", "", "Output filename (used in merge mode)")
-	flag.StringVar(&modeStr, "mode", "split", "Operation mode: 'split' (separate files) or 'merge' (combined file)")
-	flag.StringVar(&stratStr, "strategy", "fast", "Cut strategy: 'fast' (stream copy) or 'accurate' (re-encode)")
-	flag.BoolVar(&isShorts, "shorts", false, "Convert cut videos to 9:16 Shorts/Reels/TikTok format")
-	flag.StringVar(&shortsStyle, "shorts-style", "crop", "Shorts aspect ratio style: 'crop' (center crop 9:16), 'blur' (blurred background), or 'smart-crop'")
-	flag.StringVar(&quality, "quality", "best", "YouTube download quality ('best', '1080p', '720p', '480p', '360p', 'worst')")
-	flag.StringVar(&cacheDir, "cache-dir", "./cache", "Directory for caching downloaded YouTube videos")
-	flag.BoolVar(&noCache, "no-cache", false, "Disable YouTube download cache and force re-download")
-	flag.IntVar(&concurrency, "concurrency", 0, "Number of parallel workers for rendering clips (default: CPU cores)")
-	flag.StringVar(&watermarkPath, "watermark", "", "Path to watermark image file (PNG)")
-	flag.StringVar(&watermarkPos, "watermark-pos", "top-right", "Watermark position ('top-right', 'top-left', 'bottom-right', 'bottom-left', 'center')")
-	flag.StringVar(&overlayText, "text", "", "Text caption to render on video clips")
-	flag.StringVar(&textPos, "text-pos", "bottom-center", "Text caption position ('bottom-center', 'top-center', 'center', 'top-left', 'bottom-left')")
-	flag.IntVar(&fontSize, "font-size", 32, "Font size for text caption")
-	flag.StringVar(&fontColor, "font-color", "white", "Font color for text caption ('white', 'yellow', 'cyan', 'red')")
-	flag.StringVar(&autoDetect, "auto-detect", "", "Smart auto-detection mode for segments ('silence', 'scene', or 'ai')")
-	flag.StringVar(&translateLang, "translate-lang", "id", "Target language for AI titles and subtitle translation ('id', 'en', etc.)")
-	flag.BoolVar(&burnSubtitles, "burn-subtitles", false, "Hardcode/burn-in subtitles directly onto video clips")
-	flag.BoolVar(&burnSubtitles, "subtitles", false, "Hardcode/burn-in subtitles directly onto video clips")
-	flag.StringVar(&subStyle, "sub-style", "karaoke", "Subtitle style for burnt-in captions ('karaoke' for TikTok 2-word chunks, or 'standard')")
-	flag.IntVar(&subFontSize, "sub-font-size", 48, "Subtitle font size for burnt-in captions")
-	flag.StringVar(&subFontPath, "sub-font-path", "", "Custom font file path (.ttf / .otf) for burnt-in captions")
-	flag.BoolVar(&useWhisper, "use-whisper", false, "Force local Whisper AI for speech-to-text transcription")
-	flag.BoolVar(&dryRun, "dry-run", false, "Analyze segments and preview commands without rendering video files")
-	flag.StringVar(&batchList, "batch-list", "", "Path to text file containing video URLs/files (one per line)")
-	flag.BoolVar(&cleanCache, "clean-cache", false, "Clean cache directory and exit")
-	flag.IntVar(&cleanDays, "clean-days", 0, "Retention threshold in days for cache cleanup (0 = delete all)")
-	var aiRouter, aiKey string
-	flag.StringVar(&aiRouter, "ai-router", "openrouter", "AI API Provider ('openrouter', 'gemini', 'deepseek', 'openai')")
-	flag.StringVar(&aiKey, "ai-key", "", "API Key for selected AI router (e.g. Gemini/DeepSeek/OpenAI key)")
-	flag.StringVar(&openRouterKey, "openrouter-key", "", "OpenRouter API Key for AI highlight detection (defaults to $OPENROUTER_API_KEY)")
-	flag.StringVar(&aiModel, "ai-model", "openrouter/free", "AI model name (e.g. 'openrouter/free', 'gemini-2.0-flash', 'deepseek-chat', 'gpt-4o-mini')")
-	flag.StringVar(&segments, "segments", "", "Comma-separated segment timestamps (e.g. '00:10-00:25,01:00-01:30')")
-
-	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "Automated Video Cutting System in Go (Supports Local Videos, YouTube URLs, Shorts 9:16 & Auto-Detect)\n\n")
-		fmt.Fprintf(os.Stderr, "Options:\n")
-		flag.PrintDefaults()
-		fmt.Fprintf(os.Stderr, "\nExamples:\n")
-		fmt.Fprintf(os.Stderr, "  1. Generate JSON Config via Interactive Wizard:\n")
-		fmt.Fprintf(os.Stderr, "     %s -i\n\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  2. Generate JSON Config via Flags:\n")
-		fmt.Fprintf(os.Stderr, "     %s -init-config my_config.json -input video.mp4 -segments \"00:10-00:25\" -shorts\n\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  3. Process Video using JSON Config:\n")
-		fmt.Fprintf(os.Stderr, "     %s -config my_config.json\n\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  4. Smart Auto Silence Detection + Parallel Workers:\n")
-		fmt.Fprintf(os.Stderr, "     %s -input video.mp4 -auto-detect silence -concurrency 4 -shorts -outdir ./shorts_silence\n", os.Args[0])
-	}
-
-	flag.Parse()
-
-	// Handle Interactive Config Generator (-i / -interactive)
-	if interactive {
-		targetFile := initConfig
-		if targetFile == "" {
-			targetFile = "config.json"
-		}
-		runInteractiveWizard(targetFile)
+	args := os.Args[1:]
+	if len(args) == 0 {
+		printUsage()
 		return
 	}
 
-	// Handle Config File Generation via Flag (-init-config config.json)
-	if initConfig != "" {
-		parsedSegs, err := parseCLISegments(segments)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error parsing -segments flag: %v\n", err)
-			os.Exit(1)
-		}
-		genCfg := clipper.Config{
-			InputFile:     inputFile,
-			OutputDir:     outputDir,
-			OutputFile:    outputFile,
-			Mode:          clipper.Mode(modeStr),
-			Strategy:      clipper.CutStrategy(stratStr),
-			Shorts:        isShorts,
-			ShortsStyle:   shortsStyle,
-			Quality:       quality,
-			CacheDir:      cacheDir,
-			NoCache:       noCache,
-			Concurrency:   concurrency,
-			WatermarkPath: watermarkPath,
-			WatermarkPos:  watermarkPos,
-			OverlayText:   overlayText,
-			TextPos:       textPos,
-			FontSize:      fontSize,
-			FontColor:     fontColor,
-			AutoDetect:    autoDetect,
-			Segments:      parsedSegs,
-		}
-		if err := saveConfig(initConfig, genCfg); err != nil {
-			fmt.Fprintf(os.Stderr, "Error generating config file '%s': %v\n", initConfig, err)
-			os.Exit(1)
-		}
-		fmt.Printf("Successfully generated configuration file: %s\n", initConfig)
+	cmd := strings.ToLower(strings.TrimSpace(args[0]))
+	switch cmd {
+	case "help", "-h", "--help", "-help":
+		printUsage()
 		return
-	}
 
-	var cfg clipper.Config
+	case "version", "-v", "--version", "-version":
+		fmt.Printf("Clipper %s\n", Version)
+		return
 
-	if configFile != "" {
-		data, err := os.ReadFile(configFile)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading config file '%s': %v\n", configFile, err)
+	case "serve", "-s", "--serve", "-serve":
+		serveAddr := ":8000"
+		if len(args) > 1 {
+			addr := args[1]
+			if !strings.HasPrefix(addr, ":") && !strings.Contains(addr, ":") {
+				addr = ":" + addr
+			}
+			serveAddr = addr
+		}
+		srv := web.NewServer(serveAddr, &clipper.Config{})
+		if err := srv.Start(); err != nil {
+			fmt.Fprintf(os.Stderr, "Web Studio error: %v\n", err)
 			os.Exit(1)
 		}
-		if err := json.Unmarshal(data, &cfg); err != nil {
-			fmt.Fprintf(os.Stderr, "Error parsing JSON config file '%s': %v\n", configFile, err)
+		return
+
+	case "init", "-i", "--init", "-init", "-interactive", "--interactive":
+		targetFile := "config.json"
+		if len(args) > 1 {
+			targetFile = args[1]
+		}
+		if cmd == "-i" || cmd == "-interactive" || cmd == "--interactive" || (len(args) > 1 && args[1] == "--wizard") {
+			runInteractiveWizard(targetFile)
+			return
+		}
+		if err := generateSampleConfigFile(targetFile); err != nil {
+			fmt.Fprintf(os.Stderr, "Error creating config file: %v\n", err)
 			os.Exit(1)
 		}
-	}
+		fmt.Printf("✨ Created starter configuration template: %s\n", targetFile)
+		fmt.Printf("Edit %s or run:\n  clipper config %s\n", targetFile, targetFile)
+		return
 
-	// CLI flags override or supply missing values
-	// Override config values ONLY if flags were explicitly passed on CLI
-	if isFlagPassed("input") {
-		cfg.InputFile = inputFile
-	}
-	if isFlagPassed("outdir") || cfg.OutputDir == "" {
-		cfg.OutputDir = outputDir
-	}
-	if isFlagPassed("output") {
-		cfg.OutputFile = outputFile
-	}
-	if isFlagPassed("mode") {
-		cfg.Mode = clipper.Mode(modeStr)
-	}
-	if isFlagPassed("strategy") {
-		cfg.Strategy = clipper.CutStrategy(stratStr)
-	}
-	if isFlagPassed("shorts") {
-		cfg.Shorts = isShorts
-	}
-	if isFlagPassed("shorts-style") {
-		cfg.ShortsStyle = shortsStyle
-	}
-	if isFlagPassed("quality") {
-		cfg.Quality = quality
-	}
-	if isFlagPassed("cache-dir") {
-		cfg.CacheDir = cacheDir
-	}
-	if isFlagPassed("no-cache") {
-		cfg.NoCache = noCache
-	}
-	if isFlagPassed("concurrency") {
-		cfg.Concurrency = concurrency
-	}
-	if isFlagPassed("watermark") {
-		cfg.WatermarkPath = watermarkPath
-	}
-	if isFlagPassed("watermark-pos") {
-		cfg.WatermarkPos = watermarkPos
-	}
-	if isFlagPassed("text") {
-		cfg.OverlayText = overlayText
-	}
-	if isFlagPassed("text-pos") {
-		cfg.TextPos = textPos
-	}
-	if isFlagPassed("font-size") {
-		cfg.FontSize = fontSize
-	}
-	if isFlagPassed("font-color") {
-		cfg.FontColor = fontColor
-	}
-	if isFlagPassed("auto-detect") {
-		cfg.AutoDetect = autoDetect
-	}
-	if isFlagPassed("translate-lang") {
-		cfg.TranslateLang = translateLang
-	}
-	if isFlagPassed("burn-subtitles") || isFlagPassed("subtitles") {
-		cfg.BurnSubtitles = burnSubtitles
-	}
-	if isFlagPassed("sub-style") {
-		cfg.SubStyle = subStyle
-	}
-	if isFlagPassed("sub-font-size") {
-		cfg.SubFontSize = subFontSize
-	}
-	if isFlagPassed("sub-font-path") {
-		cfg.SubFontPath = subFontPath
-	}
-	if isFlagPassed("use-whisper") {
-		cfg.UseWhisper = useWhisper
-	}
-	if isFlagPassed("dry-run") {
-		cfg.DryRun = dryRun
-	}
-	if isFlagPassed("batch-list") {
-		cfg.BatchList = batchList
-	}
-	if isFlagPassed("clean-cache") {
-		cfg.CleanCache = cleanCache
-	}
-	if isFlagPassed("clean-days") {
-		cfg.CleanDays = cleanDays
-	}
-	if isFlagPassed("ai-router") {
-		cfg.AIConfig.APIRouter = aiRouter
-	}
-	if isFlagPassed("ai-key") {
-		cfg.AIConfig.APIKey = aiKey
-	}
-	if isFlagPassed("openrouter-key") {
-		cfg.AIConfig.APIKey = openRouterKey
-		cfg.OpenRouterKey = openRouterKey
-	}
-	if isFlagPassed("ai-model") {
-		cfg.AIConfig.Model = aiModel
-		cfg.AIModel = aiModel
-	}
-
-	// Parse CLI segments string if provided
-	if segments != "" {
-		parsedSegs, err := parseCLISegments(segments)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error parsing -segments flag: %v\n", err)
+	case "config", "-c", "--config", "-config":
+		if len(args) < 2 {
+			fmt.Fprintln(os.Stderr, "Error: Config file path required.\nUsage: clipper config <path/to/config.json>")
 			os.Exit(1)
 		}
-		cfg.Segments = append(cfg.Segments, parsedSegs...)
-	}
+		runConfig(args[1])
+		return
 
-	if !cfg.CleanCache && cfg.InputFile == "" && cfg.BatchList == "" {
-		flag.Usage()
+	default:
+		// If user passes a flag or file directly: e.g. `clipper config.json` or `clipper -serve=:8000`
+		if strings.HasPrefix(cmd, "-s=") || strings.HasPrefix(cmd, "--serve=") || strings.HasPrefix(cmd, "-serve=") {
+			parts := strings.Split(cmd, "=")
+			serveAddr := parts[1]
+			if !strings.HasPrefix(serveAddr, ":") && !strings.Contains(serveAddr, ":") {
+				serveAddr = ":" + serveAddr
+			}
+			srv := web.NewServer(serveAddr, &clipper.Config{})
+			if err := srv.Start(); err != nil {
+				fmt.Fprintf(os.Stderr, "Web Studio error: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		}
+		if strings.HasPrefix(cmd, "-c=") || strings.HasPrefix(cmd, "--config=") || strings.HasPrefix(cmd, "-config=") {
+			parts := strings.Split(cmd, "=")
+			runConfig(parts[1])
+			return
+		}
+		if strings.HasSuffix(cmd, ".json") {
+			runConfig(args[0])
+			return
+		}
+
+		fmt.Fprintf(os.Stderr, "Unknown command or flag '%s'\n\n", args[0])
+		printUsage()
+		os.Exit(1)
+	}
+}
+
+func runConfig(cfgPath string) {
+	cfg, err := clipper.LoadConfig(cfgPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading configuration '%s': %v\n", cfgPath, err)
 		os.Exit(1)
 	}
 
@@ -291,7 +151,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := app.Process(&cfg); err != nil {
+	if err := app.Process(cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "Processing failed: %v\n", err)
 		os.Exit(1)
 	}
@@ -299,34 +159,46 @@ func main() {
 	fmt.Println("Done!")
 }
 
-func parseCLISegments(raw string) ([]clipper.Segment, error) {
-	pairs := strings.Split(raw, ",")
-	var result []clipper.Segment
-	for _, pair := range pairs {
-		pair = strings.TrimSpace(pair)
-		if pair == "" {
-			continue
-		}
-
-		title := ""
-		timePart := pair
-		if strings.Contains(pair, ":") && (strings.Count(pair, ":") > 4 || strings.LastIndex(pair, ":") > strings.LastIndex(pair, "-")) {
-			idx := strings.LastIndex(pair, ":")
-			timePart = pair[:idx]
-			title = pair[idx+1:]
-		}
-
-		parts := strings.Split(timePart, "-")
-		if len(parts) != 2 {
-			return nil, fmt.Errorf("invalid segment pair '%s', expected format 'START-END' or 'START-END:TITLE'", pair)
-		}
-		result = append(result, clipper.Segment{
-			Start: strings.TrimSpace(parts[0]),
-			End:   strings.TrimSpace(parts[1]),
-			Title: strings.TrimSpace(title),
-		})
+func generateSampleConfigFile(filePath string) error {
+	sample := clipper.Config{
+		InputFile:        "https://www.youtube.com/watch?v=sample_video",
+		OutputDir:        "./clips",
+		OutputFile:       "merged_highlight.mp4",
+		Mode:             clipper.ModeSplit,
+		Strategy:         clipper.StrategyFast,
+		Shorts:           true,
+		ShortsStyle:      "blur",
+		Quality:          "1080p",
+		AutoDetect:       "ai",
+		TargetDuration:   30,
+		TranslateLang:    "id",
+		Subtitles:        true,
+		SubPreset:        "hormozi",
+		SubFontSize:      48,
+		SubEmoji:         true,
+		SubSDHMode:       "strip",
+		Loudnorm:         true,
+		JumpCut:          true,
+		GenerateMetadata: true,
+		ExtractThumbnail: true,
+		ThumbnailCount:   1,
+		HWAccel:          "auto",
+		ShowProgress:     true,
+		FaceTracking:     true,
+		Segments: []clipper.Segment{
+			{
+				Start: "00:00:10",
+				End:   "00:00:40",
+				Title: "Highlight 1 - Hook",
+			},
+			{
+				Start: "00:01:20",
+				End:   "00:01:50",
+				Title: "Highlight 2 - Peak Moment",
+			},
+		},
 	}
-	return result, nil
+	return saveConfig(filePath, sample)
 }
 
 func runInteractiveWizard(defaultFile string) {
@@ -335,7 +207,7 @@ func runInteractiveWizard(defaultFile string) {
 
 	fileOut := promptString(reader, "Output config filename", defaultFile)
 	inputFile := promptString(reader, "Input video file path or YouTube URL", "https://www.youtube.com/watch?v=sample")
-	outputDir := promptString(reader, "Output directory for clips", "./output_clips")
+	outputDir := promptString(reader, "Output directory for clips", "./clips")
 
 	fmt.Println("\nMode options:")
 	fmt.Println("  1. split (Cut into individual clip files)")
@@ -367,14 +239,72 @@ func runInteractiveWizard(defaultFile string) {
 		fmt.Println("Shorts aspect ratio style:")
 		fmt.Println("  1. crop (Center crop 9:16)")
 		fmt.Println("  2. blur (Blurred top/bottom background 9:16)")
-		styleChoice := promptString(reader, "Select style (1 or 2)", "1")
+		fmt.Println("  3. smart-crop (Active speaker & face tracking)")
+		styleChoice := promptString(reader, "Select style (1, 2, or 3)", "1")
 		if styleChoice == "2" || strings.ToLower(styleChoice) == "blur" {
 			shortsStyle = "blur"
+		} else if styleChoice == "3" || strings.ToLower(styleChoice) == "smart-crop" {
+			shortsStyle = "smart-crop"
 		}
 	}
 
+	loudnormChoice := promptString(reader, "\nEnable EBU R128 audio normalization (-14 LUFS)? (y/n)", "y")
+	loudnormEnabled := strings.ToLower(loudnormChoice) == "y" || strings.ToLower(loudnormChoice) == "yes"
+
+	jumpCutChoice := promptString(reader, "\nEnable Smart Silence Removal (Jump-Cut) inside clips? (y/n)", "n")
+	jumpCutEnabled := strings.ToLower(jumpCutChoice) == "y" || strings.ToLower(jumpCutChoice) == "yes"
+
+	subChoice := promptString(reader, "\nBurn subtitles directly into video? (y/n)", "n")
+	burnSubs := strings.ToLower(subChoice) == "y" || strings.ToLower(subChoice) == "yes"
+	subPresetChoice := "hormozi"
+	subSDHChoice := "strip"
+	subEmojiChoice := true
+	if burnSubs {
+		fmt.Println("Subtitle Theme Presets:")
+		fmt.Println("  1. hormozi   (Viral yellow, bold outline, pop-in bounce animation)")
+		fmt.Println("  2. minimal   (Clean crisp white, subtle border - Ali Abdaal / Devon style)")
+		fmt.Println("  3. neon      (Electric cyan, glowing magenta blur)")
+		fmt.Println("  4. cinematic (Soft ivory, wide spacing, classic subtitle)")
+		presetInput := promptString(reader, "Select preset (1-4 or name)", "1")
+		switch strings.ToLower(presetInput) {
+		case "2", "minimal", "devon":
+			subPresetChoice = "minimal"
+		case "3", "neon":
+			subPresetChoice = "neon"
+		case "4", "cinematic":
+			subPresetChoice = "cinematic"
+		default:
+			subPresetChoice = "hormozi"
+		}
+
+		fmt.Println("\nSilent Narrator & SDH Context Handling [...] :")
+		fmt.Println("  1. strip   (Remove [...] to keep speech snappy & clean - recommended)")
+		fmt.Println("  2. top-box (Render [...] as elegant static context box at top)")
+		fmt.Println("  3. keep    (Keep [...] as-is)")
+		sdhInput := promptString(reader, "Select SDH mode (1-3 or name)", "1")
+		subSDHChoice = "strip"
+		switch strings.ToLower(sdhInput) {
+		case "2", "top-box", "box":
+			subSDHChoice = "top-box"
+		case "3", "keep":
+			subSDHChoice = "keep"
+		default:
+			subSDHChoice = "strip"
+		}
+
+		emojiChoice := promptString(reader, "\nAuto-inject contextual emojis (e.g. 💰, 🔥, 💡) into subtitles? (y/n)", "y")
+		subEmojiChoice = strings.ToLower(emojiChoice) == "y" || strings.ToLower(emojiChoice) == "yes"
+	}
+
+	metaChoice := promptString(reader, "\nGenerate companion social media metadata (metadata.json & .txt)? (y/n)", "y")
+	generateMeta := strings.ToLower(metaChoice) == "y" || strings.ToLower(metaChoice) == "yes"
+
+	thumbChoice := promptString(reader, "\nExtract cover thumbnail and hook frame (.jpg)? (y/n)", "y")
+	extractThumbnails := strings.ToLower(thumbChoice) == "y" || strings.ToLower(thumbChoice) == "yes"
+
+	hwChoice := promptString(reader, "\nHardware Acceleration mode (auto, nvenc, videotoolbox, qsv, vaapi, amf, cpu)", "auto")
 	quality := promptString(reader, "\nYouTube Video Download Quality (best, 1080p, 720p, 480p, 360p, worst)", "best")
-	autoDetect := promptString(reader, "\nAuto Detection Mode (press Enter to skip, or enter 'silence' / 'scene')", "")
+	autoDetect := promptString(reader, "\nAuto Detection Mode (press Enter to skip, or enter 'ai' / 'silence' / 'scene')", "")
 
 	var segments []clipper.Segment
 	if autoDetect == "" {
@@ -403,16 +333,28 @@ func runInteractiveWizard(defaultFile string) {
 	}
 
 	cfg := clipper.Config{
-		InputFile:   inputFile,
-		OutputDir:   outputDir,
-		OutputFile:  outputFile,
-		Mode:        mode,
-		Strategy:    strategy,
-		Shorts:      isShorts,
-		ShortsStyle: shortsStyle,
-		Quality:     quality,
-		AutoDetect:  autoDetect,
-		Segments:    segments,
+		InputFile:        inputFile,
+		OutputDir:        outputDir,
+		OutputFile:       outputFile,
+		Mode:             mode,
+		Strategy:         strategy,
+		Shorts:           isShorts,
+		ShortsStyle:      shortsStyle,
+		Quality:          quality,
+		AutoDetect:       autoDetect,
+		Loudnorm:         loudnormEnabled,
+		JumpCut:          jumpCutEnabled,
+		Subtitles:        burnSubs,
+		SubPreset:        subPresetChoice,
+		SubSDHMode:       subSDHChoice,
+		SubEmoji:         subEmojiChoice,
+		GenerateMetadata: generateMeta,
+		ExtractThumbnail: extractThumbnails,
+		ThumbnailCount:   1,
+		HWAccel:          hwChoice,
+		ShowProgress:     true,
+		FaceTracking:     true,
+		Segments:         segments,
 	}
 
 	if err := saveConfig(fileOut, cfg); err != nil {
@@ -453,12 +395,85 @@ func saveConfig(filePath string, cfg clipper.Config) error {
 	return os.WriteFile(filePath, data, 0644)
 }
 
-func isFlagPassed(name string) bool {
-	found := false
-	flag.Visit(func(f *flag.Flag) {
-		if f.Name == name {
-			found = true
+// parseCLISegments parses a comma-separated string of video segment definitions.
+// Formats supported per segment:
+//   - "START-END" (e.g., "00:00-00:02")
+//   - "START-END:TITLE" (e.g., "00:05-00:25:Epic Moment")
+func parseCLISegments(raw string) ([]clipper.Segment, error) {
+	pairs := strings.Split(raw, ",")
+	var result []clipper.Segment
+	for _, pair := range pairs {
+		pair = strings.TrimSpace(pair)
+		if pair == "" {
+			continue
 		}
-	})
-	return found
+
+		dashIdx := strings.Index(pair, "-")
+		if dashIdx == -1 {
+			return nil, fmt.Errorf("invalid segment format '%s', expected 'START-END' or 'START-END:TITLE'", pair)
+		}
+
+		start := strings.TrimSpace(pair[:dashIdx])
+		rest := strings.TrimSpace(pair[dashIdx+1:])
+		if start == "" || rest == "" {
+			return nil, fmt.Errorf("invalid segment '%s': start and end must not be empty", pair)
+		}
+
+		var end, title string
+		parts := strings.Split(rest, ":")
+		switch len(parts) {
+		case 1:
+			end = parts[0]
+		case 2:
+			if isTimeDigits(parts[1]) {
+				end = rest
+			} else {
+				end = parts[0]
+				title = parts[1]
+			}
+		case 3:
+			if isTimeDigits(parts[2]) {
+				end = rest
+			} else {
+				end = parts[0] + ":" + parts[1]
+				title = parts[2]
+			}
+		default:
+			if isTimeDigits(parts[1]) && isTimeDigits(parts[2]) {
+				end = parts[0] + ":" + parts[1] + ":" + parts[2]
+				title = strings.Join(parts[3:], ":")
+			} else if isTimeDigits(parts[1]) {
+				end = parts[0] + ":" + parts[1]
+				title = strings.Join(parts[2:], ":")
+			} else {
+				end = parts[0]
+				title = strings.Join(parts[1:], ":")
+			}
+		}
+
+		result = append(result, clipper.Segment{
+			Start: start,
+			End:   strings.TrimSpace(end),
+			Title: strings.TrimSpace(title),
+		})
+	}
+
+	if len(result) == 0 {
+		return nil, fmt.Errorf("no valid segments found in '%s'", raw)
+	}
+	return result, nil
 }
+
+func isTimeDigits(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return false
+	}
+	for _, ch := range s {
+		if (ch < '0' || ch > '9') && ch != '.' {
+			return false
+		}
+	}
+	return true
+}
+
