@@ -12,7 +12,7 @@ import (
 	"github.com/misbakhul29/clipper/pkg/web"
 )
 
-const Version = "v1.32.0"
+const Version = "v1.32.1"
 
 func printUsage() {
 	fmt.Printf(`CLIPPER %s — Minimalist AI Video Clipper & Shorts Engine
@@ -394,3 +394,86 @@ func saveConfig(filePath string, cfg clipper.Config) error {
 
 	return os.WriteFile(filePath, data, 0644)
 }
+
+// parseCLISegments parses a comma-separated string of video segment definitions.
+// Formats supported per segment:
+//   - "START-END" (e.g., "00:00-00:02")
+//   - "START-END:TITLE" (e.g., "00:05-00:25:Epic Moment")
+func parseCLISegments(raw string) ([]clipper.Segment, error) {
+	pairs := strings.Split(raw, ",")
+	var result []clipper.Segment
+	for _, pair := range pairs {
+		pair = strings.TrimSpace(pair)
+		if pair == "" {
+			continue
+		}
+
+		dashIdx := strings.Index(pair, "-")
+		if dashIdx == -1 {
+			return nil, fmt.Errorf("invalid segment format '%s', expected 'START-END' or 'START-END:TITLE'", pair)
+		}
+
+		start := strings.TrimSpace(pair[:dashIdx])
+		rest := strings.TrimSpace(pair[dashIdx+1:])
+		if start == "" || rest == "" {
+			return nil, fmt.Errorf("invalid segment '%s': start and end must not be empty", pair)
+		}
+
+		var end, title string
+		parts := strings.Split(rest, ":")
+		switch len(parts) {
+		case 1:
+			end = parts[0]
+		case 2:
+			if isTimeDigits(parts[1]) {
+				end = rest
+			} else {
+				end = parts[0]
+				title = parts[1]
+			}
+		case 3:
+			if isTimeDigits(parts[2]) {
+				end = rest
+			} else {
+				end = parts[0] + ":" + parts[1]
+				title = parts[2]
+			}
+		default:
+			if isTimeDigits(parts[1]) && isTimeDigits(parts[2]) {
+				end = parts[0] + ":" + parts[1] + ":" + parts[2]
+				title = strings.Join(parts[3:], ":")
+			} else if isTimeDigits(parts[1]) {
+				end = parts[0] + ":" + parts[1]
+				title = strings.Join(parts[2:], ":")
+			} else {
+				end = parts[0]
+				title = strings.Join(parts[1:], ":")
+			}
+		}
+
+		result = append(result, clipper.Segment{
+			Start: start,
+			End:   strings.TrimSpace(end),
+			Title: strings.TrimSpace(title),
+		})
+	}
+
+	if len(result) == 0 {
+		return nil, fmt.Errorf("no valid segments found in '%s'", raw)
+	}
+	return result, nil
+}
+
+func isTimeDigits(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return false
+	}
+	for _, ch := range s {
+		if (ch < '0' || ch > '9') && ch != '.' {
+			return false
+		}
+	}
+	return true
+}
+
