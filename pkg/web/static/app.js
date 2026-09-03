@@ -504,7 +504,14 @@ async function startClippingJob() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
-    const data = await res.json();
+    let data = {};
+    const text = await res.text();
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { error: text || `HTTP ${res.status} ${res.statusText}` };
+    }
+
     if (!res.ok) {
       alert(data.error || 'Failed to start rendering.');
       if (card) card.style.display = 'none';
