@@ -26,6 +26,10 @@
       <span class="badge" id="portBadge">:8000</span>
     </div>
     <div class="header-right">
+      <button class="btn btn-secondary btn-sm" id="globalAISettingsBtn" onclick="toggleGlobalAISettings()" title="Global AI Configuration" style="height:28px; font-size:11px; display:inline-flex; align-items:center; gap:5px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px; height:13px;"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span>AI Settings</span>
+      </button>
       <div class="badge" id="statusBadge">READY</div>
       <button class="theme-toggle-btn" id="themeToggle" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
         <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -51,46 +55,51 @@
         <span class="panel-title">Source & Player</span>
       </div>
 
-      <div class="source-bar">
+      <!-- Source URL Input -->
+      <div class="field-row">
         <input type="text" id="videoSource" class="text-input" placeholder="Video path (e.g. video.mp4) or YouTube URL" />
-        <button class="btn btn-secondary" id="loadBtn" onclick="loadSourceVideo()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          <span id="loadBtnText">Load</span>
-        </button>
+        <button class="btn btn-primary" id="loadSourceBtn" onclick="loadSource()">Load</button>
       </div>
 
-      <div class="player-stage" id="playerStage">
-        <div class="player-loader" id="playerLoader" style="display: none;">
-          <svg class="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10" stroke-opacity="0.25"/>
-            <path d="M12 2a10 10 0 0 1 10 10"/>
+      <!-- Player Canvas / Area -->
+      <div class="player-container">
+        <video id="videoPlayer" playsinline></video>
+        <div id="playerPlaceholder" class="player-placeholder">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/>
+            <line x1="7" y1="2" x2="7" y2="22"/>
+            <line x1="17" y1="2" x2="17" y2="22"/>
+            <line x1="2" y1="12" x2="22" y2="12"/>
+            <line x1="2" y1="7" x2="7" y2="7"/>
+            <line x1="2" y1="17" x2="7" y2="17"/>
+            <line x1="17" y1="17" x2="22" y2="17"/>
+            <line x1="17" y1="7" x2="22" y2="7"/>
           </svg>
-          <div class="loader-title" id="loaderTitle">Preparing video...</div>
-          <div class="loader-sub" id="loaderSub">Downloading YouTube video to local cache for playback</div>
+          <span>Load a video file or YouTube URL to begin</span>
         </div>
-        <video id="mainPlayer" controls></video>
       </div>
 
-      <div class="transport-bar">
-        <div class="transport-controls">
-          <button class="btn btn-secondary btn-sm btn-icon" onclick="seekRelative(-1)" title="Seek -1s">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>
+      <!-- Player Controls -->
+      <div class="player-controls">
+        <div class="btn-group">
+          <button class="btn btn-secondary btn-icon" onclick="seekRelative(-1)" title="Seek -1s">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 17l-5-5 5-5M18 17l-5-5 5-5"/></svg>
           </button>
-          <button class="btn btn-secondary btn-sm btn-icon" onclick="seekRelative(-0.1)" title="Seek -0.1s">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+          <button class="btn btn-secondary btn-icon" onclick="seekRelative(-0.1)" title="Seek -0.1s">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
           </button>
-          <button class="btn btn-secondary btn-sm btn-icon" onclick="seekRelative(0.1)" title="Seek +0.1s">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          <button class="btn btn-secondary btn-icon" onclick="seekRelative(0.1)" title="Seek +0.1s">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
           </button>
-          <button class="btn btn-secondary btn-sm btn-icon" onclick="seekRelative(1)" title="Seek +1s">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>
+          <button class="btn btn-secondary btn-icon" onclick="seekRelative(1)" title="Seek +1s">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 17l5-5-5-5M6 17l5-5-5-5"/></svg>
           </button>
         </div>
-        <div class="timecode-display" id="playheadTime">00:00.00 / 00:00.00</div>
+        <div class="time-display" id="timeDisplay">00:00.00 / 00:00.00</div>
       </div>
 
-      <!-- Trimmer Box -->
-      <div class="trimmer-card">
+      <!-- Trimmer Controls -->
+      <div class="trimmer-section">
         <div class="trimmer-grid">
           <div class="field-group">
             <label class="field-label">
@@ -145,32 +154,9 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
               <span id="autoDetectBtnText">Generate with AI</span>
             </button>
-            <button class="btn btn-secondary btn-icon" id="aiConfigToggle" onclick="toggleAISettings()" title="AI Provider Configuration">
+            <button class="btn btn-secondary btn-icon" id="aiConfigToggle" onclick="toggleGlobalAISettings()" title="Configure AI Models & API Key">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
             </button>
-          </div>
-
-          <!-- Drawer for AI Config -->
-          <div id="aiDrawer" class="ai-drawer" style="display:none;">
-            <div class="ai-drawer-grid">
-              <div class="field-group">
-                <label class="field-label">AI Provider Router</label>
-                <select id="aiRouter" class="select-box">
-                  <option value="openrouter" selected>OpenRouter</option>
-                  <option value="gemini">Google Gemini</option>
-                  <option value="deepseek">DeepSeek</option>
-                  <option value="openai">OpenAI</option>
-                </select>
-              </div>
-              <div class="field-group">
-                <label class="field-label">AI Model</label>
-                <input type="text" id="aiModel" class="text-input" style="height:28px; font-size:11px;" placeholder="e.g. gemini-2.0-flash / deepseek-chat" />
-              </div>
-              <div class="field-group" style="grid-column: 1 / -1;">
-                <label class="field-label">API Key (Optional if already in environment)</label>
-                <input type="password" id="aiApiKey" class="text-input" style="height:28px; font-size:11px;" placeholder="sk-... (Leave blank to use environment variable)" />
-              </div>
-            </div>
           </div>
         </div>
       </div>
@@ -378,6 +364,51 @@
           <button class="btn btn-secondary" onclick="closeSubtitleStudio()">Cancel</button>
           <button class="btn btn-primary" onclick="saveSubtitleStudio()">Save to Clip</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Global AI Configuration Modal -->
+  <div id="aiModal" class="sub-modal-backdrop" style="display:none;">
+    <div class="sub-modal-card" style="max-width:520px;">
+      <div class="sub-modal-header">
+        <div class="sub-modal-title-wrap">
+          <span class="sub-modal-title">⚡ Global AI Configuration</span>
+        </div>
+        <button class="btn btn-secondary btn-icon" onclick="closeGlobalAISettings()" title="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div style="padding:16px 18px; display:flex; flex-direction:column; gap:12px;">
+        <div class="field-group">
+          <label class="field-label">Gemini API Key</label>
+          <input type="password" id="globalAIApiKey" class="text-input" placeholder="AIzaSy... (stored locally in browser)" oninput="saveGlobalAISettings()" />
+          <span style="font-size:10.5px; color:var(--text-muted); margin-top:2px;">Get a free API key at <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--text-main); text-decoration:underline;">Google AI Studio</a>.</span>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">Segment Generation Model (Highlights)</label>
+          <select id="globalAISegmentModel" class="select-box" onchange="saveGlobalAISettings()">
+            <option value="gemini-3.8-flash" selected>gemini-3.8-flash (Recommended)</option>
+            <option value="gemini-3.7-flash">gemini-3.7-flash</option>
+            <option value="gemini-3.6-flash">gemini-3.6-flash</option>
+            <option value="gemini-2.5-pro">gemini-2.5-pro</option>
+            <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</option>
+          </select>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">Speech-to-Text Model (Audio Transcription)</label>
+          <select id="globalAISTTModel" class="select-box" onchange="saveGlobalAISettings()">
+            <option value="gemini-3.5-transcribe" selected>gemini-3.5-transcribe (Recommended)</option>
+            <option value="gemini-3.5-live-translate-preview">gemini-3.5-live-translate-preview</option>
+            <option value="gemini-3.5-transcribe-live">gemini-3.5-transcribe-live</option>
+          </select>
+        </div>
+      </div>
+      <div class="sub-modal-footer">
+        <span class="sub-footer-status" id="aiModalStatus">Ready</span>
+        <button class="btn btn-primary" onclick="closeGlobalAISettings()">Save & Close</button>
       </div>
     </div>
   </div>

@@ -28,6 +28,7 @@ shorts/
 .tmp_*
 *.tmp
 *.log
+.playwright-cli/
 
 # OS & IDE Files
 .DS_Store

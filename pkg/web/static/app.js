@@ -190,22 +190,13 @@ function renderSegments() {
 function onAutoDetectModeChange() {
   const mode = document.getElementById('autoDetectMode').value;
   const btnText = document.getElementById('autoDetectBtnText');
-  const aiDrawer = document.getElementById('aiDrawer');
   if (mode === 'ai') {
     if (btnText) btnText.textContent = 'Generate with AI';
   } else if (mode === 'silence') {
     if (btnText) btnText.textContent = 'Detect Silence';
-    if (aiDrawer) aiDrawer.style.display = 'none';
   } else if (mode === 'scene') {
     if (btnText) btnText.textContent = 'Detect Scenes';
-    if (aiDrawer) aiDrawer.style.display = 'none';
   }
-}
-
-function toggleAISettings() {
-  const drawer = document.getElementById('aiDrawer');
-  if (!drawer) return;
-  drawer.style.display = drawer.style.display === 'none' ? 'block' : 'none';
 }
 
 async function runAutoDetect() {
@@ -241,9 +232,9 @@ async function runAutoDetect() {
   const payload = {
     input_file: src,
     mode: mode,
-    ai_router: document.getElementById('aiRouter').value,
-    model: document.getElementById('aiModel').value.trim(),
-    api_key: document.getElementById('aiApiKey').value.trim(),
+    ai_router: 'gemini',
+    model: getGlobalSegmentModel(),
+    api_key: getGlobalApiKey(),
     shorts: document.getElementById('cfgShorts').checked,
     target_duration: durVal
   };
@@ -622,7 +613,9 @@ async function transcribeSegmentAudio() {
         start: s.start,
         end: s.end,
         lang: lang,
-        use_whisper: useWhisper
+        use_whisper: useWhisper,
+        api_key: getGlobalApiKey(),
+        model: getGlobalSTTModel()
       })
     });
     const data = await res.json();
@@ -656,9 +649,9 @@ async function runAISubtitleAction(action) {
     action: action,
     cues: currentCues,
     target_lang: document.getElementById('subTranslateLang').value,
-    ai_router: document.getElementById('aiRouter').value,
-    api_key: document.getElementById('aiApiKey').value.trim(),
-    model: document.getElementById('aiModel').value.trim()
+    ai_router: 'gemini',
+    api_key: getGlobalApiKey(),
+    model: getGlobalSegmentModel()
   };
 
   try {
@@ -696,7 +689,64 @@ function saveSubtitleStudio() {
   renderSegments();
 }
 
+// Global AI Settings State & LocalStorage Persistence
+function initGlobalAISettings() {
+  const savedKey = localStorage.getItem('clipper_gemini_api_key') || '';
+  const savedSegModel = localStorage.getItem('clipper_ai_segment_model') || 'gemini-3.8-flash';
+  const savedSTTModel = localStorage.getItem('clipper_ai_stt_model') || 'gemini-3.5-transcribe';
+
+  const keyEl = document.getElementById('globalAIApiKey');
+  const segEl = document.getElementById('globalAISegmentModel');
+  const sttEl = document.getElementById('globalAISTTModel');
+
+  if (keyEl) keyEl.value = savedKey;
+  if (segEl) segEl.value = savedSegModel;
+  if (sttEl) sttEl.value = savedSTTModel;
+}
+
+function getGlobalApiKey() {
+  return (document.getElementById('globalAIApiKey')?.value || localStorage.getItem('clipper_gemini_api_key') || '').trim();
+}
+
+function getGlobalSegmentModel() {
+  return document.getElementById('globalAISegmentModel')?.value || localStorage.getItem('clipper_ai_segment_model') || 'gemini-3.8-flash';
+}
+
+function getGlobalSTTModel() {
+  return document.getElementById('globalAISTTModel')?.value || localStorage.getItem('clipper_ai_stt_model') || 'gemini-3.5-transcribe';
+}
+
+function saveGlobalAISettings() {
+  const key = document.getElementById('globalAIApiKey')?.value.trim() || '';
+  const segModel = document.getElementById('globalAISegmentModel')?.value || 'gemini-3.8-flash';
+  const sttModel = document.getElementById('globalAISTTModel')?.value || 'gemini-3.5-transcribe';
+
+  localStorage.setItem('clipper_gemini_api_key', key);
+  localStorage.setItem('clipper_ai_segment_model', segModel);
+  localStorage.setItem('clipper_ai_stt_model', sttModel);
+
+  const statusEl = document.getElementById('aiModalStatus');
+  if (statusEl) {
+    statusEl.textContent = key ? 'API key saved locally ✓' : 'Ready (No API key set)';
+  }
+}
+
+function toggleGlobalAISettings() {
+  const modal = document.getElementById('aiModal');
+  if (!modal) return;
+  modal.style.display = modal.style.display === 'none' ? 'flex' : 'none';
+  initGlobalAISettings();
+}
+
+function closeGlobalAISettings() {
+  saveGlobalAISettings();
+  const modal = document.getElementById('aiModal');
+  if (modal) modal.style.display = 'none';
+}
+
 // Init on load
 initTheme();
+initGlobalAISettings();
 loadClipsGallery();
+
 

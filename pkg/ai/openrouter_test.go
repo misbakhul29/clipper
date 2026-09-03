@@ -179,3 +179,32 @@ func TestParseSubtitleTranslationJSON(t *testing.T) {
 	}
 }
 
+func TestBuildGeminiAudioSTTPrompt(t *testing.T) {
+	sys, user := BuildGeminiAudioSTTPrompt("id")
+	if !strings.Contains(sys, "Bahasa Indonesia") {
+		t.Errorf("expected Bahasa Indonesia rule in prompt, got: %s", sys)
+	}
+	if !strings.Contains(user, "transcribe this audio") {
+		t.Errorf("expected user prompt, got: %s", user)
+	}
+}
+
+func TestParseGeminiAudioSTTResponse(t *testing.T) {
+	raw := "```json\n" + `[
+		{"start": 1.25, "end": 3.50, "text": "Halo teman-teman semua!"},
+		{"start": 3.80, "end": 6.20, "text": "Hari ini kita bahas video clipping."}
+	]` + "\n```"
+
+	cues, err := ParseGeminiAudioSTTResponse(raw)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cues) != 2 {
+		t.Fatalf("expected 2 cues, got %d", len(cues))
+	}
+	if cues[0].Start != 1.25 || cues[0].End != 3.50 || cues[0].Text != "Halo teman-teman semua!" {
+		t.Errorf("unexpected cue 0: %+v", cues[0])
+	}
+}
+
+

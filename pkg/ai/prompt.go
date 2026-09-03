@@ -449,3 +449,66 @@ func FormatSecondsToTime(sec float64) string {
 	}
 	return fmt.Sprintf("%02d:%02d", m, s)
 }
+
+// AudioSubtitleCue represents a single timestamped subtitle cue from Speech-to-Text.
+type AudioSubtitleCue struct {
+	Start float64 `json:"start"`
+	End   float64 `json:"end"`
+	Text  string  `json:"text"`
+}
+
+// BuildGeminiAudioSTTPrompt constructs the prompt for Gemini Audio transcription.
+func BuildGeminiAudioSTTPrompt(targetLang string) (systemPrompt string, userPrompt string) {
+	langRule := ""
+	if targetLang == "id" || strings.HasPrefix(strings.ToLower(targetLang), "ind") {
+		langRule = "Transcribe the audio accurately in Bahasa Indonesia."
+	} else if targetLang != "" {
+		langRule = fmt.Sprintf("Transcribe the audio accurately in %s language.", targetLang)
+	} else {
+		langRule = "Transcribe the audio in its original spoken language."
+	}
+
+	systemPrompt = fmt.Sprintf(`You are an expert speech-to-text audio transcriber.
+%s
+Listen carefully to the audio file provided and generate precise, time-aligned subtitle cues.
+Split sentences into natural subtitle phrases (each cue around 1.0 to 4.0 seconds long).
+The timestamps (start and end in seconds, float format) MUST be relative to the beginning of the audio clip (starting at 0.0).
+
+OUTPUT FORMAT:
+Output ONLY a valid JSON array of objects with the following schema:
+[
+  {
+    "start": 0.0,
+    "end": 2.5,
+    "text": "Transcribed speech phrase here"
+  }
+]
+Do not wrap in explanations. Output pure JSON only.`, langRule)
+
+	userPrompt = "Please transcribe this audio clip into precise timestamped subtitle cues JSON."
+	return systemPrompt, userPrompt
+}
+
+// ParseGeminiAudioSTTResponse parses Gemini STT output into a list of AudioSubtitleCue.
+func ParseGeminiAudioSTTResponse(responseText string) ([]AudioSubtitleCue, error) {
+	clean := strings.TrimSpace(responseText)
+	clean = strings.TrimPrefix(clean, "```json")
+	clean = strings.TrimPrefix(clean, "```")
+	clean = strings.TrimSuffix(clean, "```")
+	clean = strings.TrimSpace(clean)
+
+	startIdx := strings.Index(clean, "[")
+	endIdx := strings.LastIndex(clean, "]")
+	if startIdx == -1 || endIdx == -1 || endIdx <= startIdx {
+		return nil, fmt.Errorf("no valid JSON array found in Gemini Audio response: %s", responseText)
+	}
+	jsonStr := clean[startIdx : endIdx+1]
+
+	var cues []AudioSubtitleCue
+	if err := json.Unmarshal([]byte(jsonStr), &cues); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal Gemini Audio cues: %w", err)
+	}
+
+	return cues, nil
+}
+

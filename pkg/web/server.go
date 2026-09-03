@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -70,9 +71,7 @@ func (s *Server) Router() http.Handler {
 
 	// Ensure output directory exists for static video serving
 	_ = os.MkdirAll(s.OutDir, 0755)
-	_ = os.MkdirAll("./shorts", 0755)
 	mux.Handle("/clips/", http.StripPrefix("/clips/", http.FileServer(http.Dir(s.OutDir))))
-	mux.Handle("/shorts/", http.StripPrefix("/shorts/", http.FileServer(http.Dir("./shorts"))))
 
 	return mux
 }
@@ -131,8 +130,8 @@ func (s *Server) handleClips(w http.ResponseWriter, r *http.Request) {
 
 	var items []ClipItem
 
-	// Search in OutDir, OutDir/shorts, and ./shorts
-	dirsToScan := []string{s.OutDir, filepath.Join(s.OutDir, "shorts"), "./shorts"}
+	// Search in OutDir and OutDir/shorts
+	dirsToScan := []string{s.OutDir, filepath.Join(s.OutDir, "shorts")}
 	seen := make(map[string]bool)
 
 	for _, dir := range dirsToScan {
@@ -491,9 +490,7 @@ func (s *Server) handleClip(w http.ResponseWriter, r *http.Request) {
 	if req.HWAccel != "" {
 		cfg.HWAccel = req.HWAccel
 	}
-	if req.Shorts {
-		cfg.OutputDir = filepath.Join(s.OutDir, "shorts")
-	} else {
+	if cfg.OutputDir == "" {
 		cfg.OutputDir = s.OutDir
 	}
 
@@ -558,6 +555,8 @@ type transcribeRequestPayload struct {
 	End        string `json:"end"`
 	Lang       string `json:"lang"`
 	UseWhisper bool   `json:"use_whisper"`
+	APIKey     string `json:"api_key"`
+	Model      string `json:"model"`
 }
 
 type transcribeResponsePayload struct {
@@ -601,6 +600,53 @@ func (s *Server) handleTranscribe(w http.ResponseWriter, r *http.Request) {
 		lang = "id"
 	}
 
+	startSec, _ := clipper.ParseTimeSeconds(req.Start)
+	endSec, _ := clipper.ParseTimeSeconds(req.End)
+	if endSec <= startSec {
+		endSec = startSec + 60
+	}
+
+	apiKey := strings.TrimSpace(req.APIKey)
+	if apiKey == "" {
+		apiKey = os.Getenv("GEMINI_API_KEY")
+	}
+
+	// 1. Try Gemini Audio STT if API key is provided or user selected Gemini STT
+	if apiKey != "" && (req.UseWhisper || !downloader.IsYouTubeURL(src)) {
+		tmpAudio := filepath.Join(cacheDir, fmt.Sprintf(".stt_%d.mp3", time.Now().UnixNano()))
+		cmd := exec.Command("ffmpeg", "-y", "-ss", fmt.Sprintf("%.2f", startSec), "-to", fmt.Sprintf("%.2f", endSec),
+			"-i", videoPath, "-vn", "-acodec", "libmp3lame", "-b:a", "64k", "-ar", "24000", tmpAudio)
+		if err := cmd.Run(); err == nil {
+			if audioBytes, rErr := os.ReadFile(tmpAudio); rErr == nil && len(audioBytes) > 0 {
+				_ = os.Remove(tmpAudio)
+				model := req.Model
+				if model == "" {
+					model = "gemini-3.5-transcribe"
+				}
+				geminiCues, gErr := ai.TranscribeAudioGemini(apiKey, model, lang, audioBytes, "audio/mp3")
+				if gErr == nil && len(geminiCues) > 0 {
+					var cues []clipper.SubtitleCue
+					for _, gc := range geminiCues {
+						cues = append(cues, clipper.SubtitleCue{
+							Start: gc.Start,
+							End:   gc.End,
+							Text:  gc.Text,
+						})
+					}
+					w.Header().Set("Content-Type", "application/json")
+					_ = json.NewEncoder(w).Encode(transcribeResponsePayload{
+						Cues:  cues,
+						Count: len(cues),
+					})
+					return
+				}
+			} else {
+				_ = os.Remove(tmpAudio)
+			}
+		}
+	}
+
+	// 2. Fetch from YouTube subtitles or fallback to local Whisper
 	var subs []transcriber.SubtitleEntry
 	if req.UseWhisper {
 		subs, _ = transcriber.TranscribeWithWhisper(videoPath, cacheDir, lang)
@@ -610,14 +656,42 @@ func (s *Server) handleTranscribe(w http.ResponseWriter, r *http.Request) {
 			subs, _ = transcriber.FetchSubtitles(src, cacheDir, "en")
 		}
 		if len(subs) == 0 {
+			// If YouTube has no CC and Gemini API key is provided, transcribe with Gemini!
+			if apiKey != "" {
+				tmpAudio := filepath.Join(cacheDir, fmt.Sprintf(".stt_%d.mp3", time.Now().UnixNano()))
+				cmd := exec.Command("ffmpeg", "-y", "-ss", fmt.Sprintf("%.2f", startSec), "-to", fmt.Sprintf("%.2f", endSec),
+					"-i", videoPath, "-vn", "-acodec", "libmp3lame", "-b:a", "64k", "-ar", "24000", tmpAudio)
+				if err := cmd.Run(); err == nil {
+					if audioBytes, rErr := os.ReadFile(tmpAudio); rErr == nil && len(audioBytes) > 0 {
+						_ = os.Remove(tmpAudio)
+						model := req.Model
+						if model == "" {
+							model = "gemini-3.5-transcribe"
+						}
+						geminiCues, gErr := ai.TranscribeAudioGemini(apiKey, model, lang, audioBytes, "audio/mp3")
+						if gErr == nil && len(geminiCues) > 0 {
+							var cues []clipper.SubtitleCue
+							for _, gc := range geminiCues {
+								cues = append(cues, clipper.SubtitleCue{
+									Start: gc.Start,
+									End:   gc.End,
+									Text:  gc.Text,
+								})
+							}
+							w.Header().Set("Content-Type", "application/json")
+							_ = json.NewEncoder(w).Encode(transcribeResponsePayload{
+								Cues:  cues,
+								Count: len(cues),
+							})
+							return
+						}
+					} else {
+						_ = os.Remove(tmpAudio)
+					}
+				}
+			}
 			subs, _ = transcriber.TranscribeWithWhisper(videoPath, cacheDir, lang)
 		}
-	}
-
-	startSec, _ := clipper.ParseTimeSeconds(req.Start)
-	endSec, _ := clipper.ParseTimeSeconds(req.End)
-	if endSec <= startSec {
-		endSec = startSec + 60
 	}
 
 	var cues []clipper.SubtitleCue
