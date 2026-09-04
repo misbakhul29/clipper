@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io/fs"
 	"math"
+	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,6 +20,22 @@ import (
 	"github.com/misbakhul29/clipper/pkg/downloader"
 	"github.com/misbakhul29/clipper/pkg/transcriber"
 )
+
+func init() {
+	_ = mime.AddExtensionType(".mp4", "video/mp4")
+	_ = mime.AddExtensionType(".m4v", "video/mp4")
+	_ = mime.AddExtensionType(".webm", "video/webm")
+	_ = mime.AddExtensionType(".mov", "video/quicktime")
+	_ = mime.AddExtensionType(".mkv", "video/x-matroska")
+	_ = mime.AddExtensionType(".ts", "video/mp2t")
+	_ = mime.AddExtensionType(".avi", "video/x-msvideo")
+	_ = mime.AddExtensionType(".ogg", "video/ogg")
+	_ = mime.AddExtensionType(".ogv", "video/ogg")
+	_ = mime.AddExtensionType(".jpg", "image/jpeg")
+	_ = mime.AddExtensionType(".jpeg", "image/jpeg")
+	_ = mime.AddExtensionType(".png", "image/png")
+	_ = mime.AddExtensionType(".webp", "image/webp")
+}
 
 // Server handles the local web UI dashboard and REST API.
 type Server struct {
@@ -62,6 +80,9 @@ func (s *Server) Router() http.Handler {
 
 	mux.HandleFunc("/api/status", s.handleStatus)
 	mux.HandleFunc("/api/clips", s.handleClips)
+	mux.HandleFunc("/api/storage/stats", s.handleStorageStats)
+	mux.HandleFunc("/api/storage/clean-cache", s.handleCleanCache)
+	mux.HandleFunc("/api/storage/clean-clips", s.handleCleanClips)
 	mux.HandleFunc("/api/prepare", s.handlePrepare)
 	mux.HandleFunc("/api/auto-detect", s.handleAutoDetect)
 	mux.HandleFunc("/api/transcribe", s.handleTranscribe)
@@ -72,7 +93,17 @@ func (s *Server) Router() http.Handler {
 
 	// Ensure output directory exists for static video serving
 	_ = os.MkdirAll(s.OutDir, 0755)
-	mux.Handle("/clips/", http.StripPrefix("/clips/", http.FileServer(http.Dir(s.OutDir))))
+	clipFS := http.FileServer(http.Dir(s.OutDir))
+	mux.HandleFunc("/clips/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Accept-Ranges", "bytes")
+		ext := strings.ToLower(filepath.Ext(r.URL.Path))
+		if ext == ".mp4" || ext == ".m4v" {
+			w.Header().Set("Content-Type", "video/mp4")
+		} else if ext == ".webm" {
+			w.Header().Set("Content-Type", "video/webm")
+		}
+		http.StripPrefix("/clips/", clipFS).ServeHTTP(w, r)
+	})
 
 	return mux
 }
@@ -126,8 +157,67 @@ type ClipItem struct {
 	ModTime      string `json:"mod_time"`
 }
 
+func (s *Server) getCacheDir() string {
+	if s.DefaultConfig != nil && s.DefaultConfig.CacheDir != "" {
+		return s.DefaultConfig.CacheDir
+	}
+	return "./cache"
+}
+
 func (s *Server) handleClips(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method == http.MethodDelete {
+		fileName := strings.TrimSpace(r.URL.Query().Get("name"))
+		if fileName == "" {
+			fileName = strings.TrimSpace(r.URL.Query().Get("file"))
+		}
+		if fileName == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "name or file query parameter is required"})
+			return
+		}
+
+		// Prevent path traversal
+		cleanName := filepath.Base(fileName)
+		dirsToSearch := []string{s.OutDir, filepath.Join(s.OutDir, "shorts")}
+		found := false
+
+		for _, dir := range dirsToSearch {
+			targetVideo := filepath.Join(dir, cleanName)
+			if fi, err := os.Stat(targetVideo); err == nil && !fi.IsDir() {
+				_ = os.Remove(targetVideo)
+				found = true
+
+				// Also clean up matching thumbnails
+				ext := filepath.Ext(cleanName)
+				base := strings.TrimSuffix(cleanName, ext)
+				thumbCandidates := []string{
+					base + ".jpg",
+					base + "_hook1.jpg",
+					base + "_hook2.jpg",
+					base + ".png",
+					base + ".webp",
+				}
+				for _, tc := range thumbCandidates {
+					_ = os.Remove(filepath.Join(dir, tc))
+				}
+			}
+		}
+
+		if !found {
+			w.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": fmt.Sprintf("clip '%s' not found", cleanName)})
+			return
+		}
+
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"status":  "deleted",
+			"message": fmt.Sprintf("Clip '%s' deleted successfully", cleanName),
+			"name":    cleanName,
+		})
+		return
+	}
 
 	var items []ClipItem
 
@@ -202,6 +292,146 @@ func (s *Server) handleClips(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(items)
 }
 
+// StorageStatsResponse represents disk usage data for cache and clips directories.
+type StorageStatsResponse struct {
+	CacheDir       string `json:"cache_dir"`
+	CacheSizeBytes int64  `json:"cache_size_bytes"`
+	CacheSizeStr   string `json:"cache_size_str"`
+	CacheFileCount int    `json:"cache_file_count"`
+
+	ClipsDir       string `json:"clips_dir"`
+	ClipsSizeBytes int64  `json:"clips_size_bytes"`
+	ClipsSizeStr   string `json:"clips_size_str"`
+	ClipsCount     int    `json:"clips_count"`
+}
+
+func (s *Server) handleStorageStats(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	cacheDir := s.getCacheDir()
+	var cacheBytes int64
+	var cacheCount int
+	if _, err := os.Stat(cacheDir); err == nil {
+		_ = filepath.Walk(cacheDir, func(path string, info os.FileInfo, err error) error {
+			if err == nil && !info.IsDir() {
+				cacheBytes += info.Size()
+				cacheCount++
+			}
+			return nil
+		})
+	}
+
+	var clipsBytes int64
+	var clipsCount int
+	dirsToScan := []string{s.OutDir, filepath.Join(s.OutDir, "shorts")}
+	seen := make(map[string]bool)
+
+	for _, dir := range dirsToScan {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			fullPath := filepath.Join(dir, e.Name())
+			if seen[fullPath] {
+				continue
+			}
+			seen[fullPath] = true
+
+			fi, err := e.Info()
+			if err == nil {
+				clipsBytes += fi.Size()
+				ext := strings.ToLower(filepath.Ext(e.Name()))
+				if ext == ".mp4" || ext == ".mkv" || ext == ".webm" {
+					clipsCount++
+				}
+			}
+		}
+	}
+
+	_ = json.NewEncoder(w).Encode(StorageStatsResponse{
+		CacheDir:       cacheDir,
+		CacheSizeBytes: cacheBytes,
+		CacheSizeStr:   formatFileSize(cacheBytes),
+		CacheFileCount: cacheCount,
+
+		ClipsDir:       s.OutDir,
+		ClipsSizeBytes: clipsBytes,
+		ClipsSizeStr:   formatFileSize(clipsBytes),
+		ClipsCount:     clipsCount,
+	})
+}
+
+func (s *Server) handleCleanCache(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost && r.Method != http.MethodDelete {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	cacheDir := s.getCacheDir()
+	freed, count, err := downloader.CleanCache(cacheDir, 0)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": fmt.Sprintf("failed to clean cache: %v", err)})
+		return
+	}
+
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":        "success",
+		"freed_bytes":   freed,
+		"freed_str":     formatFileSize(freed),
+		"removed_count": count,
+		"message":       fmt.Sprintf("Cleaned %d cache files, freeing %s", count, formatFileSize(freed)),
+	})
+}
+
+func (s *Server) handleCleanClips(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost && r.Method != http.MethodDelete {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+
+	var freedBytes int64
+	var removedClips int
+
+	dirsToClean := []string{filepath.Join(s.OutDir, "shorts"), s.OutDir}
+	for _, dir := range dirsToClean {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			fullPath := filepath.Join(dir, e.Name())
+			ext := strings.ToLower(filepath.Ext(e.Name()))
+			if ext == ".mp4" || ext == ".mkv" || ext == ".webm" || ext == ".jpg" || ext == ".png" || ext == ".webp" {
+				if fi, sErr := e.Info(); sErr == nil {
+					freedBytes += fi.Size()
+				}
+				if ext == ".mp4" || ext == ".mkv" || ext == ".webm" {
+					removedClips++
+				}
+				_ = os.Remove(fullPath)
+			}
+		}
+	}
+
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":        "success",
+		"freed_bytes":   freedBytes,
+		"freed_str":     formatFileSize(freedBytes),
+		"removed_count": removedClips,
+		"message":       fmt.Sprintf("Deleted %d clips and media assets, freeing %s", removedClips, formatFileSize(freedBytes)),
+	})
+}
+
 type prepareRequestPayload struct {
 	Source string `json:"source"`
 }
@@ -246,7 +476,7 @@ func (s *Server) handlePrepare(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		previewURL := "/preview?path=" + filepath.ToSlash(videoPath)
+		previewURL := "/preview?path=" + url.QueryEscape(videoPath)
 		_ = json.NewEncoder(w).Encode(prepareResponse{
 			Status:     "ready",
 			Path:       videoPath,
@@ -271,7 +501,7 @@ func (s *Server) handlePrepare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	previewURL := "/preview?path=" + filepath.ToSlash(absPath)
+	previewURL := "/preview?path=" + url.QueryEscape(absPath)
 	_ = json.NewEncoder(w).Encode(prepareResponse{
 		Status:     "ready",
 		Path:       absPath,
@@ -302,6 +532,21 @@ func (s *Server) handlePreview(w http.ResponseWriter, r *http.Request) {
 	if err != nil || fi.IsDir() {
 		http.Error(w, "file not found", http.StatusNotFound)
 		return
+	}
+
+	w.Header().Set("Accept-Ranges", "bytes")
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".mp4", ".m4v":
+		w.Header().Set("Content-Type", "video/mp4")
+	case ".webm":
+		w.Header().Set("Content-Type", "video/webm")
+	case ".mov":
+		w.Header().Set("Content-Type", "video/quicktime")
+	case ".ogg", ".ogv":
+		w.Header().Set("Content-Type", "video/ogg")
+	case ".mkv":
+		w.Header().Set("Content-Type", "video/x-matroska")
 	}
 
 	// Serve video with automatic HTTP Range support for seeking

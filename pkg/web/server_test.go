@@ -224,4 +224,77 @@ func TestWebServerEndpoints(t *testing.T) {
 			t.Errorf("expected emoji in text, got %s", resp.Cues[0].Text)
 		}
 	})
+
+	t.Run("GET API Storage Stats", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/storage/stats", nil)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Errorf("expected status 200, got %d", rec.Code)
+		}
+
+		var stats StorageStatsResponse
+		if err := json.NewDecoder(rec.Body).Decode(&stats); err != nil {
+			t.Fatalf("failed decoding storage stats: %v", err)
+		}
+		if stats.ClipsCount < 1 {
+			t.Errorf("expected clips_count >= 1, got %d", stats.ClipsCount)
+		}
+		if stats.ClipsSizeBytes <= 0 {
+			t.Errorf("expected clips_size_bytes > 0, got %d", stats.ClipsSizeBytes)
+		}
+	})
+
+	t.Run("DELETE API Clip (Single File)", func(t *testing.T) {
+		// Missing parameter fails
+		reqEmpty := httptest.NewRequest(http.MethodDelete, "/api/clips", nil)
+		recEmpty := httptest.NewRecorder()
+		handler.ServeHTTP(recEmpty, reqEmpty)
+		if recEmpty.Code != http.StatusBadRequest {
+			t.Errorf("expected status 400 for missing name param, got %d", recEmpty.Code)
+		}
+
+		// Delete existing clip
+		reqDel := httptest.NewRequest(http.MethodDelete, "/api/clips?name=sample_clip_001.mp4", nil)
+		recDel := httptest.NewRecorder()
+		handler.ServeHTTP(recDel, reqDel)
+		if recDel.Code != http.StatusOK {
+			t.Errorf("expected status 200 for clip deletion, got %d: %s", recDel.Code, recDel.Body.String())
+		}
+
+		// Verify file and thumb are gone
+		if _, err := os.Stat(filepath.Join(tmpDir, "sample_clip_001.mp4")); !os.IsNotExist(err) {
+			t.Errorf("expected sample_clip_001.mp4 to be deleted")
+		}
+		if _, err := os.Stat(filepath.Join(tmpDir, "sample_clip_001.jpg")); !os.IsNotExist(err) {
+			t.Errorf("expected sample_clip_001.jpg thumbnail to be deleted")
+		}
+
+		// Deleting non-existent clip returns 404
+		req404 := httptest.NewRequest(http.MethodDelete, "/api/clips?name=sample_clip_001.mp4", nil)
+		rec404 := httptest.NewRecorder()
+		handler.ServeHTTP(rec404, req404)
+		if rec404.Code != http.StatusNotFound {
+			t.Errorf("expected status 404 for missing clip, got %d", rec404.Code)
+		}
+	})
+
+	t.Run("POST API Clean Cache and Clips", func(t *testing.T) {
+		// Clean Cache
+		reqCache := httptest.NewRequest(http.MethodPost, "/api/storage/clean-cache", nil)
+		recCache := httptest.NewRecorder()
+		handler.ServeHTTP(recCache, reqCache)
+		if recCache.Code != http.StatusOK {
+			t.Errorf("expected status 200 for clean cache, got %d: %s", recCache.Code, recCache.Body.String())
+		}
+
+		// Clean Clips
+		reqClips := httptest.NewRequest(http.MethodPost, "/api/storage/clean-clips", nil)
+		recClips := httptest.NewRecorder()
+		handler.ServeHTTP(recClips, reqClips)
+		if recClips.Code != http.StatusOK {
+			t.Errorf("expected status 200 for clean clips, got %d: %s", recClips.Code, recClips.Body.String())
+		}
+	})
 }
