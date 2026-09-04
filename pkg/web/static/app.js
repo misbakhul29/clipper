@@ -47,7 +47,7 @@ function applyTheme(theme) {
   }
 }
 
-// Player time update handler
+// Player time update and lifecycle events handler
 function setupPlayerEvents() {
   if (!player) {
     player = document.getElementById('videoPlayer') || document.getElementById('mainPlayer');
@@ -62,9 +62,76 @@ function setupPlayerEvents() {
       }
     });
 
+    player.addEventListener('loadedmetadata', () => {
+      const ph = document.getElementById('playerPlaceholder');
+      if (ph) ph.style.display = 'none';
+      const errEl = document.getElementById('playerError');
+      if (errEl) errEl.style.display = 'none';
+      const loader = document.getElementById('playerLoader');
+      if (loader) loader.style.display = 'none';
+
+      const cur = player.currentTime || 0;
+      const dur = player.duration || 0;
+      const el = document.getElementById('timeDisplay') || document.getElementById('playheadTime');
+      if (el) {
+        el.textContent = formatTimecode(cur) + ' / ' + formatTimecode(dur);
+      }
+
+      const endEl = document.getElementById('trimEnd');
+      if (endEl && (endEl.value === '00:30' || endEl.value === '00:00' || !endEl.value)) {
+        endEl.value = formatSimple(Math.min(dur, 30));
+      }
+    });
+
+    player.addEventListener('canplay', () => {
+      const loader = document.getElementById('playerLoader');
+      if (loader) loader.style.display = 'none';
+      const ph = document.getElementById('playerPlaceholder');
+      if (ph) ph.style.display = 'none';
+      const errEl = document.getElementById('playerError');
+      if (errEl) errEl.style.display = 'none';
+    });
+
     player.addEventListener('play', () => {
       const ph = document.getElementById('playerPlaceholder');
       if (ph) ph.style.display = 'none';
+      const errEl = document.getElementById('playerError');
+      if (errEl) errEl.style.display = 'none';
+    });
+
+    player.addEventListener('error', (e) => {
+      const loader = document.getElementById('playerLoader');
+      if (loader) loader.style.display = 'none';
+      const ph = document.getElementById('playerPlaceholder');
+      if (ph) ph.style.display = 'none';
+
+      const errEl = document.getElementById('playerError');
+      const errSub = document.getElementById('playerErrorSub');
+      const errTitle = document.getElementById('playerErrorTitle');
+
+      let msg = 'Format video tidak didukung atau video gagal dimuat.';
+      if (player.error) {
+        switch (player.error.code) {
+          case 1: // MEDIA_ERR_ABORTED
+            msg = 'Pemuatan video dibatalkan oleh pengguna.';
+            break;
+          case 2: // MEDIA_ERR_NETWORK
+            msg = 'Kesalahan jaringan saat mengunduh/streaming video.';
+            break;
+          case 3: // MEDIA_ERR_DECODE
+            msg = 'Gagal melakukan decode video. Codec/kompresi tidak didukung browser.';
+            break;
+          case 4: // MEDIA_ERR_SRC_NOT_SUPPORTED
+            msg = 'Format video tidak didukung oleh browser atau file tidak ditemukan (404). Gunakan format MP4 (H.264/AAC) atau WebM.';
+            break;
+          default:
+            msg = player.error.message || 'Terjadi kesalahan pada pemutaran media.';
+        }
+      }
+
+      if (errTitle) errTitle.textContent = 'Gagal Memutar Video';
+      if (errSub) errSub.textContent = msg;
+      if (errEl) errEl.style.display = 'flex';
     });
   }
 }
@@ -308,10 +375,41 @@ function loadSource() {
   loadSourceVideo();
 }
 
+function handleFileSelect(event) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+
+  const srcInput = document.getElementById('videoSource');
+  if (srcInput) {
+    srcInput.value = file.name;
+  }
+
+  const ph = document.getElementById('playerPlaceholder');
+  if (ph) ph.style.display = 'none';
+  const errEl = document.getElementById('playerError');
+  if (errEl) errEl.style.display = 'none';
+  const loader = document.getElementById('playerLoader');
+  if (loader) loader.style.display = 'none';
+
+  if (!player) player = document.getElementById('videoPlayer') || document.getElementById('mainPlayer');
+  if (player) {
+    const blobURL = URL.createObjectURL(file);
+    player.src = blobURL;
+    player.load();
+    player.play().catch(() => {});
+  }
+}
+
+function retryVideoLoad() {
+  const errEl = document.getElementById('playerError');
+  if (errEl) errEl.style.display = 'none';
+  loadSourceVideo();
+}
+
 async function loadSourceVideo() {
   const src = document.getElementById('videoSource').value.trim();
   if (!src) {
-    alert('Please enter a local video file path or YouTube URL.');
+    alert('Please enter a local video file path, select Browse, or enter a YouTube URL.');
     return;
   }
 
@@ -321,6 +419,9 @@ async function loadSourceVideo() {
   const loadBtn = document.getElementById('loadBtn');
   const loadBtnText = document.getElementById('loadBtnText');
   const ph = document.getElementById('playerPlaceholder');
+  const errEl = document.getElementById('playerError');
+
+  if (errEl) errEl.style.display = 'none';
 
   // Show loading state
   if (loader) loader.style.display = 'flex';
@@ -333,7 +434,7 @@ async function loadSourceVideo() {
     if (sub) sub.textContent = 'Fetching video into local cache for frame-accurate player scrubbing and clipping.';
   } else {
     if (title) title.textContent = 'Preparing video...';
-    if (sub) sub.textContent = 'Loading local video file into browser preview player.';
+    if (sub) sub.textContent = 'Loading video file into browser preview player.';
   }
 
   try {
@@ -345,35 +446,54 @@ async function loadSourceVideo() {
     const data = await res.json();
 
     if (!res.ok) {
-      alert(data.error || 'Failed to prepare video.');
       if (loader) loader.style.display = 'none';
-      if (loadBtn) loadBtn.disabled = false;
-      if (loadBtnText) loadBtnText.textContent = 'Load';
+      const errSub = document.getElementById('playerErrorSub');
+      const errTitle = document.getElementById('playerErrorTitle');
+      if (errTitle) errTitle.textContent = 'File / Video Error';
+      if (errSub) errSub.textContent = data.error || 'Failed to prepare video.';
+      if (errEl) errEl.style.display = 'flex';
       return;
     }
 
-    if (!player) player = document.getElementById('videoPlayer');
+    if (!player) player = document.getElementById('videoPlayer') || document.getElementById('mainPlayer');
     if (player) {
+      if (ph) ph.style.display = 'none';
+      if (errEl) errEl.style.display = 'none';
       player.src = data.preview_url;
       player.load();
-      if (ph) ph.style.display = 'none';
-      player.oncanplay = () => {
-        if (loader) loader.style.display = 'none';
-        player.oncanplay = null;
-      };
-      // Fallback timeout to hide loader
-      setTimeout(() => {
-        if (loader) loader.style.display = 'none';
-      }, 4000);
+      player.play().catch(() => {});
     } else {
       if (loader) loader.style.display = 'none';
     }
   } catch (err) {
-    alert('Error preparing video: ' + err);
     if (loader) loader.style.display = 'none';
+    const errSub = document.getElementById('playerErrorSub');
+    const errTitle = document.getElementById('playerErrorTitle');
+    if (errTitle) errTitle.textContent = 'Koneksi / Jaringan Error';
+    if (errSub) errSub.textContent = 'Error preparing video: ' + err;
+    if (errEl) errEl.style.display = 'flex';
   } finally {
     if (loadBtn) loadBtn.disabled = false;
     if (loadBtnText) loadBtnText.textContent = 'Load';
+  }
+}
+
+function playClipInStudio(url, name) {
+  switchTab('queue');
+  const srcInput = document.getElementById('videoSource');
+  if (srcInput) srcInput.value = url;
+  const ph = document.getElementById('playerPlaceholder');
+  if (ph) ph.style.display = 'none';
+  const errEl = document.getElementById('playerError');
+  if (errEl) errEl.style.display = 'none';
+  const loader = document.getElementById('playerLoader');
+  if (loader) loader.style.display = 'none';
+
+  if (!player) player = document.getElementById('videoPlayer') || document.getElementById('mainPlayer');
+  if (player) {
+    player.src = url;
+    player.load();
+    player.play().catch(() => {});
   }
 }
 
@@ -399,8 +519,8 @@ async function loadClipsGallery() {
     grid.innerHTML = data.map(c => `
       <div class="clip-card">
         ${c.thumbnail_url
-          ? `<img src="${c.thumbnail_url}" class="clip-thumb" alt="${escapeHtml(c.name)}" />`
-          : `<div class="clip-thumb-empty"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg></div>`
+          ? `<img src="${c.thumbnail_url}" class="clip-thumb" alt="${escapeHtml(c.name)}" onclick="playClipInStudio('${c.url}', '${escapeHtml(c.name)}')" style="cursor:pointer;" title="Click to preview in Studio" />`
+          : `<div class="clip-thumb-empty" onclick="playClipInStudio('${c.url}', '${escapeHtml(c.name)}')" style="cursor:pointer;" title="Click to preview in Studio"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/></svg></div>`
         }
         <div class="clip-details">
           <div class="clip-name" title="${escapeHtml(c.name)}">${escapeHtml(c.name)}</div>
@@ -409,9 +529,12 @@ async function loadClipsGallery() {
             <span>${c.mod_time || ''}</span>
           </div>
           <div class="clip-actions">
-            <a href="${c.url}" target="_blank" class="btn btn-secondary btn-sm" style="flex:1; text-decoration:none;">
+            <button onclick="playClipInStudio('${c.url}', '${escapeHtml(c.name)}')" class="btn btn-secondary btn-sm" style="flex:1;" title="Preview in Studio player">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-              Play
+              Studio
+            </button>
+            <a href="${c.url}" target="_blank" class="btn btn-secondary btn-sm" title="Open in new tab">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
             </a>
             <a href="${c.url}" download class="btn btn-secondary btn-sm" title="Download">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>

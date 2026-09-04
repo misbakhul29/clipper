@@ -84,6 +84,11 @@
       <!-- Source URL Input -->
       <div class="field-row">
         <input type="text" id="videoSource" class="text-input" placeholder="Enter video path (e.g. video.mp4) or YouTube URL..." />
+        <button class="btn btn-secondary" type="button" onclick="document.getElementById('fileInput').click()" title="Browse local video file from computer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          <span>Browse</span>
+        </button>
+        <input type="file" id="fileInput" accept="video/mp4,video/webm,video/ogg,video/quicktime,video/*" style="display:none;" onchange="handleFileSelect(event)" />
         <button class="btn btn-primary" id="loadBtn" onclick="loadSource()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
           <span id="loadBtnText">Load</span>
@@ -92,7 +97,7 @@
 
       <!-- Player Stage / Area -->
       <div class="player-container" id="playerStage">
-        <video id="videoPlayer" playsinline></video>
+        <video id="videoPlayer" playsinline controls preload="metadata"></video>
         
         <div id="playerPlaceholder" class="player-placeholder">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -105,13 +110,20 @@
             <line x1="17" y1="17" x2="22" y2="17"/>
             <line x1="17" y1="7" x2="22" y2="7"/>
           </svg>
-          <span>Load a video file or YouTube URL above to preview & cut clips</span>
+          <span>Load a video file, select Browse, or enter a YouTube URL above</span>
+        </div>
+
+        <div id="playerError" class="player-error" style="display: none;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="error-icon"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <div class="player-error-title" id="playerErrorTitle">Video Error</div>
+          <div class="player-error-sub" id="playerErrorSub">Unable to play video file</div>
+          <button class="btn btn-secondary btn-sm" onclick="retryVideoLoad()">Retry Load</button>
         </div>
 
         <div id="playerLoader" class="player-loader">
           <div class="spinner"></div>
           <div class="loader-title" id="loaderTitle">Preparing video...</div>
-          <div class="loader-sub" id="loaderSub">Loading local video file into browser preview player.</div>
+          <div class="loader-sub" id="loaderSub">Loading video file into browser preview player.</div>
         </div>
       </div>
 

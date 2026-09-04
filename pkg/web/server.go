@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io/fs"
 	"math"
+	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,6 +20,22 @@ import (
 	"github.com/misbakhul29/clipper/pkg/downloader"
 	"github.com/misbakhul29/clipper/pkg/transcriber"
 )
+
+func init() {
+	_ = mime.AddExtensionType(".mp4", "video/mp4")
+	_ = mime.AddExtensionType(".m4v", "video/mp4")
+	_ = mime.AddExtensionType(".webm", "video/webm")
+	_ = mime.AddExtensionType(".mov", "video/quicktime")
+	_ = mime.AddExtensionType(".mkv", "video/x-matroska")
+	_ = mime.AddExtensionType(".ts", "video/mp2t")
+	_ = mime.AddExtensionType(".avi", "video/x-msvideo")
+	_ = mime.AddExtensionType(".ogg", "video/ogg")
+	_ = mime.AddExtensionType(".ogv", "video/ogg")
+	_ = mime.AddExtensionType(".jpg", "image/jpeg")
+	_ = mime.AddExtensionType(".jpeg", "image/jpeg")
+	_ = mime.AddExtensionType(".png", "image/png")
+	_ = mime.AddExtensionType(".webp", "image/webp")
+}
 
 // Server handles the local web UI dashboard and REST API.
 type Server struct {
@@ -72,7 +90,17 @@ func (s *Server) Router() http.Handler {
 
 	// Ensure output directory exists for static video serving
 	_ = os.MkdirAll(s.OutDir, 0755)
-	mux.Handle("/clips/", http.StripPrefix("/clips/", http.FileServer(http.Dir(s.OutDir))))
+	clipFS := http.FileServer(http.Dir(s.OutDir))
+	mux.HandleFunc("/clips/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Accept-Ranges", "bytes")
+		ext := strings.ToLower(filepath.Ext(r.URL.Path))
+		if ext == ".mp4" || ext == ".m4v" {
+			w.Header().Set("Content-Type", "video/mp4")
+		} else if ext == ".webm" {
+			w.Header().Set("Content-Type", "video/webm")
+		}
+		http.StripPrefix("/clips/", clipFS).ServeHTTP(w, r)
+	})
 
 	return mux
 }
@@ -246,7 +274,7 @@ func (s *Server) handlePrepare(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		previewURL := "/preview?path=" + filepath.ToSlash(videoPath)
+		previewURL := "/preview?path=" + url.QueryEscape(videoPath)
 		_ = json.NewEncoder(w).Encode(prepareResponse{
 			Status:     "ready",
 			Path:       videoPath,
@@ -271,7 +299,7 @@ func (s *Server) handlePrepare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	previewURL := "/preview?path=" + filepath.ToSlash(absPath)
+	previewURL := "/preview?path=" + url.QueryEscape(absPath)
 	_ = json.NewEncoder(w).Encode(prepareResponse{
 		Status:     "ready",
 		Path:       absPath,
@@ -302,6 +330,21 @@ func (s *Server) handlePreview(w http.ResponseWriter, r *http.Request) {
 	if err != nil || fi.IsDir() {
 		http.Error(w, "file not found", http.StatusNotFound)
 		return
+	}
+
+	w.Header().Set("Accept-Ranges", "bytes")
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".mp4", ".m4v":
+		w.Header().Set("Content-Type", "video/mp4")
+	case ".webm":
+		w.Header().Set("Content-Type", "video/webm")
+	case ".mov":
+		w.Header().Set("Content-Type", "video/quicktime")
+	case ".ogg", ".ogv":
+		w.Header().Set("Content-Type", "video/ogg")
+	case ".mkv":
+		w.Header().Set("Content-Type", "video/x-matroska")
 	}
 
 	// Serve video with automatic HTTP Range support for seeking
