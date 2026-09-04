@@ -1162,15 +1162,23 @@ async function purgeCache() {
   }
   try {
     const res = await fetch('/api/storage/clean-cache', { method: 'POST' });
-    const data = await res.json();
-    if (res.ok) {
-      fetchStorageStats();
-      alert(data.message || 'Cache purged successfully.');
-    } else {
-      alert(data.error || 'Failed to purge cache.');
+    let data = {};
+    const text = await res.text();
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { error: text || `HTTP ${res.status} ${res.statusText}` };
     }
+
+    if (!res.ok) {
+      alert(data.error || 'Failed to purge cache.');
+      return;
+    }
+    fetchStorageStats();
+    alert(data.message || 'Cache purged successfully.');
   } catch (err) {
-    alert('Error purging cache: ' + err);
+    console.error('Purge cache error:', err);
+    alert('Failed to connect to Clipper server. Please make sure `./clipper serve :8000` is running in your terminal.');
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -1188,16 +1196,24 @@ async function cleanAllClips() {
 
   try {
     const res = await fetch('/api/storage/clean-clips', { method: 'POST' });
-    const data = await res.json();
-    if (res.ok) {
-      loadClipsGallery();
-      fetchStorageStats();
-      alert(data.message || 'All clips deleted successfully.');
-    } else {
-      alert(data.error || 'Failed to clean clips.');
+    let data = {};
+    const text = await res.text();
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { error: text || `HTTP ${res.status} ${res.statusText}` };
     }
+
+    if (!res.ok) {
+      alert(data.error || 'Failed to clean clips.');
+      return;
+    }
+    loadClipsGallery();
+    fetchStorageStats();
+    alert(data.message || 'All clips deleted successfully.');
   } catch (err) {
-    alert('Error cleaning clips: ' + err);
+    console.error('Clean clips error:', err);
+    alert('Failed to connect to Clipper server. Please make sure `./clipper serve :8000` is running in your terminal.');
   } finally {
     if (btn) btn.disabled = false;
     if (topBtn) topBtn.disabled = false;

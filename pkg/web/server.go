@@ -73,9 +73,22 @@ func NewServer(addr string, defaultCfg *clipper.Config) *Server {
 func (s *Server) Router() http.Handler {
 	mux := http.NewServeMux()
 
-	sub, err := fs.Sub(StaticFS, "static")
-	if err == nil {
-		mux.Handle("/", http.FileServer(http.FS(sub)))
+	// Serve static files: prioritize live disk ./pkg/web/static for instant dev reload, fallback to embed.FS
+	var staticHandler http.Handler
+	if _, err := os.Stat("./pkg/web/static"); err == nil {
+		staticHandler = http.FileServer(http.Dir("./pkg/web/static"))
+	} else if sub, err := fs.Sub(StaticFS, "static"); err == nil {
+		staticHandler = http.FileServer(http.FS(sub))
+	}
+
+	if staticHandler != nil {
+		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			// Prevent browser caching during local development
+			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+			w.Header().Set("Pragma", "no-cache")
+			w.Header().Set("Expires", "0")
+			staticHandler.ServeHTTP(w, r)
+		})
 	}
 
 	mux.HandleFunc("/api/status", s.handleStatus)
