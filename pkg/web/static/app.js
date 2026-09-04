@@ -503,7 +503,12 @@ async function loadClipsGallery() {
     const data = await res.json();
     const grid = document.getElementById('clipsGrid');
     const countEl = document.getElementById('clipsCount');
+    const clearAllBtn = document.getElementById('clearAllClipsBtn');
     if (countEl) countEl.textContent = data ? data.length : 0;
+
+    if (clearAllBtn) {
+      clearAllBtn.style.display = (!data || data.length === 0) ? 'none' : 'inline-flex';
+    }
 
     if (!grid) return;
 
@@ -539,12 +544,37 @@ async function loadClipsGallery() {
             <a href="${c.url}" download class="btn btn-secondary btn-sm" title="Download">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             </a>
+            <button onclick="deleteClip('${escapeHtml(c.name)}')" class="btn btn-secondary btn-sm btn-delete-clip" title="Delete clip file">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+            </button>
           </div>
         </div>
       </div>
     `).join('');
   } catch (err) {
     console.error('Error loading clips:', err);
+  }
+}
+
+async function deleteClip(name) {
+  if (!name) return;
+  if (!confirm(`Are you sure you want to delete "${name}"?`)) return;
+  try {
+    const res = await fetch(`/api/clips?name=${encodeURIComponent(name)}`, {
+      method: 'DELETE'
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.error || 'Failed to delete clip');
+      return;
+    }
+    loadClipsGallery();
+    const storageModal = document.getElementById('storageModal');
+    if (storageModal && storageModal.style.display !== 'none') {
+      fetchStorageStats();
+    }
+  } catch (err) {
+    alert('Error deleting clip: ' + err);
   }
 }
 
@@ -1073,6 +1103,105 @@ function closeGlobalAISettings() {
   saveGlobalAISettings();
   const modal = document.getElementById('aiModal');
   if (modal) modal.style.display = 'none';
+}
+
+/* ==========================================================================
+   STORAGE MANAGER & CACHE CLEANUP
+   ========================================================================== */
+function toggleStorageModal() {
+  const modal = document.getElementById('storageModal');
+  if (!modal) return;
+  const isOpening = modal.style.display === 'none' || modal.style.display === '';
+  modal.style.display = isOpening ? 'flex' : 'none';
+  if (isOpening) {
+    fetchStorageStats();
+  }
+}
+
+function closeStorageModal() {
+  const modal = document.getElementById('storageModal');
+  if (modal) modal.style.display = 'none';
+}
+
+async function fetchStorageStats() {
+  const statusEl = document.getElementById('storageModalStatus');
+  if (statusEl) statusEl.textContent = 'Calculating disk metrics...';
+  try {
+    const res = await fetch('/api/storage/stats');
+    const data = await res.json();
+    if (res.ok) {
+      const cacheDirEl = document.getElementById('storageCacheDir');
+      const cacheSizeEl = document.getElementById('storageCacheSize');
+      const cacheCountEl = document.getElementById('storageCacheCount');
+      if (cacheDirEl) cacheDirEl.textContent = `Directory: ${data.cache_dir}`;
+      if (cacheSizeEl) cacheSizeEl.textContent = data.cache_size_str;
+      if (cacheCountEl) cacheCountEl.textContent = `${data.cache_file_count} cached video/audio files`;
+
+      const clipsDirEl = document.getElementById('storageClipsDir');
+      const clipsSizeEl = document.getElementById('storageClipsSize');
+      const clipsCountEl = document.getElementById('storageClipsCount');
+      if (clipsDirEl) clipsDirEl.textContent = `Directory: ${data.clips_dir}`;
+      if (clipsSizeEl) clipsSizeEl.textContent = data.clips_size_str;
+      if (clipsCountEl) clipsCountEl.textContent = `${data.clips_count} rendered clips found`;
+
+      if (statusEl) statusEl.textContent = 'Storage data up to date ✓';
+    } else {
+      if (statusEl) statusEl.textContent = 'Failed to fetch storage stats';
+    }
+  } catch (err) {
+    if (statusEl) statusEl.textContent = 'Error: ' + err.message;
+  }
+}
+
+async function purgeCache() {
+  if (!confirm('Are you sure you want to purge all downloaded video and audio cache files?')) return;
+  const btn = document.getElementById('purgeCacheBtn');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:4px;"></span> Purging...';
+  }
+  try {
+    const res = await fetch('/api/storage/clean-cache', { method: 'POST' });
+    const data = await res.json();
+    if (res.ok) {
+      fetchStorageStats();
+      alert(data.message || 'Cache purged successfully.');
+    } else {
+      alert(data.error || 'Failed to purge cache.');
+    }
+  } catch (err) {
+    alert('Error purging cache: ' + err);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg><span>Purge Cache</span>';
+    }
+  }
+}
+
+async function cleanAllClips() {
+  if (!confirm('⚠️ Are you sure you want to DELETE ALL rendered clips and thumbnails? This action cannot be undone.')) return;
+  const btn = document.getElementById('cleanClipsBtn');
+  const topBtn = document.getElementById('clearAllClipsBtn');
+  if (btn) btn.disabled = true;
+  if (topBtn) topBtn.disabled = true;
+
+  try {
+    const res = await fetch('/api/storage/clean-clips', { method: 'POST' });
+    const data = await res.json();
+    if (res.ok) {
+      loadClipsGallery();
+      fetchStorageStats();
+      alert(data.message || 'All clips deleted successfully.');
+    } else {
+      alert(data.error || 'Failed to clean clips.');
+    }
+  } catch (err) {
+    alert('Error cleaning clips: ' + err);
+  } finally {
+    if (btn) btn.disabled = false;
+    if (topBtn) topBtn.disabled = false;
+  }
 }
 
 // Init on load

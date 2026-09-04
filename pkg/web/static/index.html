@@ -47,6 +47,11 @@
         <span>Export</span>
       </button>
 
+      <button class="btn btn-secondary btn-sm" id="globalStorageBtn" onclick="toggleStorageModal()" title="Disk Storage & Cache Manager">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+        <span>Storage</span>
+      </button>
+
       <button class="btn btn-secondary btn-sm" id="globalAISettingsBtn" onclick="toggleGlobalAISettings()" title="Global AI Configuration">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         <span>AI Config</span>
@@ -423,6 +428,15 @@
       </div>
 
       <div id="tabClips" style="display:none;">
+        <div class="tab-clips-header" id="tabClipsHeader">
+          <div class="tab-clips-info">
+            <span class="tab-clips-title">Rendered Output Files</span>
+          </div>
+          <button class="btn btn-secondary btn-sm btn-danger-hover" onclick="cleanAllClips()" id="clearAllClipsBtn" title="Delete all generated clips in output folder">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            <span>Clear All</span>
+          </button>
+        </div>
         <div class="clips-grid" id="clipsGrid">
           <div class="empty-state">
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.6;"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
@@ -558,10 +572,73 @@
             <option value="gemini-1.5-flash">gemini-1.5-flash</option>
           </select>
         </div>
-      </div>
       <div class="sub-modal-footer">
         <span class="sub-footer-status" id="aiModalStatus">Ready</span>
         <button class="btn btn-primary" onclick="closeGlobalAISettings()">Save & Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Storage & Cache Manager Modal -->
+  <div id="storageModal" class="sub-modal-backdrop" style="display:none;">
+    <div class="sub-modal-card" style="max-width:540px;">
+      <div class="sub-modal-header">
+        <div class="sub-modal-title-wrap">
+          <span class="sub-modal-title">💾 Storage & Cache Manager</span>
+        </div>
+        <button class="btn btn-secondary btn-icon" onclick="closeStorageModal()" title="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div style="padding:18px 20px; display:flex; flex-direction:column; gap:16px;">
+        <!-- Cache Storage Card -->
+        <div class="storage-card">
+          <div class="storage-card-header">
+            <div class="storage-card-icon-wrap">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            </div>
+            <div class="storage-card-info">
+              <div class="storage-card-title">YouTube & Temp Audio Cache</div>
+              <div class="storage-card-sub" id="storageCacheDir">Directory: ./cache</div>
+            </div>
+            <div class="storage-badge" id="storageCacheSize">0 B</div>
+          </div>
+          <div class="storage-card-body">
+            <span class="storage-desc" id="storageCacheCount">0 cache files found</span>
+            <button class="btn btn-secondary btn-sm" onclick="purgeCache()" id="purgeCacheBtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              <span>Purge Cache</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Rendered Clips Card -->
+        <div class="storage-card">
+          <div class="storage-card-header">
+            <div class="storage-card-icon-wrap">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+            </div>
+            <div class="storage-card-info">
+              <div class="storage-card-title">Rendered Output Clips</div>
+              <div class="storage-card-sub" id="storageClipsDir">Directory: ./clips</div>
+            </div>
+            <div class="storage-badge" id="storageClipsSize">0 B</div>
+          </div>
+          <div class="storage-card-body">
+            <span class="storage-desc" id="storageClipsCount">0 clips generated</span>
+            <button class="btn btn-secondary btn-sm btn-danger-hover" onclick="cleanAllClips()" id="cleanClipsBtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              <span>Delete All Clips</span>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="sub-modal-footer">
+        <span class="sub-footer-status" id="storageModalStatus">Ready</span>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-secondary" onclick="fetchStorageStats()">Refresh</button>
+          <button class="btn btn-primary" onclick="closeStorageModal()">Done</button>
+        </div>
       </div>
     </div>
   </div>
