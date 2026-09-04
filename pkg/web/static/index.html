@@ -534,7 +534,7 @@
   </div>
 
   <!-- Global AI Configuration Modal -->
-  <div id="aiModal" class="sub-modal-backdrop" style="display:none;">
+  <div id="aiModal" class="sub-modal-backdrop" style="display:none;" onclick="if(event.target === this) closeGlobalAISettings()">
     <div class="sub-modal-card" style="max-width:520px;">
       <div class="sub-modal-header">
         <div class="sub-modal-title-wrap">
@@ -572,6 +572,7 @@
             <option value="gemini-1.5-flash">gemini-1.5-flash</option>
           </select>
         </div>
+      </div>
       <div class="sub-modal-footer">
         <span class="sub-footer-status" id="aiModalStatus">Ready</span>
         <button class="btn btn-primary" onclick="closeGlobalAISettings()">Save & Close</button>
@@ -580,7 +581,7 @@
   </div>
 
   <!-- Storage & Cache Manager Modal -->
-  <div id="storageModal" class="sub-modal-backdrop" style="display:none;">
+  <div id="storageModal" class="sub-modal-backdrop" style="display:none;" onclick="if(event.target === this) closeStorageModal()">
     <div class="sub-modal-card" style="max-width:540px;">
       <div class="sub-modal-header">
         <div class="sub-modal-title-wrap">
