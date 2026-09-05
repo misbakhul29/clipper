@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -58,8 +59,12 @@ func NewServer(addr string, defaultCfg *clipper.Config) *Server {
 	if !strings.Contains(addr, ":") {
 		addr = ":" + addr
 	}
+	if defaultCfg == nil {
+		def := clipper.DefaultConfig()
+		defaultCfg = &def
+	}
 	outDir := "./clips"
-	if defaultCfg != nil && defaultCfg.OutputDir != "" && defaultCfg.OutputDir != "." {
+	if defaultCfg.OutputDir != "" && defaultCfg.OutputDir != "." {
 		outDir = defaultCfg.OutputDir
 	}
 	return &Server{
@@ -100,8 +105,9 @@ func (s *Server) Router() http.Handler {
 	mux.HandleFunc("/api/auto-detect", s.handleAutoDetect)
 	mux.HandleFunc("/api/transcribe", s.handleTranscribe)
 	mux.HandleFunc("/api/ai/subtitles", s.handleAISubtitles)
+	mux.HandleFunc("/api/ai-subtitles-emojis", s.handleAISubtitles)
 	mux.HandleFunc("/api/clip", s.handleClip)
-	mux.HandleFunc("/api/render", s.handleClip)
+	mux.HandleFunc("/api/render", s.handleClip) // Alias for /api/clip
 	mux.HandleFunc("/preview", s.handlePreview)
 
 	// Ensure output directory exists for static video serving
@@ -249,63 +255,69 @@ func (s *Server) handleClips(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		for _, e := range entries {
-			if e.IsDir() {
+		for _, entry := range entries {
+			if entry.IsDir() {
 				continue
 			}
-			name := e.Name()
+
+			name := entry.Name()
+			if seen[name] {
+				continue
+			}
+
 			ext := strings.ToLower(filepath.Ext(name))
-			if ext != ".mp4" && ext != ".mkv" && ext != ".webm" {
+			if ext != ".mp4" && ext != ".mov" && ext != ".webm" && ext != ".mkv" {
 				continue
 			}
 
-			fullPath := filepath.Join(dir, name)
-			if seen[fullPath] {
-				continue
-			}
-			seen[fullPath] = true
-
-			fi, fErr := e.Info()
-			if fErr != nil {
+			seen[name] = true
+			info, err := entry.Info()
+			if err != nil {
 				continue
 			}
 
-			rel, _ := filepath.Rel(s.OutDir, fullPath)
-			url := "/clips/" + filepath.ToSlash(rel)
-
-			// Look for matching thumbnail
-			baseWithoutExt := strings.TrimSuffix(name, ext)
-			var thumbURL string
-			thumbCandidates := []string{
-				baseWithoutExt + ".jpg",
-				baseWithoutExt + "_hook1.jpg",
-				baseWithoutExt + "_hook2.jpg",
+			sizeMB := float64(info.Size()) / (1024 * 1024)
+			sizeStr := fmt.Sprintf("%.1f MB", sizeMB)
+			if sizeMB < 1.0 {
+				sizeStr = fmt.Sprintf("%.0f KB", float64(info.Size())/1024)
 			}
-			for _, tc := range thumbCandidates {
-				candidatePath := filepath.Join(dir, tc)
-				if _, sErr := os.Stat(candidatePath); sErr == nil {
-					relThumb, _ := filepath.Rel(s.OutDir, candidatePath)
-					thumbURL = "/clips/" + filepath.ToSlash(relThumb)
+
+			modTimeStr := info.ModTime().Format("02 Jan 15:04")
+
+			// Check if thumbnail exists
+			base := strings.TrimSuffix(name, ext)
+			thumbURL := ""
+			candidates := []string{base + ".jpg", base + "_hook1.jpg", base + "_hook2.jpg", base + ".png", base + ".webp"}
+			for _, tc := range candidates {
+				if _, err := os.Stat(filepath.Join(dir, tc)); err == nil {
+					thumbURL = "/clips/" + tc
+					if strings.HasSuffix(dir, "shorts") {
+						thumbURL = "/clips/shorts/" + tc
+					}
 					break
 				}
 			}
 
-			sizeStr := formatFileSize(fi.Size())
+			clipURL := "/clips/" + name
+			if strings.HasSuffix(dir, "shorts") {
+				clipURL = "/clips/shorts/" + name
+			}
 
 			items = append(items, ClipItem{
 				Name:         name,
-				URL:          url,
+				URL:          clipURL,
 				ThumbnailURL: thumbURL,
 				SizeStr:      sizeStr,
-				DurationStr:  "--",
-				ModTime:      fi.ModTime().Format("15:04:05 02 Jan"),
+				DurationStr:  "",
+				ModTime:      modTimeStr,
 			})
 		}
 	}
 
-	if items == nil {
-		items = []ClipItem{}
-	}
+	// Sort newest first
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].ModTime > items[j].ModTime
+	})
 
 	_ = json.NewEncoder(w).Encode(items)
 }
@@ -324,100 +336,59 @@ type StorageStatsResponse struct {
 }
 
 func (s *Server) handleStorageStats(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
 	cacheDir := s.getCacheDir()
-	var cacheBytes int64
-	var cacheCount int
-	if _, err := os.Stat(cacheDir); err == nil {
-		_ = filepath.Walk(cacheDir, func(path string, info os.FileInfo, err error) error {
-			if err == nil && !info.IsDir() {
-				cacheBytes += info.Size()
-				cacheCount++
-			}
-			return nil
-		})
-	}
+	clipsDir := s.OutDir
 
-	var clipsBytes int64
-	var clipsCount int
-	dirsToScan := []string{s.OutDir, filepath.Join(s.OutDir, "shorts")}
-	seen := make(map[string]bool)
+	cacheSize, cacheCount := getDirStats(cacheDir)
+	clipsSize, clipsCount := getDirStats(clipsDir)
 
-	for _, dir := range dirsToScan {
-		entries, err := os.ReadDir(dir)
-		if err != nil {
-			continue
-		}
-		for _, e := range entries {
-			if e.IsDir() {
-				continue
-			}
-			fullPath := filepath.Join(dir, e.Name())
-			if seen[fullPath] {
-				continue
-			}
-			seen[fullPath] = true
-
-			fi, err := e.Info()
-			if err == nil {
-				clipsBytes += fi.Size()
-				ext := strings.ToLower(filepath.Ext(e.Name()))
-				if ext == ".mp4" || ext == ".mkv" || ext == ".webm" {
-					clipsCount++
-				}
-			}
-		}
-	}
-
-	_ = json.NewEncoder(w).Encode(StorageStatsResponse{
-		CacheDir:       cacheDir,
-		CacheSizeBytes: cacheBytes,
-		CacheSizeStr:   formatFileSize(cacheBytes),
-		CacheFileCount: cacheCount,
-
-		ClipsDir:       s.OutDir,
-		ClipsSizeBytes: clipsBytes,
-		ClipsSizeStr:   formatFileSize(clipsBytes),
-		ClipsCount:     clipsCount,
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"cache_dir":        cacheDir,
+		"cache_size_bytes": cacheSize,
+		"cache_size_str":   formatSize(cacheSize),
+		"cache_count":      cacheCount,
+		"clips_dir":        clipsDir,
+		"clips_size_bytes": clipsSize,
+		"clips_size_str":   formatSize(clipsSize),
+		"clips_count":      clipsCount,
 	})
 }
 
 func (s *Server) handleCleanCache(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost && r.Method != http.MethodDelete {
+	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
 
 	cacheDir := s.getCacheDir()
 	freed, count, err := downloader.CleanCache(cacheDir, 0)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		_ = json.NewEncoder(w).Encode(map[string]string{"error": fmt.Sprintf("failed to clean cache: %v", err)})
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
-		"status":        "success",
-		"freed_bytes":   freed,
-		"freed_str":     formatFileSize(freed),
-		"removed_count": count,
-		"message":       fmt.Sprintf("Cleaned %d cache files, freeing %s", count, formatFileSize(freed)),
+		"status":      "success",
+		"freed_bytes": freed,
+		"freed_str":   formatSize(freed),
+		"count":       count,
+		"message":     fmt.Sprintf("Cleaned %d cache files, freed %s", count, formatSize(freed)),
 	})
 }
 
 func (s *Server) handleCleanClips(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost && r.Method != http.MethodDelete {
+	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
 
-	var freedBytes int64
-	var removedClips int
+	var freed int64
+	var count int
 
-	dirsToClean := []string{filepath.Join(s.OutDir, "shorts"), s.OutDir}
+	dirsToClean := []string{s.OutDir, filepath.Join(s.OutDir, "shorts")}
 	for _, dir := range dirsToClean {
 		entries, err := os.ReadDir(dir)
 		if err != nil {
@@ -427,25 +398,54 @@ func (s *Server) handleCleanClips(w http.ResponseWriter, r *http.Request) {
 			if e.IsDir() {
 				continue
 			}
-			fullPath := filepath.Join(dir, e.Name())
-			if fi, sErr := e.Info(); sErr == nil {
-				freedBytes += fi.Size()
+			fp := filepath.Join(dir, e.Name())
+			if fi, err := e.Info(); err == nil {
+				freed += fi.Size()
+				_ = os.Remove(fp)
+				count++
 			}
-			ext := strings.ToLower(filepath.Ext(e.Name()))
-			if ext == ".mp4" || ext == ".mkv" || ext == ".webm" {
-				removedClips++
-			}
-			_ = os.Remove(fullPath)
 		}
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
-		"status":        "success",
-		"freed_bytes":   freedBytes,
-		"freed_str":     formatFileSize(freedBytes),
-		"removed_count": removedClips,
-		"message":       fmt.Sprintf("Deleted %d clips and media assets, freeing %s", removedClips, formatFileSize(freedBytes)),
+		"status":      "success",
+		"freed_bytes": freed,
+		"freed_str":   formatSize(freed),
+		"count":       count,
+		"message":     fmt.Sprintf("Deleted %d clips and media files, freed %s", count, formatSize(freed)),
 	})
+}
+
+func getDirStats(dir string) (int64, int) {
+	var totalSize int64
+	var fileCount int
+
+	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d == nil {
+			return nil
+		}
+		if !d.IsDir() {
+			if info, err := d.Info(); err == nil {
+				totalSize += info.Size()
+				fileCount++
+			}
+		}
+		return nil
+	})
+
+	return totalSize, fileCount
+}
+
+func formatSize(bytes int64) string {
+	if bytes < 1024 {
+		return fmt.Sprintf("%d B", bytes)
+	} else if bytes < 1024*1024 {
+		return fmt.Sprintf("%.1f KB", float64(bytes)/1024)
+	} else if bytes < 1024*1024*1024 {
+		return fmt.Sprintf("%.1f MB", float64(bytes)/(1024*1024))
+	}
+	return fmt.Sprintf("%.2f GB", float64(bytes)/(1024*1024*1024))
 }
 
 type prepareRequestPayload struct {
@@ -605,6 +605,15 @@ type clipRequestPayload struct {
 	TargetDuration   float64           `json:"target_duration"`
 	HWAccel          string            `json:"hwaccel"`
 	Concurrency      int               `json:"concurrency"`
+
+	// Nested Structured Options
+	CacheConfig    *clipper.CacheConfig    `json:"cache,omitempty"`
+	ShortsConfig   *clipper.ShortsConfig   `json:"shorts_config,omitempty"`
+	SubtitleConfig *clipper.SubtitleConfig `json:"subtitle_config,omitempty"`
+	AudioConfig    *clipper.AudioConfig    `json:"audio_config,omitempty"`
+	BrandingConfig *clipper.BrandingConfig `json:"branding_config,omitempty"`
+	SocialConfig   *clipper.SocialConfig   `json:"social_config,omitempty"`
+
 	AIConfigs        []ai.AIProfile      `json:"ai_configs,omitempty"`
 	RoutingModels    ai.AIRoutingModels  `json:"routing_models,omitempty"`
 	AIConfig         *struct {
@@ -651,7 +660,7 @@ func (s *Server) handleAutoDetect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cfg := clipper.Config{}
+	cfg := clipper.DefaultConfig()
 	if s.DefaultConfig != nil {
 		cfg = *s.DefaultConfig
 	}
@@ -679,6 +688,7 @@ func (s *Server) handleAutoDetect(w http.ResponseWriter, r *http.Request) {
 	if req.Model != "" {
 		cfg.AIConfig.Model = req.Model
 	}
+	cfg.Sync()
 
 	c, err := clipper.New()
 	if err != nil {
@@ -736,7 +746,7 @@ func (s *Server) handleClip(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 
 	// Clone default config and override with request parameters
-	cfg := clipper.Config{}
+	cfg := clipper.DefaultConfig()
 	if s.DefaultConfig != nil {
 		cfg = *s.DefaultConfig
 	}
@@ -837,6 +847,28 @@ func (s *Server) handleClip(w http.ResponseWriter, r *http.Request) {
 	} else if cfg.OutputDir == "" {
 		cfg.OutputDir = s.OutDir
 	}
+
+	// Apply structured nested overrides if provided
+	if req.CacheConfig != nil {
+		cfg.CacheConfig = *req.CacheConfig
+	}
+	if req.ShortsConfig != nil {
+		cfg.ShortsConfig = *req.ShortsConfig
+	}
+	if req.SubtitleConfig != nil {
+		cfg.SubtitleConfig = *req.SubtitleConfig
+	}
+	if req.AudioConfig != nil {
+		cfg.AudioConfig = *req.AudioConfig
+	}
+	if req.BrandingConfig != nil {
+		cfg.BrandingConfig = *req.BrandingConfig
+	}
+	if req.SocialConfig != nil {
+		cfg.SocialConfig = *req.SocialConfig
+	}
+
+	cfg.Sync()
 
 	// Run clipping job in background goroutine
 	go func() {

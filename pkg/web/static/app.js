@@ -728,25 +728,60 @@ function applyImportedConfig(cfg) {
   if (cfg.output_dir && document.getElementById('cfgOutputDir')) document.getElementById('cfgOutputDir').value = cfg.output_dir;
   if (cfg.strategy && document.getElementById('cfgStrategy')) document.getElementById('cfgStrategy').value = cfg.strategy;
   if (cfg.quality && document.getElementById('cfgQuality')) document.getElementById('cfgQuality').value = cfg.quality;
-  if (typeof cfg.shorts === 'boolean' && document.getElementById('cfgShorts')) document.getElementById('cfgShorts').checked = cfg.shorts;
-  if (cfg.shorts_style && document.getElementById('cfgShortsStyle')) document.getElementById('cfgShortsStyle').value = cfg.shorts_style;
-  if (typeof cfg.subtitles === 'boolean' && document.getElementById('cfgBurnSubs')) document.getElementById('cfgBurnSubs').checked = cfg.subtitles;
-  if (cfg.sub_preset && document.getElementById('cfgSubPreset')) document.getElementById('cfgSubPreset').value = cfg.sub_preset;
-  if (cfg.sub_sdh_mode && document.getElementById('cfgSubSDHMode')) document.getElementById('cfgSubSDHMode').value = cfg.sub_sdh_mode;
-  if (typeof cfg.loudnorm === 'boolean' && document.getElementById('cfgLoudnorm')) document.getElementById('cfgLoudnorm').checked = cfg.loudnorm;
-  if (typeof cfg.jump_cut === 'boolean' && document.getElementById('cfgJumpCut')) document.getElementById('cfgJumpCut').checked = cfg.jump_cut;
-  if (cfg.jump_cut_min_silence && document.getElementById('cfgJumpCutMinSil')) document.getElementById('cfgJumpCutMinSil').value = cfg.jump_cut_min_silence;
-  if (cfg.jump_cut_margin && document.getElementById('cfgJumpCutMargin')) document.getElementById('cfgJumpCutMargin').value = cfg.jump_cut_margin;
-  if (cfg.jump_cut_noise && document.getElementById('cfgJumpCutNoise')) document.getElementById('cfgJumpCutNoise').value = cfg.jump_cut_noise;
-  if (cfg.watermark && document.getElementById('cfgWatermark')) document.getElementById('cfgWatermark').value = cfg.watermark;
-  if (cfg.watermark_pos && document.getElementById('cfgWatermarkPos')) document.getElementById('cfgWatermarkPos').value = cfg.watermark_pos;
-  if (cfg.overlay_text && document.getElementById('cfgOverlayText')) document.getElementById('cfgOverlayText').value = cfg.overlay_text;
-  if (cfg.text_pos && document.getElementById('cfgTextPos')) document.getElementById('cfgTextPos').value = cfg.text_pos;
-  if (cfg.font_color && document.getElementById('cfgFontColor')) document.getElementById('cfgFontColor').value = cfg.font_color;
-  if (typeof cfg.generate_metadata === 'boolean' && document.getElementById('cfgMetadata')) document.getElementById('cfgMetadata').checked = cfg.generate_metadata;
-  if (typeof cfg.extract_thumbnail === 'boolean' && document.getElementById('cfgThumbnail')) document.getElementById('cfgThumbnail').checked = cfg.extract_thumbnail;
+
+  // Shorts (nested or flat)
+  const isShorts = cfg.shorts?.enabled ?? (typeof cfg.shorts === 'boolean' ? cfg.shorts : undefined);
+  if (typeof isShorts === 'boolean' && document.getElementById('cfgShorts')) document.getElementById('cfgShorts').checked = isShorts;
+  const shortsStyle = cfg.shorts?.style || cfg.shorts_style;
+  if (shortsStyle && document.getElementById('cfgShortsStyle')) document.getElementById('cfgShortsStyle').value = shortsStyle;
+
+  // Subtitles (nested or flat)
+  const isSubs = cfg.subtitles?.enabled ?? (typeof cfg.subtitles === 'boolean' ? cfg.subtitles : undefined);
+  if (typeof isSubs === 'boolean' && document.getElementById('cfgBurnSubs')) document.getElementById('cfgBurnSubs').checked = isSubs;
+  const subPreset = cfg.subtitles?.preset || cfg.sub_preset;
+  if (subPreset && document.getElementById('cfgSubPreset')) document.getElementById('cfgSubPreset').value = subPreset;
+  const subSDHMode = cfg.subtitles?.sdh_mode || cfg.sub_sdh_mode;
+  if (subSDHMode && document.getElementById('cfgSubSDHMode')) document.getElementById('cfgSubSDHMode').value = subSDHMode;
+
+  // Audio (nested or flat)
+  const isLoudnorm = cfg.audio?.loudnorm?.enabled ?? (typeof cfg.loudnorm === 'boolean' ? cfg.loudnorm : undefined);
+  if (typeof isLoudnorm === 'boolean' && document.getElementById('cfgLoudnorm')) document.getElementById('cfgLoudnorm').checked = isLoudnorm;
+
+  const isJumpCut = cfg.audio?.jump_cut?.enabled ?? (typeof cfg.jump_cut === 'boolean' ? cfg.jump_cut : undefined);
+  if (typeof isJumpCut === 'boolean' && document.getElementById('cfgJumpCut')) document.getElementById('cfgJumpCut').checked = isJumpCut;
+
+  const jcMinSil = cfg.audio?.jump_cut?.min_silence ?? cfg.jump_cut_min_silence;
+  if (jcMinSil !== undefined && document.getElementById('cfgJumpCutMinSil')) document.getElementById('cfgJumpCutMinSil').value = jcMinSil;
+
+  const jcMargin = cfg.audio?.jump_cut?.margin ?? cfg.jump_cut_margin;
+  if (jcMargin !== undefined && document.getElementById('cfgJumpCutMargin')) document.getElementById('cfgJumpCutMargin').value = jcMargin;
+
+  const jcNoise = cfg.audio?.jump_cut?.noise ?? cfg.jump_cut_noise;
+  if (jcNoise !== undefined && document.getElementById('cfgJumpCutNoise')) document.getElementById('cfgJumpCutNoise').value = jcNoise;
+
+  // Branding (nested or flat)
+  const watermarkPath = cfg.branding?.watermark?.path || cfg.watermark;
+  if (watermarkPath && document.getElementById('cfgWatermark')) document.getElementById('cfgWatermark').value = watermarkPath;
+  const watermarkPos = cfg.branding?.watermark?.position || cfg.watermark_pos;
+  if (watermarkPos && document.getElementById('cfgWatermarkPos')) document.getElementById('cfgWatermarkPos').value = watermarkPos;
+
+  const overlayText = cfg.branding?.overlay_text?.text || cfg.overlay_text;
+  if (overlayText && document.getElementById('cfgOverlayText')) document.getElementById('cfgOverlayText').value = overlayText;
+  const textPos = cfg.branding?.overlay_text?.position || cfg.text_pos;
+  if (textPos && document.getElementById('cfgTextPos')) document.getElementById('cfgTextPos').value = textPos;
+  const fontColor = cfg.branding?.overlay_text?.font_color || cfg.font_color;
+  if (fontColor && document.getElementById('cfgFontColor')) document.getElementById('cfgFontColor').value = fontColor;
+
+  // Social (nested or flat)
+  const genMeta = cfg.social?.generate_metadata ?? (typeof cfg.generate_metadata === 'boolean' ? cfg.generate_metadata : undefined);
+  if (typeof genMeta === 'boolean' && document.getElementById('cfgMetadata')) document.getElementById('cfgMetadata').checked = genMeta;
+
+  const extThumb = cfg.social?.extract_thumbnail ?? (typeof cfg.extract_thumbnail === 'boolean' ? cfg.extract_thumbnail : undefined);
+  if (typeof extThumb === 'boolean' && document.getElementById('cfgThumbnail')) document.getElementById('cfgThumbnail').checked = extThumb;
+
   if (cfg.hwaccel && document.getElementById('cfgHwaccel')) document.getElementById('cfgHwaccel').value = cfg.hwaccel;
 
+  // Multi-AI configs & routing
   if (Array.isArray(cfg.ai_configs) && cfg.ai_configs.length > 0) {
     localStorage.setItem('clipper_ai_configs', JSON.stringify(cfg.ai_configs));
   }
@@ -761,32 +796,62 @@ function applyImportedConfig(cfg) {
 
 function exportCurrentConfig() {
   const currentConfig = {
-    input_file: document.getElementById('videoSource')?.value.trim() || '',
+    input: document.getElementById('videoSource')?.value.trim() || '',
     output_dir: document.getElementById('cfgOutputDir')?.value.trim() || './clips',
     output: document.getElementById('cfgOutputFile')?.value.trim() || 'merged_highlight.mp4',
     mode: document.getElementById('cfgMode')?.value || 'split',
     strategy: document.getElementById('cfgStrategy')?.value || 'fast',
-    shorts: document.getElementById('cfgShorts')?.checked || false,
-    shorts_style: document.getElementById('cfgShortsStyle')?.value || 'smart-crop',
     quality: document.getElementById('cfgQuality')?.value || 'best',
-    subtitles: document.getElementById('cfgBurnSubs')?.checked || false,
-    sub_preset: document.getElementById('cfgSubPreset')?.value || 'hormozi',
-    sub_sdh_mode: document.getElementById('cfgSubSDHMode')?.value || 'strip',
-    sub_emoji: true,
-    loudnorm: document.getElementById('cfgLoudnorm')?.checked || false,
-    jump_cut: document.getElementById('cfgJumpCut')?.checked || false,
-    jump_cut_min_silence: parseFloat(document.getElementById('cfgJumpCutMinSil')?.value || '1.0'),
-    jump_cut_margin: parseFloat(document.getElementById('cfgJumpCutMargin')?.value || '0.2'),
-    jump_cut_noise: parseFloat(document.getElementById('cfgJumpCutNoise')?.value || '-30'),
-    watermark: document.getElementById('cfgWatermark')?.value.trim() || '',
-    watermark_pos: document.getElementById('cfgWatermarkPos')?.value || 'top-right',
-    overlay_text: document.getElementById('cfgOverlayText')?.value.trim() || '',
-    text_pos: document.getElementById('cfgTextPos')?.value || 'bottom-center',
-    font_color: document.getElementById('cfgFontColor')?.value || 'white',
-    generate_metadata: document.getElementById('cfgMetadata')?.checked || false,
-    extract_thumbnail: document.getElementById('cfgThumbnail')?.checked || false,
-    thumbnail_count: 1,
     hwaccel: document.getElementById('cfgHwaccel')?.value || 'auto',
+    concurrency: 8,
+    cache: {
+      dir: './cache'
+    },
+    shorts: {
+      enabled: document.getElementById('cfgShorts')?.checked || false,
+      style: document.getElementById('cfgShortsStyle')?.value || 'blur',
+      face_tracking: true,
+      pan_duration: 0.8
+    },
+    subtitles: {
+      enabled: document.getElementById('cfgBurnSubs')?.checked || false,
+      preset: document.getElementById('cfgSubPreset')?.value || 'hormozi',
+      style: 'karaoke',
+      sdh_mode: document.getElementById('cfgSubSDHMode')?.value || 'strip',
+      emoji: true,
+      font_size: 48,
+      translate_lang: 'id'
+    },
+    audio: {
+      loudnorm: {
+        enabled: document.getElementById('cfgLoudnorm')?.checked || false,
+        i: -14,
+        lra: 7,
+        tp: -2
+      },
+      jump_cut: {
+        enabled: document.getElementById('cfgJumpCut')?.checked || false,
+        min_silence: parseFloat(document.getElementById('cfgJumpCutMinSil')?.value || '1.0'),
+        margin: parseFloat(document.getElementById('cfgJumpCutMargin')?.value || '0.2'),
+        noise: parseFloat(document.getElementById('cfgJumpCutNoise')?.value || '-30')
+      }
+    },
+    branding: {
+      watermark: {
+        path: document.getElementById('cfgWatermark')?.value.trim() || '',
+        position: document.getElementById('cfgWatermarkPos')?.value || 'top-right'
+      },
+      overlay_text: {
+        text: document.getElementById('cfgOverlayText')?.value.trim() || '',
+        position: document.getElementById('cfgTextPos')?.value || 'bottom-center',
+        font_color: document.getElementById('cfgFontColor')?.value || 'white'
+      }
+    },
+    social: {
+      generate_metadata: document.getElementById('cfgMetadata')?.checked || false,
+      extract_thumbnail: document.getElementById('cfgThumbnail')?.checked || false,
+      thumbnail_count: 1
+    },
     ai_configs: getGlobalAIConfigs(),
     routing_models: getGlobalRoutingModels(),
     segments: segments
