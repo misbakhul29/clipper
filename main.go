@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/misbakhul29/clipper/pkg/ai"
 	"github.com/misbakhul29/clipper/pkg/clipper"
 	"github.com/misbakhul29/clipper/pkg/web"
 )
@@ -185,6 +186,31 @@ func generateSampleConfigFile(filePath string) error {
 		HWAccel:          "auto",
 		ShowProgress:     true,
 		FaceTracking:     true,
+		AIConfigs: []ai.AIProfile{
+			{
+				ID:     "gemini_acc_1",
+				Router: "gemini",
+				Model:  "gemini-2.5-flash",
+				Key:    "YOUR_GEMINI_API_KEY_1",
+			},
+			{
+				ID:     "gemini_acc_2",
+				Router: "gemini",
+				Model:  "gemini-2.5-flash",
+				Key:    "YOUR_GEMINI_API_KEY_2",
+			},
+			{
+				ID:     "deepseek_main",
+				Router: "deepseek",
+				Model:  "deepseek-chat",
+				Key:    "YOUR_DEEPSEEK_API_KEY",
+			},
+		},
+		RoutingModels: ai.AIRoutingModels{
+			Segment:      "gemini_acc_1",
+			SubTranslate: "gemini_acc_1",
+			Metadata:     "deepseek_main",
+		},
 		Segments: []clipper.Segment{
 			{
 				Start: "00:00:10",

@@ -91,7 +91,7 @@ type Config struct {
 	ThumbnailCount   int                 `json:"thumbnail_count"`   // Number of candidate thumbnails to extract (1 to 3, default: 1)
 	HWAccel          string              `json:"hwaccel"`           // Hardware acceleration mode: 'auto', 'nvenc', 'videotoolbox', 'qsv', 'vaapi', 'amf', 'cpu'
 	ShowProgress     bool                `json:"show_progress"`     // Display interactive terminal progress bar during rendering (default: true)
-	AIConfig         ai.AIProviderConfig `json:"ai_config"`        // Multi-provider AI config
+	AIConfig         ai.AIProviderConfig `json:"ai_config,omitempty"`        // Multi-provider AI config
 	AIConfigs        []ai.AIProfile      `json:"ai_configs,omitempty"`     // Multi-AI account profiles list
 	RoutingModels    ai.AIRoutingModels  `json:"routing_models,omitempty"` // Task-to-Profile ID routing mapping
 	OpenRouterKey string              `json:"openrouter_key"`// OpenRouter API Key (legacy fallback)
@@ -121,6 +121,21 @@ func (c *Config) GetAITaskConfig(task string) ai.AIProviderConfig {
 		fallback.TargetDuration = c.TargetDuration
 	}
 	return ai.ResolveTaskConfig(task, c.AIConfigs, c.RoutingModels, fallback)
+}
+
+// MarshalJSON customizes serialization to omit empty ai_config when ai_configs is used.
+func (c Config) MarshalJSON() ([]byte, error) {
+	type Alias Config
+	aux := struct {
+		Alias
+		AIConfig *ai.AIProviderConfig `json:"ai_config,omitempty"`
+	}{
+		Alias: Alias(c),
+	}
+	if c.AIConfig.APIRouter != "" || c.AIConfig.APIKey != "" || c.AIConfig.Model != "" {
+		aux.AIConfig = &c.AIConfig
+	}
+	return json.Marshal(aux)
 }
 
 // UnmarshalJSON implements custom unmarshaling to support "subtitles", "subtitle", "burn_subtitles", and "burn_subtitle" config keys,
