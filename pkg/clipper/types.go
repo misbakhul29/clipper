@@ -126,6 +126,14 @@ type SocialConfig struct {
 	ThumbnailCount   int  `json:"thumbnail_count,omitempty"`   // Number of candidate thumbnails to extract (1 to 3, default: 1)
 }
 
+// CacheConfig groups caching and storage maintenance settings.
+type CacheConfig struct {
+	Dir       string `json:"dir,omitempty"`        // Directory to cache downloaded YouTube videos (default: "./cache")
+	NoCache   bool   `json:"no_cache,omitempty"`   // Disable YouTube download cache and force re-download
+	Clean     bool   `json:"clean,omitempty"`      // Clean cache directory
+	CleanDays int    `json:"clean_days,omitempty"` // Delete cache files older than N days (0 = clean all)
+}
+
 // Config holds options for the video cutting job.
 type Config struct {
 	InputFile     string              `json:"input"`
@@ -134,8 +142,6 @@ type Config struct {
 	Mode          Mode                `json:"mode"`         // "split" or "merge"
 	Strategy      CutStrategy         `json:"strategy"`     // "fast" or "accurate"
 	Quality       string              `json:"quality"`      // YouTube download quality e.g. "best", "1080p", "720p", "480p", "360p", "worst"
-	CacheDir      string              `json:"cache_dir"`    // Directory to cache downloaded YouTube videos (default: "./cache")
-	NoCache       bool                `json:"no_cache"`     // Disable YouTube download cache and force re-download
 	Concurrency   int                 `json:"concurrency"`  // Number of parallel workers for rendering clips (default: NumCPU)
 	AutoDetect     string              `json:"auto_detect"`     // Auto detection mode: "silence", "scene", or "ai"
 	TargetDuration float64             `json:"target_duration"` // Desired segment clip duration in seconds (0 = auto)
@@ -143,10 +149,9 @@ type Config struct {
 	ShowProgress     bool                `json:"show_progress"`     // Display interactive terminal progress bar during rendering (default: true)
 	DryRun        bool                `json:"dry_run"`      // Dry-run mode: analyze & preview commands without rendering video
 	BatchList     string              `json:"batch_list"`    // Path to text file containing list of video URLs/files (one per line)
-	CleanCache    bool                `json:"clean_cache"`   // Clean cache directory
-	CleanDays     int                 `json:"clean_days"`    // Delete cache files older than N days (0 = clean all)
 
 	// Structured Child Configurations (handled via custom MarshalJSON / UnmarshalJSON)
+	CacheConfig    CacheConfig    `json:"-"`
 	ShortsConfig   ShortsConfig   `json:"-"`
 	SubtitleConfig SubtitleConfig `json:"-"`
 	AudioConfig    AudioConfig    `json:"-"`
@@ -154,6 +159,10 @@ type Config struct {
 	SocialConfig   SocialConfig   `json:"-"`
 
 	// Flat Compatibility Fields
+	CacheDir      string              `json:"-"`
+	NoCache       bool                `json:"-"`
+	CleanCache    bool                `json:"-"`
+	CleanDays     int                 `json:"-"`
 	Shorts        bool                `json:"-"`
 	ShortsStyle   string              `json:"-"`
 	FaceTracking  bool                `json:"-"`
@@ -197,6 +206,19 @@ type Config struct {
 
 // Sync ensures all flat fields and nested child structs remain completely synchronized.
 func (c *Config) Sync() {
+	// Cache sync
+	if c.CacheConfig.Dir != "" || c.CacheConfig.NoCache || c.CacheConfig.Clean || c.CacheConfig.CleanDays > 0 {
+		c.CacheDir = c.CacheConfig.Dir
+		c.NoCache = c.CacheConfig.NoCache
+		c.CleanCache = c.CacheConfig.Clean
+		c.CleanDays = c.CacheConfig.CleanDays
+	} else if c.CacheDir != "" || c.NoCache || c.CleanCache || c.CleanDays > 0 {
+		c.CacheConfig.Dir = c.CacheDir
+		c.CacheConfig.NoCache = c.NoCache
+		c.CacheConfig.Clean = c.CleanCache
+		c.CacheConfig.CleanDays = c.CleanDays
+	}
+
 	// Shorts sync
 	if c.ShortsConfig.Enabled || c.ShortsConfig.Style != "" || c.ShortsConfig.FaceTracking || c.ShortsConfig.PanDuration > 0 {
 		c.Shorts = c.ShortsConfig.Enabled
@@ -299,13 +321,16 @@ func DefaultConfig() Config {
 		Mode:           ModeSplit,
 		Strategy:       StrategyFast,
 		Quality:        "1080p",
-		CacheDir:       "./cache",
 		Concurrency:    runtime.NumCPU(),
 		AutoDetect:     "ai",
 		TargetDuration: 30,
 		HWAccel:        "auto",
 		ShowProgress:   true,
 
+		CacheConfig: CacheConfig{
+			Dir:     "./cache",
+			NoCache: false,
+		},
 		ShortsConfig: ShortsConfig{
 			Enabled:      true,
 			Style:        "blur",
@@ -409,6 +434,7 @@ func (c Config) MarshalJSON() ([]byte, error) {
 	type Alias Config
 	aux := struct {
 		Alias
+		Cache     *CacheConfig         `json:"cache,omitempty"`
 		Shorts    ShortsConfig         `json:"shorts"`
 		Subtitles SubtitleConfig       `json:"subtitles"`
 		Audio     AudioConfig          `json:"audio"`
@@ -420,6 +446,9 @@ func (c Config) MarshalJSON() ([]byte, error) {
 		Shorts:    cCopy.ShortsConfig,
 		Subtitles: cCopy.SubtitleConfig,
 		Audio:     cCopy.AudioConfig,
+	}
+	if cCopy.CacheConfig.Dir != "" || cCopy.CacheConfig.NoCache || cCopy.CacheConfig.Clean || cCopy.CacheConfig.CleanDays > 0 {
+		aux.Cache = &cCopy.CacheConfig
 	}
 	if cCopy.BrandingConfig.Watermark.Path != "" || cCopy.BrandingConfig.OverlayText.Text != "" {
 		aux.Branding = &cCopy.BrandingConfig
@@ -439,6 +468,7 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 	type Alias Config
 	aux := &struct {
 		// Polymorphic child configs
+		RawCache     json.RawMessage `json:"cache"`
 		RawShorts    json.RawMessage `json:"shorts"`
 		RawSubtitles json.RawMessage `json:"subtitles"`
 		RawSubtitle  json.RawMessage `json:"subtitle"`
@@ -449,6 +479,10 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 		RawSocial    json.RawMessage `json:"social"`
 
 		// Flat legacy fields
+		CacheDir         *string  `json:"cache_dir"`
+		NoCache          *bool    `json:"no_cache"`
+		CleanCache       *bool    `json:"clean_cache"`
+		CleanDays        *int     `json:"clean_days"`
 		ShortsStyle      *string  `json:"shorts_style"`
 		FaceTracking     *bool    `json:"face_tracking"`
 		PanDuration      *float64 `json:"pan_duration"`
@@ -486,6 +520,34 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 
 	if err := json.Unmarshal(data, aux); err != nil {
 		return err
+	}
+
+	// 0. Cache parsing
+	if len(aux.RawCache) > 0 {
+		var cc CacheConfig
+		if err := json.Unmarshal(aux.RawCache, &cc); err == nil {
+			c.CacheConfig = cc
+			c.CacheDir = cc.Dir
+			c.NoCache = cc.NoCache
+			c.CleanCache = cc.Clean
+			c.CleanDays = cc.CleanDays
+		}
+	}
+	if aux.CacheDir != nil {
+		c.CacheDir = *aux.CacheDir
+		c.CacheConfig.Dir = *aux.CacheDir
+	}
+	if aux.NoCache != nil {
+		c.NoCache = *aux.NoCache
+		c.CacheConfig.NoCache = *aux.NoCache
+	}
+	if aux.CleanCache != nil {
+		c.CleanCache = *aux.CleanCache
+		c.CacheConfig.Clean = *aux.CleanCache
+	}
+	if aux.CleanDays != nil {
+		c.CleanDays = *aux.CleanDays
+		c.CacheConfig.CleanDays = *aux.CleanDays
 	}
 
 	// 1. Shorts parsing

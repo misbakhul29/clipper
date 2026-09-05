@@ -202,6 +202,12 @@ func TestStructuredAndLegacyConfigParsing(t *testing.T) {
 	t.Run("Parse Structured Nested JSON", func(t *testing.T) {
 		jsonData := []byte(`{
 			"input": "test.mp4",
+			"cache": {
+				"dir": "/custom/cache",
+				"no_cache": true,
+				"clean": false,
+				"clean_days": 5
+			},
 			"shorts": {
 				"enabled": true,
 				"style": "smart-crop",
@@ -256,6 +262,9 @@ func TestStructuredAndLegacyConfigParsing(t *testing.T) {
 			t.Fatalf("Unmarshal error: %v", err)
 		}
 
+		if cfg.CacheDir != "/custom/cache" || !cfg.NoCache || cfg.CleanDays != 5 {
+			t.Errorf("Cache syncing failed: %+v", cfg.CacheConfig)
+		}
 		if !cfg.Shorts || cfg.ShortsStyle != "smart-crop" || !cfg.FaceTracking || cfg.PanDuration != 1.2 {
 			t.Errorf("Shorts syncing failed: %+v", cfg.ShortsConfig)
 		}
@@ -282,6 +291,9 @@ func TestStructuredAndLegacyConfigParsing(t *testing.T) {
 	t.Run("Parse Flat Legacy JSON", func(t *testing.T) {
 		jsonData := []byte(`{
 			"input": "legacy.mp4",
+			"cache_dir": "/legacy/cache",
+			"no_cache": true,
+			"clean_days": 10,
 			"shorts": true,
 			"shorts_style": "blur",
 			"subtitles": true,
@@ -306,6 +318,9 @@ func TestStructuredAndLegacyConfigParsing(t *testing.T) {
 			t.Fatalf("Unmarshal error: %v", err)
 		}
 
+		if cfg.CacheConfig.Dir != "/legacy/cache" || !cfg.CacheConfig.NoCache || cfg.CacheConfig.CleanDays != 10 {
+			t.Errorf("CacheConfig flat sync failed: %+v", cfg.CacheConfig)
+		}
 		if !cfg.ShortsConfig.Enabled || cfg.ShortsConfig.Style != "blur" {
 			t.Errorf("ShortsConfig flat sync failed: %+v", cfg.ShortsConfig)
 		}
