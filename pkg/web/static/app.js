@@ -320,6 +320,8 @@ async function runAutoDetect() {
     ai_router: 'gemini',
     model: getGlobalSegmentModel(),
     api_key: getGlobalApiKey(),
+    ai_configs: getGlobalAIConfigs(),
+    routing_models: getGlobalRoutingModels(),
     shorts: document.getElementById('cfgShorts').checked,
     target_duration: durVal
   };
@@ -638,6 +640,8 @@ async function startClippingJob() {
     thumbnail_count: 1,
     hwaccel: document.getElementById('cfgHwaccel')?.value || 'auto',
     output_dir: document.getElementById('cfgOutputDir')?.value.trim() || './clips',
+    ai_configs: getGlobalAIConfigs(),
+    routing_models: getGlobalRoutingModels(),
     ai_config: {
       api_key: getGlobalApiKey(),
       segment_model: getGlobalSegmentModel(),
@@ -743,10 +747,16 @@ function applyImportedConfig(cfg) {
   if (typeof cfg.extract_thumbnail === 'boolean' && document.getElementById('cfgThumbnail')) document.getElementById('cfgThumbnail').checked = cfg.extract_thumbnail;
   if (cfg.hwaccel && document.getElementById('cfgHwaccel')) document.getElementById('cfgHwaccel').value = cfg.hwaccel;
 
+  if (Array.isArray(cfg.ai_configs) && cfg.ai_configs.length > 0) {
+    localStorage.setItem('clipper_ai_configs', JSON.stringify(cfg.ai_configs));
+  }
+  if (cfg.routing_models && typeof cfg.routing_models === 'object') {
+    localStorage.setItem('clipper_routing_models', JSON.stringify(cfg.routing_models));
+  }
   if (cfg.ai_config?.api_key) {
     localStorage.setItem('clipper_gemini_api_key', cfg.ai_config.api_key);
-    initGlobalAISettings();
   }
+  initGlobalAISettings();
 }
 
 function exportCurrentConfig() {
@@ -777,6 +787,8 @@ function exportCurrentConfig() {
     extract_thumbnail: document.getElementById('cfgThumbnail')?.checked || false,
     thumbnail_count: 1,
     hwaccel: document.getElementById('cfgHwaccel')?.value || 'auto',
+    ai_configs: getGlobalAIConfigs(),
+    routing_models: getGlobalRoutingModels(),
     segments: segments
   };
 
@@ -1037,59 +1049,221 @@ function saveSubtitleStudio() {
   renderSegments();
 }
 
-// Global AI Settings State & LocalStorage Persistence
-function sanitizeGeminiModelName(model, isSTT) {
-  if (!model || model === 'gemini-3.8-flash' || model === 'gemini-3.5-transcribe' || model === 'default') {
-    return 'gemini-3.6-flash';
+// Global Multi-AI Settings State & LocalStorage Persistence
+function getGlobalAIConfigs() {
+  try {
+    const raw = localStorage.getItem('clipper_ai_configs');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (e) {
+    console.error('Error reading clipper_ai_configs:', e);
   }
-  return model;
+
+  // Fallback default profile if legacy key exists
+  const legacyKey = localStorage.getItem('clipper_gemini_api_key') || '';
+  return [
+    {
+      id: 'default_gemini',
+      router: 'gemini',
+      model: 'gemini-2.5-flash',
+      key: legacyKey
+    }
+  ];
+}
+
+function getGlobalRoutingModels() {
+  try {
+    const raw = localStorage.getItem('clipper_routing_models');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') return parsed;
+    }
+  } catch (e) {
+    console.error('Error reading clipper_routing_models:', e);
+  }
+
+  return {
+    segment: 'default_gemini',
+    sub_translate: 'default_gemini',
+    metadata: 'default_gemini'
+  };
 }
 
 function initGlobalAISettings() {
-  const savedKey = localStorage.getItem('clipper_gemini_api_key') || '';
-  let savedSegModel = sanitizeGeminiModelName(localStorage.getItem('clipper_ai_segment_model'), false);
-  let savedSTTModel = sanitizeGeminiModelName(localStorage.getItem('clipper_ai_stt_model'), true);
-
-  // Migrate in localStorage
-  localStorage.setItem('clipper_ai_segment_model', savedSegModel);
-  localStorage.setItem('clipper_ai_stt_model', savedSTTModel);
-
-  const keyEl = document.getElementById('globalAIApiKey');
-  const segEl = document.getElementById('globalAISegmentModel');
-  const sttEl = document.getElementById('globalAISTTModel');
-
-  if (keyEl) keyEl.value = savedKey;
-  if (segEl) segEl.value = savedSegModel;
-  if (sttEl) sttEl.value = savedSTTModel;
+  renderAIProfilesList();
+  populateRoutingDropdowns();
 }
 
-function getGlobalApiKey() {
-  return (document.getElementById('globalAIApiKey')?.value || localStorage.getItem('clipper_gemini_api_key') || '').trim();
+function renderAIProfilesList() {
+  const container = document.getElementById('aiProfilesListContainer');
+  if (!container) return;
+
+  const profiles = getGlobalAIConfigs();
+  if (profiles.length === 0) {
+    container.innerHTML = `<div style="padding:10px; font-size:11.5px; color:var(--text-muted); text-align:center; background:var(--bg-surface); border-radius:6px;">No AI profiles configured yet. Click '+ Add Profile' to connect an AI key.</div>`;
+    return;
+  }
+
+  container.innerHTML = profiles.map(p => {
+    const maskedKey = p.key ? (p.key.length > 8 ? p.key.substring(0, 4) + '...' + p.key.substring(p.key.length - 4) : '••••••••') : '(no key)';
+    return `
+      <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-surface); border:1px solid var(--border); padding:8px 12px; border-radius:6px;">
+        <div style="display:flex; flex-direction:column; gap:2px;">
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span style="font-size:12px; font-weight:700; color:var(--text-primary); font-family:var(--font-mono);">${escapeHtml(p.id)}</span>
+            <span style="font-size:10px; padding:1px 5px; border-radius:4px; background:var(--bg-surface-elevated); border:1px solid var(--border); text-transform:uppercase; color:var(--accent-primary); font-weight:600;">${escapeHtml(p.router)}</span>
+          </div>
+          <span style="font-size:11px; color:var(--text-muted); font-family:var(--font-mono);">${escapeHtml(p.model || 'auto')} • ${escapeHtml(maskedKey)}</span>
+        </div>
+        <button class="btn btn-secondary btn-icon" style="height:26px; width:26px; padding:0; color:#ef4444;" onclick="deleteAIProfile('${escapeHtml(p.id)}')" title="Delete Profile">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px; height:14px;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+        </button>
+      </div>
+    `;
+  }).join('');
 }
 
-function getGlobalSegmentModel() {
-  const m = document.getElementById('globalAISegmentModel')?.value || localStorage.getItem('clipper_ai_segment_model') || 'gemini-3.6-flash';
-  return sanitizeGeminiModelName(m, false);
+function populateRoutingDropdowns() {
+  const profiles = getGlobalAIConfigs();
+  const routing = getGlobalRoutingModels();
+
+  const segSelect = document.getElementById('routeSegmentProfile');
+  const subSelect = document.getElementById('routeSubtitleProfile');
+  const metaSelect = document.getElementById('routeMetadataProfile');
+
+  const optionsHTML = profiles.map(p => `
+    <option value="${escapeHtml(p.id)}">${escapeHtml(p.id)} (${p.router}: ${p.model || 'default'})</option>
+  `).join('');
+
+  if (segSelect) {
+    segSelect.innerHTML = optionsHTML;
+    if (routing.segment && profiles.some(p => p.id === routing.segment)) {
+      segSelect.value = routing.segment;
+    } else if (profiles.length > 0) {
+      segSelect.value = profiles[0].id;
+    }
+  }
+
+  if (subSelect) {
+    subSelect.innerHTML = optionsHTML;
+    if (routing.sub_translate && profiles.some(p => p.id === routing.sub_translate)) {
+      subSelect.value = routing.sub_translate;
+    } else if (profiles.length > 0) {
+      subSelect.value = profiles[0].id;
+    }
+  }
+
+  if (metaSelect) {
+    metaSelect.innerHTML = optionsHTML;
+    if (routing.metadata && profiles.some(p => p.id === routing.metadata)) {
+      metaSelect.value = routing.metadata;
+    } else if (profiles.length > 0) {
+      metaSelect.value = profiles[0].id;
+    }
+  }
 }
 
-function getGlobalSTTModel() {
-  const m = document.getElementById('globalAISTTModel')?.value || localStorage.getItem('clipper_ai_stt_model') || 'gemini-3.6-flash';
-  return sanitizeGeminiModelName(m, true);
-}
-
-function saveGlobalAISettings() {
-  const key = document.getElementById('globalAIApiKey')?.value.trim() || '';
-  const segModel = sanitizeGeminiModelName(document.getElementById('globalAISegmentModel')?.value, false);
-  const sttModel = sanitizeGeminiModelName(document.getElementById('globalAISTTModel')?.value, true);
-
-  localStorage.setItem('clipper_gemini_api_key', key);
-  localStorage.setItem('clipper_ai_segment_model', segModel);
-  localStorage.setItem('clipper_ai_stt_model', sttModel);
+function saveGlobalAIRouting() {
+  const routing = {
+    segment: document.getElementById('routeSegmentProfile')?.value || '',
+    sub_translate: document.getElementById('routeSubtitleProfile')?.value || '',
+    metadata: document.getElementById('routeMetadataProfile')?.value || ''
+  };
+  localStorage.setItem('clipper_routing_models', JSON.stringify(routing));
 
   const statusEl = document.getElementById('aiModalStatus');
   if (statusEl) {
-    statusEl.textContent = key ? 'API key & model saved locally ✓' : 'Ready (No API key set)';
+    statusEl.textContent = 'Task routing updated ✓';
   }
+}
+
+function showAddProfileForm() {
+  const form = document.getElementById('addProfileFormBox');
+  if (form) {
+    form.style.display = 'block';
+    document.getElementById('newProfID').value = 'gemini_' + (getGlobalAIConfigs().length + 1);
+    document.getElementById('newProfRouter').value = 'gemini';
+    document.getElementById('newProfModel').value = 'gemini-2.5-flash';
+    document.getElementById('newProfKey').value = '';
+  }
+}
+
+function hideAddProfileForm() {
+  const form = document.getElementById('addProfileFormBox');
+  if (form) form.style.display = 'none';
+}
+
+function onProfileRouterChange() {
+  const router = document.getElementById('newProfRouter')?.value || 'gemini';
+  const modelInput = document.getElementById('newProfModel');
+  if (!modelInput) return;
+  if (router === 'gemini') modelInput.value = 'gemini-2.5-flash';
+  else if (router === 'deepseek') modelInput.value = 'deepseek-chat';
+  else if (router === 'openrouter') modelInput.value = 'openrouter/free';
+  else if (router === 'openai') modelInput.value = 'gpt-4o-mini';
+}
+
+function saveNewProfile() {
+  const id = document.getElementById('newProfID')?.value.trim() || '';
+  const router = document.getElementById('newProfRouter')?.value || 'gemini';
+  const model = document.getElementById('newProfModel')?.value.trim() || '';
+  const key = document.getElementById('newProfKey')?.value.trim() || '';
+
+  if (!id) {
+    alert('Please enter a unique Profile ID.');
+    return;
+  }
+
+  const profiles = getGlobalAIConfigs();
+  const existingIdx = profiles.findIndex(p => p.id.toLowerCase() === id.toLowerCase());
+  const newProfile = { id, router, model, key };
+
+  if (existingIdx >= 0) {
+    profiles[existingIdx] = newProfile;
+  } else {
+    profiles.push(newProfile);
+  }
+
+  localStorage.setItem('clipper_ai_configs', JSON.stringify(profiles));
+  if (router === 'gemini' && key) {
+    localStorage.setItem('clipper_gemini_api_key', key);
+  }
+
+  hideAddProfileForm();
+  initGlobalAISettings();
+  saveGlobalAIRouting();
+
+  const statusEl = document.getElementById('aiModalStatus');
+  if (statusEl) {
+    statusEl.textContent = `Profile '${id}' saved ✓`;
+  }
+}
+
+function deleteAIProfile(id) {
+  let profiles = getGlobalAIConfigs();
+  profiles = profiles.filter(p => p.id !== id);
+  localStorage.setItem('clipper_ai_configs', JSON.stringify(profiles));
+  initGlobalAISettings();
+  saveGlobalAIRouting();
+}
+
+function getGlobalApiKey() {
+  const profiles = getGlobalAIConfigs();
+  if (profiles.length > 0 && profiles[0].key) return profiles[0].key;
+  return (localStorage.getItem('clipper_gemini_api_key') || '').trim();
+}
+
+function getGlobalSegmentModel() {
+  const routing = getGlobalRoutingModels();
+  const profiles = getGlobalAIConfigs();
+  const target = profiles.find(p => p.id === routing.segment);
+  return target?.model || 'gemini-2.5-flash';
+}
+
+function getGlobalSTTModel() {
+  return 'gemini-2.5-flash';
 }
 
 function toggleGlobalAISettings() {
@@ -1100,7 +1274,7 @@ function toggleGlobalAISettings() {
 }
 
 function closeGlobalAISettings() {
-  saveGlobalAISettings();
+  saveGlobalAIRouting();
   const modal = document.getElementById('aiModal');
   if (modal) modal.style.display = 'none';
 }

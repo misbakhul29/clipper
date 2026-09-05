@@ -92,6 +92,8 @@ type Config struct {
 	HWAccel          string              `json:"hwaccel"`           // Hardware acceleration mode: 'auto', 'nvenc', 'videotoolbox', 'qsv', 'vaapi', 'amf', 'cpu'
 	ShowProgress     bool                `json:"show_progress"`     // Display interactive terminal progress bar during rendering (default: true)
 	AIConfig         ai.AIProviderConfig `json:"ai_config"`        // Multi-provider AI config
+	AIConfigs        []ai.AIProfile      `json:"ai_configs,omitempty"`     // Multi-AI account profiles list
+	RoutingModels    ai.AIRoutingModels  `json:"routing_models,omitempty"` // Task-to-Profile ID routing mapping
 	OpenRouterKey string              `json:"openrouter_key"`// OpenRouter API Key (legacy fallback)
 	AIModel       string              `json:"ai_model"`     // AI model name (legacy fallback)
 	DryRun        bool                `json:"dry_run"`      // Dry-run mode: analyze & preview commands without rendering video
@@ -111,14 +113,26 @@ type Config struct {
 	Segments      []Segment           `json:"segments"`
 }
 
-// UnmarshalJSON implements custom unmarshaling to support "subtitles", "subtitle", "burn_subtitles", and "burn_subtitle" config keys.
+// GetAITaskConfig resolves the effective AIProviderConfig for a given task (e.g. "segment", "sub_translate", "metadata").
+func (c *Config) GetAITaskConfig(task string) ai.AIProviderConfig {
+	fallback := c.AIConfig
+	fallback.IsShorts = c.Shorts
+	if c.TargetDuration > 0 {
+		fallback.TargetDuration = c.TargetDuration
+	}
+	return ai.ResolveTaskConfig(task, c.AIConfigs, c.RoutingModels, fallback)
+}
+
+// UnmarshalJSON implements custom unmarshaling to support "subtitles", "subtitle", "burn_subtitles", and "burn_subtitle" config keys,
+// as well as flexible parsing for single vs array ai_config.
 func (c *Config) UnmarshalJSON(data []byte) error {
 	type Alias Config
 	aux := &struct {
-		Subtitles     *bool `json:"subtitles"`
-		Subtitle      *bool `json:"subtitle"`
-		BurnSubtitles *bool `json:"burn_subtitles"`
-		BurnSubtitle  *bool `json:"burn_subtitle"`
+		Subtitles     *bool           `json:"subtitles"`
+		Subtitle      *bool           `json:"subtitle"`
+		BurnSubtitles *bool           `json:"burn_subtitles"`
+		BurnSubtitle  *bool           `json:"burn_subtitle"`
+		RawAIConfig   json.RawMessage `json:"ai_config"`
 		*Alias
 	}{
 		Alias: (*Alias)(c),
@@ -136,6 +150,22 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 		c.Subtitles = *aux.BurnSubtitles
 	} else if aux.BurnSubtitle != nil {
 		c.Subtitles = *aux.BurnSubtitle
+	}
+
+	// Handle ai_config if provided as array []AIProfile
+	if len(aux.RawAIConfig) > 0 {
+		trimmed := strings.TrimSpace(string(aux.RawAIConfig))
+		if strings.HasPrefix(trimmed, "[") {
+			var profiles []ai.AIProfile
+			if err := json.Unmarshal(aux.RawAIConfig, &profiles); err == nil && len(profiles) > 0 {
+				c.AIConfigs = append(c.AIConfigs, profiles...)
+			}
+		} else if strings.HasPrefix(trimmed, "{") {
+			var single ai.AIProviderConfig
+			if err := json.Unmarshal(aux.RawAIConfig, &single); err == nil {
+				c.AIConfig = single
+			}
+		}
 	}
 
 	return nil

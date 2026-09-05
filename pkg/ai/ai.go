@@ -15,6 +15,64 @@ type AIProviderConfig struct {
 	TargetDuration float64 `json:"target_duration"` // Desired clip duration in seconds (0 = auto)
 }
 
+// AIProfile represents a single AI account connection and model configuration.
+type AIProfile struct {
+	ID     string `json:"id"`
+	Router string `json:"router"` // "gemini", "openrouter", "deepseek", "openai"
+	Model  string `json:"model"`
+	Key    string `json:"key"`
+}
+
+// AIRoutingModels maps task names to AIProfile IDs in a One-to-Many relationship.
+type AIRoutingModels struct {
+	Segment      string `json:"segment,omitempty"`       // ID of AIProfile for segment detection
+	SubTranslate string `json:"sub_translate,omitempty"`  // ID of AIProfile for subtitle cleaning & translation
+	Metadata     string `json:"metadata,omitempty"`       // ID of AIProfile for social metadata & hooks
+}
+
+// ResolveTaskConfig resolves an AIProviderConfig for a given task using profiles and routing mappings.
+func ResolveTaskConfig(task string, profiles []AIProfile, routing AIRoutingModels, fallback AIProviderConfig) AIProviderConfig {
+	var targetProfileID string
+	switch strings.ToLower(strings.TrimSpace(task)) {
+	case "segment", "segments", "highlight", "highlights":
+		targetProfileID = routing.Segment
+	case "sub_translate", "subtitles", "subtitle", "transcribe", "translation":
+		targetProfileID = routing.SubTranslate
+	case "metadata", "social", "meta":
+		targetProfileID = routing.Metadata
+	}
+
+	// 1. Look up profile by targetProfileID
+	if targetProfileID != "" && len(profiles) > 0 {
+		for _, p := range profiles {
+			if strings.EqualFold(strings.TrimSpace(p.ID), targetProfileID) {
+				return AIProviderConfig{
+					APIRouter:      p.Router,
+					APIKey:         p.Key,
+					Model:          p.Model,
+					IsShorts:       fallback.IsShorts,
+					TargetDuration: fallback.TargetDuration,
+				}
+			}
+		}
+	}
+
+	// 2. If no targetProfileID or not found, but profiles exist, use first profile
+	if len(profiles) > 0 {
+		first := profiles[0]
+		return AIProviderConfig{
+			APIRouter:      first.Router,
+			APIKey:         first.Key,
+			Model:          first.Model,
+			IsShorts:       fallback.IsShorts,
+			TargetDuration: fallback.TargetDuration,
+		}
+	}
+
+	// 3. Fall back to fallback AIProviderConfig
+	return fallback
+}
+
 // AnalyzeHighlightsMultiProvider analyzes timestamped transcript entries using the configured AI provider.
 func AnalyzeHighlightsMultiProvider(entries []transcriber.SubtitleEntry, aiCfg AIProviderConfig, targetLang string) ([]AIHighlight, error) {
 	router := strings.ToLower(strings.TrimSpace(aiCfg.APIRouter))

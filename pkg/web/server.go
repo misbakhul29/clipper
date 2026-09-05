@@ -605,6 +605,8 @@ type clipRequestPayload struct {
 	TargetDuration   float64           `json:"target_duration"`
 	HWAccel          string            `json:"hwaccel"`
 	Concurrency      int               `json:"concurrency"`
+	AIConfigs        []ai.AIProfile      `json:"ai_configs,omitempty"`
+	RoutingModels    ai.AIRoutingModels  `json:"routing_models,omitempty"`
 	AIConfig         *struct {
 		APIKey       string `json:"api_key"`
 		SegmentModel string `json:"segment_model"`
@@ -613,14 +615,16 @@ type clipRequestPayload struct {
 }
 
 type autoDetectRequestPayload struct {
-	InputFile      string  `json:"input_file"`
-	Mode           string  `json:"mode"` // "ai", "silence", "scene"
-	AIRouter       string  `json:"ai_router"`
-	APIKey         string  `json:"api_key"`
-	Model          string  `json:"model"`
-	UseWhisper     bool    `json:"use_whisper"`
-	Shorts         bool    `json:"shorts"`
-	TargetDuration float64 `json:"target_duration"`
+	InputFile      string              `json:"input_file"`
+	Mode           string              `json:"mode"` // "ai", "silence", "scene"
+	AIRouter       string              `json:"ai_router"`
+	APIKey         string              `json:"api_key"`
+	Model          string              `json:"model"`
+	AIConfigs      []ai.AIProfile      `json:"ai_configs,omitempty"`
+	RoutingModels  ai.AIRoutingModels  `json:"routing_models,omitempty"`
+	UseWhisper     bool                `json:"use_whisper"`
+	Shorts         bool                `json:"shorts"`
+	TargetDuration float64             `json:"target_duration"`
 }
 
 type autoDetectResponse struct {
@@ -660,6 +664,11 @@ func (s *Server) handleAutoDetect(w http.ResponseWriter, r *http.Request) {
 	cfg.Shorts = req.Shorts
 	cfg.UseWhisper = req.UseWhisper
 	cfg.AIConfig.TargetDuration = req.TargetDuration
+
+	if len(req.AIConfigs) > 0 {
+		cfg.AIConfigs = req.AIConfigs
+	}
+	cfg.RoutingModels = req.RoutingModels
 
 	if req.AIRouter != "" {
 		cfg.AIConfig.APIRouter = req.AIRouter
@@ -751,6 +760,11 @@ func (s *Server) handleClip(w http.ResponseWriter, r *http.Request) {
 		cfg.TargetDuration = req.TargetDuration
 		cfg.AIConfig.TargetDuration = req.TargetDuration
 	}
+	if len(req.AIConfigs) > 0 {
+		cfg.AIConfigs = req.AIConfigs
+	}
+	cfg.RoutingModels = req.RoutingModels
+
 	if req.AIRouter != "" {
 		cfg.AIConfig.APIRouter = req.AIRouter
 	}
