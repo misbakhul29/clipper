@@ -20,5 +20,10 @@ Every time a new feature is implemented or a major bug is fixed in this reposito
    - Always create an annotated Git tag matching the version:
      `git tag -a vX.Y.Z -m "vX.Y.Z: <Summary>"`
 
-3. **Workflow Rule**:
+3. **UI & Design Rules (Strict No-Emoji Policy)**:
+   - **Never use emojis in any UI**: All Web UI headers, labels, buttons, cards, modals, select dropdown options, alerts, and CLI interactive wizard prompts/logs must NEVER contain emojis.
+   - Use clean, modern SVG icons and professional typography instead of emojis in all user interfaces.
+   - Emojis are strictly prohibited in the UI layer.
+
+4. **Workflow Rule**:
    - Proactively assist the user with `git add`, `git commit`, and `git tag` upon finishing feature implementations or major bug fixes.

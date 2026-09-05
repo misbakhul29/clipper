@@ -115,33 +115,81 @@ func ParseVTT(content string) ([]SubtitleEntry, error) {
 	return entries, nil
 }
 
-// findMatchingSubtitleFile searches dir for a .vtt file matching target language code precisely.
-// It avoids false positive substring matches (e.g. video ID 'xid1sE8lEec' matching '*id*.vtt' for Russian '.ru.vtt').
-func findMatchingSubtitleFile(dir, lang string) string {
+// CleanSubtitleGarbage strips narrator markers, bracketed sound effects, speaker tags, and stray noise characters ([]{}><+=).
+func CleanSubtitleGarbage(text string) string {
+	if text == "" {
+		return ""
+	}
+
+	// 1. Remove HTML tags
+	text = htmlTagRegex.ReplaceAllString(text, "")
+	text = html.UnescapeString(text)
+
+	// 2. Remove [...] brackets (e.g. [Musik], [Tawa], [Applause])
+	text = sdhBracketRegex.ReplaceAllString(text, " ")
+
+	// 3. Remove {...} brackets
+	braceRegex := regexp.MustCompile(`(?s)\{.*?\}`)
+	text = braceRegex.ReplaceAllString(text, " ")
+
+	// 4. Remove common parenthetical sound effects (e.g. (Music), (Laughter), (Tawa), (Applause))
+	parenNoiseRegex := regexp.MustCompile(`(?i)\((?:music|musik|laughter|tawa|applause|cheers|cheering|tepuk tangan|suara|sound|crowd|snicker|sigh|gasp)[^\)]*\)`)
+	text = parenNoiseRegex.ReplaceAllString(text, " ")
+
+	// 5. Remove speaker / narrator prefixes (e.g. "Narrator: ", "Host: ", "John: ", "Speaker 1: ")
+	speakerPrefixRegex := regexp.MustCompile(`(?i)^(?:narrator|host|speaker\s*\d*|presenter|voiceover|pengisi suara|[A-Za-z0-9_\-]{2,15})\s*:\s*`)
+	text = speakerPrefixRegex.ReplaceAllString(text, "")
+
+	// 6. Remove stray noise symbols like ><+= {} [] \ ^ ~ * |
+	straySymbolRegex := regexp.MustCompile(`[><\+\=\{\}\[\]\~\|\^\\]+`)
+	text = straySymbolRegex.ReplaceAllString(text, " ")
+
+	// 7. Normalize spaces and non-breaking spaces
+	text = strings.ReplaceAll(text, "\u00a0", " ")
+	text = strings.ReplaceAll(text, "\n", " ")
+	text = strings.TrimSpace(text)
+	for strings.Contains(text, "  ") {
+		text = strings.ReplaceAll(text, "  ", " ")
+	}
+
+	return text
+}
+
+// findExactMatchingSubtitleFile searches dir for a .vtt file matching target language code precisely.
+func findExactMatchingSubtitleFile(dir, lang string) string {
 	matches, err := filepath.Glob(filepath.Join(dir, "*.vtt"))
 	if err != nil || len(matches) == 0 {
 		return ""
 	}
 
 	targetLang := strings.ToLower(strings.TrimSpace(lang))
+	if targetLang == "" {
+		return ""
+	}
 
-	// 1. Precise check for requested language (e.g. .id.vtt, .id-orig.vtt, .id-auto.vtt)
-	if targetLang != "" {
-		for _, m := range matches {
-			base := strings.ToLower(filepath.Base(m))
-			parts := strings.Split(base, ".")
-			if len(parts) >= 3 {
-				fileLang := parts[len(parts)-2]
-				if fileLang == targetLang || strings.HasPrefix(fileLang, targetLang+"-") || strings.HasPrefix(fileLang, targetLang+"_") {
-					return m
-				}
+	for _, m := range matches {
+		base := strings.ToLower(filepath.Base(m))
+		parts := strings.Split(base, ".")
+		if len(parts) >= 3 {
+			fileLang := parts[len(parts)-2]
+			if fileLang == targetLang || strings.HasPrefix(fileLang, targetLang+"-") || strings.HasPrefix(fileLang, targetLang+"_") {
+				return m
 			}
 		}
 	}
+	return ""
+}
 
-	// 2. Fallback check for English if requested language was not found
+// findMatchingSubtitleFile searches dir for a .vtt file matching target language code precisely, or falling back to English.
+func findMatchingSubtitleFile(dir, lang string) string {
+	if exact := findExactMatchingSubtitleFile(dir, lang); exact != "" {
+		return exact
+	}
+
+	targetLang := strings.ToLower(strings.TrimSpace(lang))
+	// Fallback check for English if requested language was not found
 	if targetLang != "en" {
-		for _, m := range matches {
+		for _, m := range matchesInDir(dir, "*.vtt") {
 			base := strings.ToLower(filepath.Base(m))
 			parts := strings.Split(base, ".")
 			if len(parts) >= 3 {
@@ -154,6 +202,11 @@ func findMatchingSubtitleFile(dir, lang string) string {
 	}
 
 	return ""
+}
+
+func matchesInDir(dir, pattern string) []string {
+	matches, _ := filepath.Glob(filepath.Join(dir, pattern))
+	return matches
 }
 
 // findAnySubtitleFile returns the first available .vtt subtitle file found in dir.
@@ -174,64 +227,89 @@ func findAnySubtitleFile(dir string) string {
 
 // FetchSubtitles attempts to retrieve subtitles for a YouTube URL or local file path.
 func FetchSubtitles(inputStr, outputDir, lang string) ([]SubtitleEntry, error) {
+	entries, _, err := FetchSubtitlesWithLangInfo(inputStr, outputDir, lang)
+	return entries, err
+}
+
+// FetchSubtitlesWithLangInfo retrieves subtitles and reports whether the matched subtitle is the requested target language.
+func FetchSubtitlesWithLangInfo(inputStr, outputDir, lang string) ([]SubtitleEntry, bool, error) {
 	if outputDir == "" {
 		outputDir = "./cache"
+	}
+
+	targetLang := strings.ToLower(strings.TrimSpace(lang))
+	if targetLang == "" {
+		targetLang = "id"
 	}
 
 	// Case 1: Input is already a local .vtt or .srt file
 	if (strings.HasSuffix(inputStr, ".vtt") || strings.HasSuffix(inputStr, ".srt")) && fileExists(inputStr) {
 		data, err := os.ReadFile(inputStr)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
-		return ParseVTT(string(data))
+		entries, err := ParseVTT(string(data))
+		return entries, true, err
 	}
 
 	// Case 1b: Check for local companion .srt or .vtt file next to the video
 	baseNoExt := strings.TrimSuffix(inputStr, filepath.Ext(inputStr))
 	if fileExists(baseNoExt + ".srt") {
 		if data, err := os.ReadFile(baseNoExt + ".srt"); err == nil && len(data) > 0 {
-			return ParseVTT(string(data))
+			entries, err := ParseVTT(string(data))
+			return entries, true, err
 		}
 	}
 	if fileExists(baseNoExt + ".vtt") {
 		if data, err := os.ReadFile(baseNoExt + ".vtt"); err == nil && len(data) > 0 {
-			return ParseVTT(string(data))
+			entries, err := ParseVTT(string(data))
+			return entries, true, err
 		}
 	}
 
 	videoCacheDir := downloader.GetVideoCacheDir(outputDir, inputStr)
 	if err := os.MkdirAll(videoCacheDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create subtitle cache dir: %w", err)
+		return nil, false, fmt.Errorf("failed to create subtitle cache dir: %w", err)
 	}
 
-	// Case 2: Check cache for existing matching subtitle file (exact, en fallback, or any cached sub)
-	if match := findMatchingSubtitleFile(videoCacheDir, lang); match != "" {
+	// Case 2: Check cache for exact target language subtitle file
+	if match := findExactMatchingSubtitleFile(videoCacheDir, targetLang); match != "" {
 		data, err := os.ReadFile(match)
 		if err == nil && len(data) > 0 {
-			return ParseVTT(string(data))
+			entries, pErr := ParseVTT(string(data))
+			if pErr == nil {
+				return entries, true, nil
+			}
 		}
 	}
+
+	// Case 2b: Check cache for any cached fallback subtitle file
 	if match := findAnySubtitleFile(videoCacheDir); match != "" {
 		data, err := os.ReadFile(match)
 		if err == nil && len(data) > 0 {
-			return ParseVTT(string(data))
+			entries, pErr := ParseVTT(string(data))
+			if pErr == nil {
+				// Check if the matched file is actually target language
+				base := strings.ToLower(filepath.Base(match))
+				isTarget := strings.Contains(base, "."+targetLang+".") || strings.Contains(base, "."+targetLang+"-")
+				return entries, isTarget, nil
+			}
 		}
 	}
 
 	binPath := findYtDlpBinary()
 	if binPath == "" {
-		return nil, fmt.Errorf("yt-dlp binary required to fetch YouTube subtitles")
+		return nil, false, fmt.Errorf("yt-dlp binary required to fetch YouTube subtitles")
 	}
 
 	subTemplate := filepath.Join(videoCacheDir, "sub_%(id)s")
 
-	// Attempt 1: Try requested target language
-	if lang != "" {
+	// Attempt 1: Try requested target language on YouTube
+	if targetLang != "" {
 		args := []string{
 			"--write-auto-sub",
 			"--write-sub",
-			"--sub-lang", fmt.Sprintf("%s,%s-*", lang, lang),
+			"--sub-lang", fmt.Sprintf("%s,%s-*", targetLang, targetLang),
 			"--sub-format", "vtt",
 			"--skip-download",
 			"-o", subTemplate,
@@ -240,15 +318,18 @@ func FetchSubtitles(inputStr, outputDir, lang string) ([]SubtitleEntry, error) {
 		cmd := exec.Command(binPath, args...)
 		_ = cmd.Run()
 
-		if match := findMatchingSubtitleFile(videoCacheDir, lang); match != "" {
+		if match := findExactMatchingSubtitleFile(videoCacheDir, targetLang); match != "" {
 			data, err := os.ReadFile(match)
 			if err == nil && len(data) > 0 {
-				return ParseVTT(string(data))
+				entries, pErr := ParseVTT(string(data))
+				if pErr == nil {
+					return entries, true, nil
+				}
 			}
 		}
 	}
 
-	// Attempt 2: Try original video track (.*-orig, e.g. ko-orig, ja-orig, en-orig) to avoid 429 machine-translation errors
+	// Attempt 2: Try original video track (.*-orig, e.g. ko-orig, ja-orig, en-orig)
 	argsOrig := []string{
 		"--write-auto-sub",
 		"--write-sub",
@@ -264,15 +345,20 @@ func FetchSubtitles(inputStr, outputDir, lang string) ([]SubtitleEntry, error) {
 	if match := findAnySubtitleFile(videoCacheDir); match != "" {
 		data, err := os.ReadFile(match)
 		if err == nil && len(data) > 0 {
-			return ParseVTT(string(data))
+			entries, pErr := ParseVTT(string(data))
+			if pErr == nil {
+				base := strings.ToLower(filepath.Base(match))
+				isTarget := strings.Contains(base, "."+targetLang+".") || strings.Contains(base, "."+targetLang+"-")
+				return entries, isTarget, nil
+			}
 		}
 	}
 
-	// Attempt 3: Try English or fallback
+	// Attempt 3: Try English or general fallback
 	argsFallback := []string{
 		"--write-auto-sub",
 		"--write-sub",
-		"--sub-lang", "en,en-*",
+		"--sub-lang", "en,en-*,all",
 		"--sub-format", "vtt",
 		"--skip-download",
 		"-o", subTemplate,
@@ -281,20 +367,29 @@ func FetchSubtitles(inputStr, outputDir, lang string) ([]SubtitleEntry, error) {
 	cmdFallback := exec.Command(binPath, argsFallback...)
 	_ = cmdFallback.Run()
 
-	match := findMatchingSubtitleFile(videoCacheDir, lang)
-	if match == "" {
-		match = findAnySubtitleFile(videoCacheDir)
-	}
-	if match == "" {
-		return nil, fmt.Errorf("no matching subtitle file found for language '%s' (input: %s)", lang, inputStr)
-	}
-
-	data, err := os.ReadFile(match)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read downloaded subtitle file '%s': %w", match, err)
+	if match := findExactMatchingSubtitleFile(videoCacheDir, targetLang); match != "" {
+		data, err := os.ReadFile(match)
+		if err == nil && len(data) > 0 {
+			entries, pErr := ParseVTT(string(data))
+			if pErr == nil {
+				return entries, true, nil
+			}
+		}
 	}
 
-	return ParseVTT(string(data))
+	if match := findAnySubtitleFile(videoCacheDir); match != "" {
+		data, err := os.ReadFile(match)
+		if err == nil && len(data) > 0 {
+			entries, pErr := ParseVTT(string(data))
+			if pErr == nil {
+				base := strings.ToLower(filepath.Base(match))
+				isTarget := strings.Contains(base, "."+targetLang+".") || strings.Contains(base, "."+targetLang+"-")
+				return entries, isTarget, nil
+			}
+		}
+	}
+
+	return nil, false, fmt.Errorf("no matching subtitle file found for language '%s' (input: %s)", targetLang, inputStr)
 }
 
 func findYtDlpBinary() string {

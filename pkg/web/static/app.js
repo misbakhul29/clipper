@@ -320,6 +320,8 @@ async function runAutoDetect() {
     ai_router: 'gemini',
     model: getGlobalSegmentModel(),
     api_key: getGlobalApiKey(),
+    ai_configs: getGlobalAIConfigs(),
+    routing_models: getGlobalRoutingModels(),
     shorts: document.getElementById('cfgShorts').checked,
     target_duration: durVal
   };
@@ -638,6 +640,8 @@ async function startClippingJob() {
     thumbnail_count: 1,
     hwaccel: document.getElementById('cfgHwaccel')?.value || 'auto',
     output_dir: document.getElementById('cfgOutputDir')?.value.trim() || './clips',
+    ai_configs: getGlobalAIConfigs(),
+    routing_models: getGlobalRoutingModels(),
     ai_config: {
       api_key: getGlobalApiKey(),
       segment_model: getGlobalSegmentModel(),
@@ -724,59 +728,132 @@ function applyImportedConfig(cfg) {
   if (cfg.output_dir && document.getElementById('cfgOutputDir')) document.getElementById('cfgOutputDir').value = cfg.output_dir;
   if (cfg.strategy && document.getElementById('cfgStrategy')) document.getElementById('cfgStrategy').value = cfg.strategy;
   if (cfg.quality && document.getElementById('cfgQuality')) document.getElementById('cfgQuality').value = cfg.quality;
-  if (typeof cfg.shorts === 'boolean' && document.getElementById('cfgShorts')) document.getElementById('cfgShorts').checked = cfg.shorts;
-  if (cfg.shorts_style && document.getElementById('cfgShortsStyle')) document.getElementById('cfgShortsStyle').value = cfg.shorts_style;
-  if (typeof cfg.subtitles === 'boolean' && document.getElementById('cfgBurnSubs')) document.getElementById('cfgBurnSubs').checked = cfg.subtitles;
-  if (cfg.sub_preset && document.getElementById('cfgSubPreset')) document.getElementById('cfgSubPreset').value = cfg.sub_preset;
-  if (cfg.sub_sdh_mode && document.getElementById('cfgSubSDHMode')) document.getElementById('cfgSubSDHMode').value = cfg.sub_sdh_mode;
-  if (typeof cfg.loudnorm === 'boolean' && document.getElementById('cfgLoudnorm')) document.getElementById('cfgLoudnorm').checked = cfg.loudnorm;
-  if (typeof cfg.jump_cut === 'boolean' && document.getElementById('cfgJumpCut')) document.getElementById('cfgJumpCut').checked = cfg.jump_cut;
-  if (cfg.jump_cut_min_silence && document.getElementById('cfgJumpCutMinSil')) document.getElementById('cfgJumpCutMinSil').value = cfg.jump_cut_min_silence;
-  if (cfg.jump_cut_margin && document.getElementById('cfgJumpCutMargin')) document.getElementById('cfgJumpCutMargin').value = cfg.jump_cut_margin;
-  if (cfg.jump_cut_noise && document.getElementById('cfgJumpCutNoise')) document.getElementById('cfgJumpCutNoise').value = cfg.jump_cut_noise;
-  if (cfg.watermark && document.getElementById('cfgWatermark')) document.getElementById('cfgWatermark').value = cfg.watermark;
-  if (cfg.watermark_pos && document.getElementById('cfgWatermarkPos')) document.getElementById('cfgWatermarkPos').value = cfg.watermark_pos;
-  if (cfg.overlay_text && document.getElementById('cfgOverlayText')) document.getElementById('cfgOverlayText').value = cfg.overlay_text;
-  if (cfg.text_pos && document.getElementById('cfgTextPos')) document.getElementById('cfgTextPos').value = cfg.text_pos;
-  if (cfg.font_color && document.getElementById('cfgFontColor')) document.getElementById('cfgFontColor').value = cfg.font_color;
-  if (typeof cfg.generate_metadata === 'boolean' && document.getElementById('cfgMetadata')) document.getElementById('cfgMetadata').checked = cfg.generate_metadata;
-  if (typeof cfg.extract_thumbnail === 'boolean' && document.getElementById('cfgThumbnail')) document.getElementById('cfgThumbnail').checked = cfg.extract_thumbnail;
+
+  // Shorts (nested or flat)
+  const isShorts = cfg.shorts?.enabled ?? (typeof cfg.shorts === 'boolean' ? cfg.shorts : undefined);
+  if (typeof isShorts === 'boolean' && document.getElementById('cfgShorts')) document.getElementById('cfgShorts').checked = isShorts;
+  const shortsStyle = cfg.shorts?.style || cfg.shorts_style;
+  if (shortsStyle && document.getElementById('cfgShortsStyle')) document.getElementById('cfgShortsStyle').value = shortsStyle;
+
+  // Subtitles (nested or flat)
+  const isSubs = cfg.subtitles?.enabled ?? (typeof cfg.subtitles === 'boolean' ? cfg.subtitles : undefined);
+  if (typeof isSubs === 'boolean' && document.getElementById('cfgBurnSubs')) document.getElementById('cfgBurnSubs').checked = isSubs;
+  const subPreset = cfg.subtitles?.preset || cfg.sub_preset;
+  if (subPreset && document.getElementById('cfgSubPreset')) document.getElementById('cfgSubPreset').value = subPreset;
+  const subSDHMode = cfg.subtitles?.sdh_mode || cfg.sub_sdh_mode;
+  if (subSDHMode && document.getElementById('cfgSubSDHMode')) document.getElementById('cfgSubSDHMode').value = subSDHMode;
+
+  // Audio (nested or flat)
+  const isLoudnorm = cfg.audio?.loudnorm?.enabled ?? (typeof cfg.loudnorm === 'boolean' ? cfg.loudnorm : undefined);
+  if (typeof isLoudnorm === 'boolean' && document.getElementById('cfgLoudnorm')) document.getElementById('cfgLoudnorm').checked = isLoudnorm;
+
+  const isJumpCut = cfg.audio?.jump_cut?.enabled ?? (typeof cfg.jump_cut === 'boolean' ? cfg.jump_cut : undefined);
+  if (typeof isJumpCut === 'boolean' && document.getElementById('cfgJumpCut')) document.getElementById('cfgJumpCut').checked = isJumpCut;
+
+  const jcMinSil = cfg.audio?.jump_cut?.min_silence ?? cfg.jump_cut_min_silence;
+  if (jcMinSil !== undefined && document.getElementById('cfgJumpCutMinSil')) document.getElementById('cfgJumpCutMinSil').value = jcMinSil;
+
+  const jcMargin = cfg.audio?.jump_cut?.margin ?? cfg.jump_cut_margin;
+  if (jcMargin !== undefined && document.getElementById('cfgJumpCutMargin')) document.getElementById('cfgJumpCutMargin').value = jcMargin;
+
+  const jcNoise = cfg.audio?.jump_cut?.noise ?? cfg.jump_cut_noise;
+  if (jcNoise !== undefined && document.getElementById('cfgJumpCutNoise')) document.getElementById('cfgJumpCutNoise').value = jcNoise;
+
+  // Branding (nested or flat)
+  const watermarkPath = cfg.branding?.watermark?.path || cfg.watermark;
+  if (watermarkPath && document.getElementById('cfgWatermark')) document.getElementById('cfgWatermark').value = watermarkPath;
+  const watermarkPos = cfg.branding?.watermark?.position || cfg.watermark_pos;
+  if (watermarkPos && document.getElementById('cfgWatermarkPos')) document.getElementById('cfgWatermarkPos').value = watermarkPos;
+
+  const overlayText = cfg.branding?.overlay_text?.text || cfg.overlay_text;
+  if (overlayText && document.getElementById('cfgOverlayText')) document.getElementById('cfgOverlayText').value = overlayText;
+  const textPos = cfg.branding?.overlay_text?.position || cfg.text_pos;
+  if (textPos && document.getElementById('cfgTextPos')) document.getElementById('cfgTextPos').value = textPos;
+  const fontColor = cfg.branding?.overlay_text?.font_color || cfg.font_color;
+  if (fontColor && document.getElementById('cfgFontColor')) document.getElementById('cfgFontColor').value = fontColor;
+
+  // Social (nested or flat)
+  const genMeta = cfg.social?.generate_metadata ?? (typeof cfg.generate_metadata === 'boolean' ? cfg.generate_metadata : undefined);
+  if (typeof genMeta === 'boolean' && document.getElementById('cfgMetadata')) document.getElementById('cfgMetadata').checked = genMeta;
+
+  const extThumb = cfg.social?.extract_thumbnail ?? (typeof cfg.extract_thumbnail === 'boolean' ? cfg.extract_thumbnail : undefined);
+  if (typeof extThumb === 'boolean' && document.getElementById('cfgThumbnail')) document.getElementById('cfgThumbnail').checked = extThumb;
+
   if (cfg.hwaccel && document.getElementById('cfgHwaccel')) document.getElementById('cfgHwaccel').value = cfg.hwaccel;
 
+  // Multi-AI configs & routing
+  if (Array.isArray(cfg.ai_configs) && cfg.ai_configs.length > 0) {
+    localStorage.setItem('clipper_ai_configs', JSON.stringify(cfg.ai_configs));
+  }
+  if (cfg.routing_models && typeof cfg.routing_models === 'object') {
+    localStorage.setItem('clipper_routing_models', JSON.stringify(cfg.routing_models));
+  }
   if (cfg.ai_config?.api_key) {
     localStorage.setItem('clipper_gemini_api_key', cfg.ai_config.api_key);
-    initGlobalAISettings();
   }
+  initGlobalAISettings();
 }
 
 function exportCurrentConfig() {
   const currentConfig = {
-    input_file: document.getElementById('videoSource')?.value.trim() || '',
+    input: document.getElementById('videoSource')?.value.trim() || '',
     output_dir: document.getElementById('cfgOutputDir')?.value.trim() || './clips',
     output: document.getElementById('cfgOutputFile')?.value.trim() || 'merged_highlight.mp4',
     mode: document.getElementById('cfgMode')?.value || 'split',
     strategy: document.getElementById('cfgStrategy')?.value || 'fast',
-    shorts: document.getElementById('cfgShorts')?.checked || false,
-    shorts_style: document.getElementById('cfgShortsStyle')?.value || 'smart-crop',
     quality: document.getElementById('cfgQuality')?.value || 'best',
-    subtitles: document.getElementById('cfgBurnSubs')?.checked || false,
-    sub_preset: document.getElementById('cfgSubPreset')?.value || 'hormozi',
-    sub_sdh_mode: document.getElementById('cfgSubSDHMode')?.value || 'strip',
-    sub_emoji: true,
-    loudnorm: document.getElementById('cfgLoudnorm')?.checked || false,
-    jump_cut: document.getElementById('cfgJumpCut')?.checked || false,
-    jump_cut_min_silence: parseFloat(document.getElementById('cfgJumpCutMinSil')?.value || '1.0'),
-    jump_cut_margin: parseFloat(document.getElementById('cfgJumpCutMargin')?.value || '0.2'),
-    jump_cut_noise: parseFloat(document.getElementById('cfgJumpCutNoise')?.value || '-30'),
-    watermark: document.getElementById('cfgWatermark')?.value.trim() || '',
-    watermark_pos: document.getElementById('cfgWatermarkPos')?.value || 'top-right',
-    overlay_text: document.getElementById('cfgOverlayText')?.value.trim() || '',
-    text_pos: document.getElementById('cfgTextPos')?.value || 'bottom-center',
-    font_color: document.getElementById('cfgFontColor')?.value || 'white',
-    generate_metadata: document.getElementById('cfgMetadata')?.checked || false,
-    extract_thumbnail: document.getElementById('cfgThumbnail')?.checked || false,
-    thumbnail_count: 1,
     hwaccel: document.getElementById('cfgHwaccel')?.value || 'auto',
+    concurrency: 8,
+    cache: {
+      dir: './cache'
+    },
+    shorts: {
+      enabled: document.getElementById('cfgShorts')?.checked || false,
+      style: document.getElementById('cfgShortsStyle')?.value || 'blur',
+      face_tracking: true,
+      pan_duration: 0.8
+    },
+    subtitles: {
+      enabled: document.getElementById('cfgBurnSubs')?.checked || false,
+      preset: document.getElementById('cfgSubPreset')?.value || 'hormozi',
+      style: 'karaoke',
+      sdh_mode: document.getElementById('cfgSubSDHMode')?.value || 'strip',
+      emoji: true,
+      font_size: 48,
+      translate_lang: 'id'
+    },
+    audio: {
+      loudnorm: {
+        enabled: document.getElementById('cfgLoudnorm')?.checked || false,
+        i: -14,
+        lra: 7,
+        tp: -2
+      },
+      jump_cut: {
+        enabled: document.getElementById('cfgJumpCut')?.checked || false,
+        min_silence: parseFloat(document.getElementById('cfgJumpCutMinSil')?.value || '1.0'),
+        margin: parseFloat(document.getElementById('cfgJumpCutMargin')?.value || '0.2'),
+        noise: parseFloat(document.getElementById('cfgJumpCutNoise')?.value || '-30')
+      }
+    },
+    branding: {
+      watermark: {
+        path: document.getElementById('cfgWatermark')?.value.trim() || '',
+        position: document.getElementById('cfgWatermarkPos')?.value || 'top-right'
+      },
+      overlay_text: {
+        text: document.getElementById('cfgOverlayText')?.value.trim() || '',
+        position: document.getElementById('cfgTextPos')?.value || 'bottom-center',
+        font_color: document.getElementById('cfgFontColor')?.value || 'white'
+      }
+    },
+    social: {
+      generate_metadata: document.getElementById('cfgMetadata')?.checked || false,
+      extract_thumbnail: document.getElementById('cfgThumbnail')?.checked || false,
+      thumbnail_count: 1
+    },
+    ai_configs: getGlobalAIConfigs(),
+    routing_models: getGlobalRoutingModels(),
     segments: segments
   };
 
@@ -1037,59 +1114,221 @@ function saveSubtitleStudio() {
   renderSegments();
 }
 
-// Global AI Settings State & LocalStorage Persistence
-function sanitizeGeminiModelName(model, isSTT) {
-  if (!model || model === 'gemini-3.8-flash' || model === 'gemini-3.5-transcribe' || model === 'default') {
-    return 'gemini-3.6-flash';
+// Global Multi-AI Settings State & LocalStorage Persistence
+function getGlobalAIConfigs() {
+  try {
+    const raw = localStorage.getItem('clipper_ai_configs');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (e) {
+    console.error('Error reading clipper_ai_configs:', e);
   }
-  return model;
+
+  // Fallback default profile if legacy key exists
+  const legacyKey = localStorage.getItem('clipper_gemini_api_key') || '';
+  return [
+    {
+      id: 'default_gemini',
+      router: 'gemini',
+      model: 'gemini-2.5-flash',
+      key: legacyKey
+    }
+  ];
+}
+
+function getGlobalRoutingModels() {
+  try {
+    const raw = localStorage.getItem('clipper_routing_models');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') return parsed;
+    }
+  } catch (e) {
+    console.error('Error reading clipper_routing_models:', e);
+  }
+
+  return {
+    segment: 'default_gemini',
+    sub_translate: 'default_gemini',
+    metadata: 'default_gemini'
+  };
 }
 
 function initGlobalAISettings() {
-  const savedKey = localStorage.getItem('clipper_gemini_api_key') || '';
-  let savedSegModel = sanitizeGeminiModelName(localStorage.getItem('clipper_ai_segment_model'), false);
-  let savedSTTModel = sanitizeGeminiModelName(localStorage.getItem('clipper_ai_stt_model'), true);
-
-  // Migrate in localStorage
-  localStorage.setItem('clipper_ai_segment_model', savedSegModel);
-  localStorage.setItem('clipper_ai_stt_model', savedSTTModel);
-
-  const keyEl = document.getElementById('globalAIApiKey');
-  const segEl = document.getElementById('globalAISegmentModel');
-  const sttEl = document.getElementById('globalAISTTModel');
-
-  if (keyEl) keyEl.value = savedKey;
-  if (segEl) segEl.value = savedSegModel;
-  if (sttEl) sttEl.value = savedSTTModel;
+  renderAIProfilesList();
+  populateRoutingDropdowns();
 }
 
-function getGlobalApiKey() {
-  return (document.getElementById('globalAIApiKey')?.value || localStorage.getItem('clipper_gemini_api_key') || '').trim();
+function renderAIProfilesList() {
+  const container = document.getElementById('aiProfilesListContainer');
+  if (!container) return;
+
+  const profiles = getGlobalAIConfigs();
+  if (profiles.length === 0) {
+    container.innerHTML = `<div style="padding:10px; font-size:11.5px; color:var(--text-muted); text-align:center; background:var(--bg-surface); border-radius:6px;">No AI profiles configured yet. Click '+ Add Profile' to connect an AI key.</div>`;
+    return;
+  }
+
+  container.innerHTML = profiles.map(p => {
+    const maskedKey = p.key ? (p.key.length > 8 ? p.key.substring(0, 4) + '...' + p.key.substring(p.key.length - 4) : '••••••••') : '(no key)';
+    return `
+      <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-surface); border:1px solid var(--border); padding:8px 12px; border-radius:6px;">
+        <div style="display:flex; flex-direction:column; gap:2px;">
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span style="font-size:12px; font-weight:700; color:var(--text-primary); font-family:var(--font-mono);">${escapeHtml(p.id)}</span>
+            <span style="font-size:10px; padding:1px 5px; border-radius:4px; background:var(--bg-surface-elevated); border:1px solid var(--border); text-transform:uppercase; color:var(--accent-primary); font-weight:600;">${escapeHtml(p.router)}</span>
+          </div>
+          <span style="font-size:11px; color:var(--text-muted); font-family:var(--font-mono);">${escapeHtml(p.model || 'auto')} • ${escapeHtml(maskedKey)}</span>
+        </div>
+        <button class="btn btn-secondary btn-icon" style="height:26px; width:26px; padding:0; color:#ef4444;" onclick="deleteAIProfile('${escapeHtml(p.id)}')" title="Delete Profile">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px; height:14px;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+        </button>
+      </div>
+    `;
+  }).join('');
 }
 
-function getGlobalSegmentModel() {
-  const m = document.getElementById('globalAISegmentModel')?.value || localStorage.getItem('clipper_ai_segment_model') || 'gemini-3.6-flash';
-  return sanitizeGeminiModelName(m, false);
+function populateRoutingDropdowns() {
+  const profiles = getGlobalAIConfigs();
+  const routing = getGlobalRoutingModels();
+
+  const segSelect = document.getElementById('routeSegmentProfile');
+  const subSelect = document.getElementById('routeSubtitleProfile');
+  const metaSelect = document.getElementById('routeMetadataProfile');
+
+  const optionsHTML = profiles.map(p => `
+    <option value="${escapeHtml(p.id)}">${escapeHtml(p.id)} (${p.router}: ${p.model || 'default'})</option>
+  `).join('');
+
+  if (segSelect) {
+    segSelect.innerHTML = optionsHTML;
+    if (routing.segment && profiles.some(p => p.id === routing.segment)) {
+      segSelect.value = routing.segment;
+    } else if (profiles.length > 0) {
+      segSelect.value = profiles[0].id;
+    }
+  }
+
+  if (subSelect) {
+    subSelect.innerHTML = optionsHTML;
+    if (routing.sub_translate && profiles.some(p => p.id === routing.sub_translate)) {
+      subSelect.value = routing.sub_translate;
+    } else if (profiles.length > 0) {
+      subSelect.value = profiles[0].id;
+    }
+  }
+
+  if (metaSelect) {
+    metaSelect.innerHTML = optionsHTML;
+    if (routing.metadata && profiles.some(p => p.id === routing.metadata)) {
+      metaSelect.value = routing.metadata;
+    } else if (profiles.length > 0) {
+      metaSelect.value = profiles[0].id;
+    }
+  }
 }
 
-function getGlobalSTTModel() {
-  const m = document.getElementById('globalAISTTModel')?.value || localStorage.getItem('clipper_ai_stt_model') || 'gemini-3.6-flash';
-  return sanitizeGeminiModelName(m, true);
-}
-
-function saveGlobalAISettings() {
-  const key = document.getElementById('globalAIApiKey')?.value.trim() || '';
-  const segModel = sanitizeGeminiModelName(document.getElementById('globalAISegmentModel')?.value, false);
-  const sttModel = sanitizeGeminiModelName(document.getElementById('globalAISTTModel')?.value, true);
-
-  localStorage.setItem('clipper_gemini_api_key', key);
-  localStorage.setItem('clipper_ai_segment_model', segModel);
-  localStorage.setItem('clipper_ai_stt_model', sttModel);
+function saveGlobalAIRouting() {
+  const routing = {
+    segment: document.getElementById('routeSegmentProfile')?.value || '',
+    sub_translate: document.getElementById('routeSubtitleProfile')?.value || '',
+    metadata: document.getElementById('routeMetadataProfile')?.value || ''
+  };
+  localStorage.setItem('clipper_routing_models', JSON.stringify(routing));
 
   const statusEl = document.getElementById('aiModalStatus');
   if (statusEl) {
-    statusEl.textContent = key ? 'API key & model saved locally ✓' : 'Ready (No API key set)';
+    statusEl.textContent = 'Task routing updated';
   }
+}
+
+function showAddProfileForm() {
+  const form = document.getElementById('addProfileFormBox');
+  if (form) {
+    form.style.display = 'block';
+    document.getElementById('newProfID').value = 'gemini_' + (getGlobalAIConfigs().length + 1);
+    document.getElementById('newProfRouter').value = 'gemini';
+    document.getElementById('newProfModel').value = 'gemini-2.5-flash';
+    document.getElementById('newProfKey').value = '';
+  }
+}
+
+function hideAddProfileForm() {
+  const form = document.getElementById('addProfileFormBox');
+  if (form) form.style.display = 'none';
+}
+
+function onProfileRouterChange() {
+  const router = document.getElementById('newProfRouter')?.value || 'gemini';
+  const modelInput = document.getElementById('newProfModel');
+  if (!modelInput) return;
+  if (router === 'gemini') modelInput.value = 'gemini-2.5-flash';
+  else if (router === 'deepseek') modelInput.value = 'deepseek-chat';
+  else if (router === 'openrouter') modelInput.value = 'openrouter/free';
+  else if (router === 'openai') modelInput.value = 'gpt-4o-mini';
+}
+
+function saveNewProfile() {
+  const id = document.getElementById('newProfID')?.value.trim() || '';
+  const router = document.getElementById('newProfRouter')?.value || 'gemini';
+  const model = document.getElementById('newProfModel')?.value.trim() || '';
+  const key = document.getElementById('newProfKey')?.value.trim() || '';
+
+  if (!id) {
+    alert('Please enter a unique Profile ID.');
+    return;
+  }
+
+  const profiles = getGlobalAIConfigs();
+  const existingIdx = profiles.findIndex(p => p.id.toLowerCase() === id.toLowerCase());
+  const newProfile = { id, router, model, key };
+
+  if (existingIdx >= 0) {
+    profiles[existingIdx] = newProfile;
+  } else {
+    profiles.push(newProfile);
+  }
+
+  localStorage.setItem('clipper_ai_configs', JSON.stringify(profiles));
+  if (router === 'gemini' && key) {
+    localStorage.setItem('clipper_gemini_api_key', key);
+  }
+
+  hideAddProfileForm();
+  initGlobalAISettings();
+  saveGlobalAIRouting();
+
+  const statusEl = document.getElementById('aiModalStatus');
+  if (statusEl) {
+    statusEl.textContent = `Profile '${id}' saved`;
+  }
+}
+
+function deleteAIProfile(id) {
+  let profiles = getGlobalAIConfigs();
+  profiles = profiles.filter(p => p.id !== id);
+  localStorage.setItem('clipper_ai_configs', JSON.stringify(profiles));
+  initGlobalAISettings();
+  saveGlobalAIRouting();
+}
+
+function getGlobalApiKey() {
+  const profiles = getGlobalAIConfigs();
+  if (profiles.length > 0 && profiles[0].key) return profiles[0].key;
+  return (localStorage.getItem('clipper_gemini_api_key') || '').trim();
+}
+
+function getGlobalSegmentModel() {
+  const routing = getGlobalRoutingModels();
+  const profiles = getGlobalAIConfigs();
+  const target = profiles.find(p => p.id === routing.segment);
+  return target?.model || 'gemini-2.5-flash';
+}
+
+function getGlobalSTTModel() {
+  return 'gemini-2.5-flash';
 }
 
 function toggleGlobalAISettings() {
@@ -1100,7 +1339,7 @@ function toggleGlobalAISettings() {
 }
 
 function closeGlobalAISettings() {
-  saveGlobalAISettings();
+  saveGlobalAIRouting();
   const modal = document.getElementById('aiModal');
   if (modal) modal.style.display = 'none';
 }
@@ -1144,7 +1383,7 @@ async function fetchStorageStats() {
       if (clipsSizeEl) clipsSizeEl.textContent = data.clips_size_str;
       if (clipsCountEl) clipsCountEl.textContent = `${data.clips_count} rendered clips found`;
 
-      if (statusEl) statusEl.textContent = 'Storage data up to date ✓';
+      if (statusEl) statusEl.textContent = 'Storage data up to date';
     } else {
       if (statusEl) statusEl.textContent = 'Failed to fetch storage stats';
     }
@@ -1154,30 +1393,27 @@ async function fetchStorageStats() {
 }
 
 async function purgeCache() {
-  if (!confirm('Are you sure you want to purge all downloaded video and audio cache files?')) return;
   const btn = document.getElementById('purgeCacheBtn');
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:4px;"></span> Purging...';
+    btn.innerHTML = '<span class="spinner" style="width:14px; height:14px; margin-right:4px;"></span> Purging...';
   }
+
   try {
     const res = await fetch('/api/storage/clean-cache', { method: 'POST' });
     let data = {};
     const text = await res.text();
     try {
       data = JSON.parse(text);
-    } catch {
-      data = { error: text || `HTTP ${res.status} ${res.statusText}` };
-    }
+    } catch (_) {}
 
-    if (!res.ok) {
-      alert(data.error || 'Failed to purge cache.');
-      return;
+    if (res.ok) {
+      await fetchStorageStats();
+      alert(`Cache successfully cleaned!\nRemoved ${data.removed_count || 0} temporary file(s) (${data.freed_space || '0 B'}).`);
+    } else {
+      alert(`Failed to clean cache: ${data.error || text || 'Unknown error'}`);
     }
-    fetchStorageStats();
-    alert(data.message || 'Cache purged successfully.');
   } catch (err) {
-    console.error('Purge cache error:', err);
     alert('Failed to connect to Clipper server. Please make sure `./clipper serve :8000` is running in your terminal.');
   } finally {
     if (btn) {
@@ -1188,7 +1424,7 @@ async function purgeCache() {
 }
 
 async function cleanAllClips() {
-  if (!confirm('⚠️ Are you sure you want to DELETE ALL rendered clips and thumbnails? This action cannot be undone.')) return;
+  if (!confirm('Are you sure you want to DELETE ALL rendered clips and thumbnails? This action cannot be undone.')) return;
   const btn = document.getElementById('cleanClipsBtn');
   const topBtn = document.getElementById('clearAllClipsBtn');
   if (btn) btn.disabled = true;

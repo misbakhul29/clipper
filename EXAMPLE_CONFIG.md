@@ -51,10 +51,74 @@ Skenario paling umum untuk mengunduh video YouTube, menganalisis klip menarik me
   "hwaccel": "auto",
   "show_progress": true,
   "dry_run": false,
-  "ai_config": {
-    "api_router": "gemini",
-    "api_key": "YOUR_GEMINI_API_KEY",
-    "model": "gemini-2.5-flash"
+  "ai_configs": [
+    {
+      "id": "gemini_acc_1",
+      "router": "gemini",
+      "model": "gemini-2.5-flash",
+      "key": "YOUR_GEMINI_API_KEY_1"
+    },
+    {
+      "id": "gemini_acc_2",
+      "router": "gemini",
+      "model": "gemini-2.5-flash",
+      "key": "YOUR_GEMINI_API_KEY_2"
+    },
+    {
+      "id": "deepseek_main",
+      "router": "deepseek",
+      "model": "deepseek-chat",
+      "key": "YOUR_DEEPSEEK_API_KEY"
+    }
+  ],
+  "routing_models": {
+    "segment": "gemini_acc_1",
+    "sub_translate": "gemini_acc_1",
+    "metadata": "deepseek_main"
+  }
+}
+```
+
+> 💡 **Fitur One-to-Many Routing:** Satu profil akun (misal `"gemini_acc_1"`) bisa dipakai untuk beberapa tugas sekaligus (misal `segment` dan `sub_translate`), atau setiap tugas diarahkan ke akun/model yang berbeda.
+
+---
+
+## ⚡ 1b. Multi-AI Account Profiles & One-to-Many Task Routing
+
+Konfigurasi ini memisahkan akun API untuk tiap tugas agar kuota token tidak cepat habis:
+
+```json
+{
+  "input": "https://www.youtube.com/watch?v=xid1sE8lEec",
+  "output_dir": "./output_multi_ai",
+  "shorts": true,
+  "subtitles": true,
+  "translate_lang": "id",
+  "generate_metadata": true,
+  "ai_configs": [
+    {
+      "id": "gemini_acc_1",
+      "router": "gemini",
+      "model": "gemini-2.5-flash",
+      "key": "YOUR_GEMINI_API_KEY_1"
+    },
+    {
+      "id": "gemini_acc_2",
+      "router": "gemini",
+      "model": "gemini-2.5-flash",
+      "key": "YOUR_GEMINI_API_KEY_2"
+    },
+    {
+      "id": "openrouter_free",
+      "router": "openrouter",
+      "model": "openrouter/free",
+      "key": "YOUR_OPENROUTER_API_KEY"
+    }
+  ],
+  "routing_models": {
+    "segment": "gemini_acc_1",
+    "sub_translate": "gemini_acc_2",
+    "metadata": "openrouter_free"
   }
 }
 ```

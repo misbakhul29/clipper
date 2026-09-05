@@ -15,6 +15,64 @@ type AIProviderConfig struct {
 	TargetDuration float64 `json:"target_duration"` // Desired clip duration in seconds (0 = auto)
 }
 
+// AIProfile represents a single AI account connection and model configuration.
+type AIProfile struct {
+	ID     string `json:"id"`
+	Router string `json:"router"` // "gemini", "openrouter", "deepseek", "openai"
+	Model  string `json:"model"`
+	Key    string `json:"key"`
+}
+
+// AIRoutingModels maps task names to AIProfile IDs in a One-to-Many relationship.
+type AIRoutingModels struct {
+	Segment      string `json:"segment,omitempty"`       // ID of AIProfile for segment detection
+	SubTranslate string `json:"sub_translate,omitempty"`  // ID of AIProfile for subtitle cleaning & translation
+	Metadata     string `json:"metadata,omitempty"`       // ID of AIProfile for social metadata & hooks
+}
+
+// ResolveTaskConfig resolves an AIProviderConfig for a given task using profiles and routing mappings.
+func ResolveTaskConfig(task string, profiles []AIProfile, routing AIRoutingModels, fallback AIProviderConfig) AIProviderConfig {
+	var targetProfileID string
+	switch strings.ToLower(strings.TrimSpace(task)) {
+	case "segment", "segments", "highlight", "highlights":
+		targetProfileID = routing.Segment
+	case "sub_translate", "subtitles", "subtitle", "transcribe", "translation":
+		targetProfileID = routing.SubTranslate
+	case "metadata", "social", "meta":
+		targetProfileID = routing.Metadata
+	}
+
+	// 1. Look up profile by targetProfileID
+	if targetProfileID != "" && len(profiles) > 0 {
+		for _, p := range profiles {
+			if strings.EqualFold(strings.TrimSpace(p.ID), targetProfileID) {
+				return AIProviderConfig{
+					APIRouter:      p.Router,
+					APIKey:         p.Key,
+					Model:          p.Model,
+					IsShorts:       fallback.IsShorts,
+					TargetDuration: fallback.TargetDuration,
+				}
+			}
+		}
+	}
+
+	// 2. If no targetProfileID or not found, but profiles exist, use first profile
+	if len(profiles) > 0 {
+		first := profiles[0]
+		return AIProviderConfig{
+			APIRouter:      first.Router,
+			APIKey:         first.Key,
+			Model:          first.Model,
+			IsShorts:       fallback.IsShorts,
+			TargetDuration: fallback.TargetDuration,
+		}
+	}
+
+	// 3. Fall back to fallback AIProviderConfig
+	return fallback
+}
+
 // AnalyzeHighlightsMultiProvider analyzes timestamped transcript entries using the configured AI provider.
 func AnalyzeHighlightsMultiProvider(entries []transcriber.SubtitleEntry, aiCfg AIProviderConfig, targetLang string) ([]AIHighlight, error) {
 	router := strings.ToLower(strings.TrimSpace(aiCfg.APIRouter))
@@ -30,22 +88,71 @@ func AnalyzeHighlightsMultiProvider(entries []transcriber.SubtitleEntry, aiCfg A
 	return nil, fmt.Errorf("unsupported api_router '%s', must be 'openrouter', 'gemini', 'deepseek', or 'openai'", aiCfg.APIRouter)
 }
 
-// TranslateSubtitlesMultiProvider translates subtitle cues to targetLang using the configured AI provider.
-func TranslateSubtitlesMultiProvider(entries []transcriber.SubtitleEntry, aiCfg AIProviderConfig, targetLang string) ([]transcriber.SubtitleEntry, error) {
-	if len(entries) == 0 || targetLang == "" {
+// RefineAndTranslateSubtitlesMultiProvider cleans and optionally translates subtitle cues using the configured AI provider.
+func RefineAndTranslateSubtitlesMultiProvider(entries []transcriber.SubtitleEntry, aiCfg AIProviderConfig, targetLang string, needTranslation bool) ([]transcriber.SubtitleEntry, error) {
+	if len(entries) == 0 {
 		return entries, nil
 	}
+
+	sysPrompt, userPrompt := BuildSubtitleRefineAndTranslatePrompts(entries, targetLang, needTranslation)
 	router := strings.ToLower(strings.TrimSpace(aiCfg.APIRouter))
-	if router == "" || router == "openrouter" {
-		return TranslateSubtitlesOpenRouter(entries, aiCfg.APIKey, aiCfg.Model, targetLang)
-	} else if router == "gemini" {
-		return TranslateSubtitlesGemini(entries, aiCfg.APIKey, aiCfg.Model, targetLang)
+
+	var content string
+	var err error
+
+	if router == "gemini" {
+		resolvedKey, resolvedModel, rErr := resolveAPIKeyAndModel(aiCfg.APIKey, "GEMINI_API_KEY", aiCfg.Model, "gemini-3.6-flash", "Gemini")
+		if rErr == nil {
+			content, err = callGeminiGenerate(resolvedKey, resolvedModel, sysPrompt+"\n\n"+userPrompt)
+		} else {
+			err = rErr
+		}
 	} else if router == "deepseek" {
-		return TranslateSubtitlesDeepSeek(entries, aiCfg.APIKey, aiCfg.Model, targetLang)
+		resolvedKey, resolvedModel, rErr := resolveAPIKeyAndModel(aiCfg.APIKey, "DEEPSEEK_API_KEY", aiCfg.Model, "deepseek-chat", "DeepSeek")
+		if rErr == nil {
+			content, err = callOpenAICompatibleCompletions(deepSeekEndpoint, resolvedKey, resolvedModel, sysPrompt, userPrompt)
+		} else {
+			err = rErr
+		}
 	} else if router == "openai" || router == "codex" {
-		return TranslateSubtitlesOpenAI(entries, aiCfg.APIKey, aiCfg.Model, targetLang)
+		resolvedKey, resolvedModel, rErr := resolveAPIKeyAndModel(aiCfg.APIKey, "OPENAI_API_KEY", aiCfg.Model, "gpt-4o-mini", "OpenAI")
+		if rErr == nil {
+			content, err = callOpenAICompatibleCompletions(openAIEndpoint, resolvedKey, resolvedModel, sysPrompt, userPrompt)
+		} else {
+			err = rErr
+		}
+	} else {
+		// default OpenRouter
+		resolvedKey, resolvedModel, rErr := resolveAPIKeyAndModel(aiCfg.APIKey, "OPENROUTER_API_KEY", aiCfg.Model, "openrouter/free", "OpenRouter")
+		if rErr == nil {
+			content, err = callOpenAICompatibleCompletions(openRouterEndpoint, resolvedKey, resolvedModel, sysPrompt, userPrompt)
+		} else {
+			err = rErr
+		}
 	}
-	return entries, fmt.Errorf("unsupported api_router '%s', must be 'openrouter', 'gemini', 'deepseek', or 'openai'", aiCfg.APIRouter)
+
+	if err == nil && content != "" {
+		if parsed, pErr := ParseSubtitleTranslationJSON(content, entries); pErr == nil && len(parsed) > 0 {
+			// Apply final clean pass
+			for i := range parsed {
+				parsed[i].Text = transcriber.CleanSubtitleGarbage(parsed[i].Text)
+			}
+			return parsed, nil
+		}
+	}
+
+	// Deterministic fallback: clean garbage on all entries
+	fallbackEntries := make([]transcriber.SubtitleEntry, len(entries))
+	copy(fallbackEntries, entries)
+	for i := range fallbackEntries {
+		fallbackEntries[i].Text = transcriber.CleanSubtitleGarbage(fallbackEntries[i].Text)
+	}
+	return fallbackEntries, err
+}
+
+// TranslateSubtitlesMultiProvider translates subtitle cues to targetLang using the configured AI provider.
+func TranslateSubtitlesMultiProvider(entries []transcriber.SubtitleEntry, aiCfg AIProviderConfig, targetLang string) ([]transcriber.SubtitleEntry, error) {
+	return RefineAndTranslateSubtitlesMultiProvider(entries, aiCfg, targetLang, true)
 }
 
 // AnalyzeHighlightsWithoutSubtitles generates video highlight segments from title and duration without needing subtitles.

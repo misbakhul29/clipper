@@ -66,40 +66,59 @@ type SubtitleCueItem struct {
 	Text string `json:"text"`
 }
 
-// BuildSubtitleTranslationPrompts constructs prompts to translate subtitle cues to targetLang.
-func BuildSubtitleTranslationPrompts(entries []transcriber.SubtitleEntry, targetLang string) (systemPrompt string, userPrompt string) {
+// BuildSubtitleRefineAndTranslatePrompts constructs prompts to clean noise and optionally translate subtitle cues.
+func BuildSubtitleRefineAndTranslatePrompts(entries []transcriber.SubtitleEntry, targetLang string, needTranslation bool) (systemPrompt string, userPrompt string) {
 	langName := targetLang
-	if targetLang == "id" || strings.HasPrefix(strings.ToLower(targetLang), "ind") {
+	if targetLang == "" || targetLang == "id" || strings.HasPrefix(strings.ToLower(targetLang), "ind") {
 		langName = "Bahasa Indonesia (Indonesian)"
+	} else if strings.EqualFold(targetLang, "en") || strings.HasPrefix(strings.ToLower(targetLang), "eng") {
+		langName = "English"
 	}
 
 	var items []SubtitleCueItem
 	for i, e := range entries {
+		// Clean basic garbage before sending to AI
+		cleanText := transcriber.CleanSubtitleGarbage(e.Text)
+		if cleanText == "" {
+			cleanText = e.Text
+		}
 		items = append(items, SubtitleCueItem{
 			ID:   i + 1,
-			Text: e.Text,
+			Text: cleanText,
 		})
 	}
 
 	itemsJSON, _ := json.MarshalIndent(items, "", "  ")
 
-	systemPrompt = fmt.Sprintf(`You are an expert video subtitle and closed-caption translator.
-Translate the provided video subtitle cues into %s.
+	actionDesc := fmt.Sprintf("Clean, refine, and translate the provided subtitle cues into %s.", langName)
+	if !needTranslation {
+		actionDesc = fmt.Sprintf("Clean, polish, and fix grammar/formatting of the provided %s subtitle cues.", langName)
+	}
 
-CRITICAL TRANSLATION RULES:
-1. Preserve the natural spoken conversational tone, humor, slang, and context of the video.
-2. Keep subtitle lines concise and easily readable for fast video playback.
-3. You MUST return EXACTLY %d translated items matching the input IDs from 1 to %d in order.
-4. Output MUST be a strict JSON array of objects with keys "id" (number) and "text" (translated string).
+	systemPrompt = fmt.Sprintf(`You are an expert video subtitle editor and translator for short-form & viral videos (TikTok, YouTube Shorts, Reels).
+%s
+
+CRITICAL CLEANING & FORMATTING RULES:
+1. REMOVE all non-dialogue bracketed sounds, effects, or cues: e.g. [Musik], [Tawa], [Applause], (cheers), {noise}.
+2. REMOVE all narrator/speaker markers: e.g. "Narrator: ", "Host: ", "Speaker 1: ", "John: ".
+3. STRIP weird stray math/noise characters: e.g. "><+=", "{}", "[]", "\\", "^", "~", "|".
+4. Make the spoken dialogue punchy, natural, modern, concise, and easy to read during fast video playback.
+5. You MUST return EXACTLY %d items matching the input IDs from 1 to %d in chronological order.
+6. Output MUST be a strict JSON array of objects with keys "id" (number) and "text" (cleaned/translated string).
 Example:
 [
-  {"id": 1, "text": "Terjemahan baris 1"},
-  {"id": 2, "text": "Terjemahan baris 2"}
+  {"id": 1, "text": "Hasil subtitle baris 1"},
+  {"id": 2, "text": "Hasil subtitle baris 2"}
 ]
-Do NOT include markdown formatting, codeblocks, or extra explanation. Return ONLY the raw JSON array.`, langName, len(entries), len(entries))
+Do NOT include markdown explanations or extra commentary. Return ONLY the raw JSON array.`, actionDesc, len(entries), len(entries))
 
-	userPrompt = fmt.Sprintf("Here are the %d subtitle cues to translate:\n\n%s", len(entries), string(itemsJSON))
+	userPrompt = fmt.Sprintf("Here are the %d subtitle cues to process:\n\n%s", len(entries), string(itemsJSON))
 	return systemPrompt, userPrompt
+}
+
+// BuildSubtitleTranslationPrompts constructs prompts to translate subtitle cues to targetLang.
+func BuildSubtitleTranslationPrompts(entries []transcriber.SubtitleEntry, targetLang string) (systemPrompt string, userPrompt string) {
+	return BuildSubtitleRefineAndTranslatePrompts(entries, targetLang, true)
 }
 
 // ParseSubtitleTranslationJSON parses translated subtitle cues and maps them back to original entries preserving timestamps.

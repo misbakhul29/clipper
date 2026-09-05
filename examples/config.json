@@ -1,0 +1,89 @@
+{
+  "input": "https://www.youtube.com/watch?v=sample_video",
+  "output_dir": "./clips",
+  "output": "merged_highlight.mp4",
+  "mode": "split",
+  "strategy": "fast",
+  "quality": "1080p",
+  "concurrency": 8,
+  "auto_detect": "ai",
+  "target_duration": 30,
+  "hwaccel": "auto",
+  "show_progress": true,
+  "dry_run": false,
+  "batch_list": "",
+  "ai_configs": [
+    {
+      "id": "gemini_acc_1",
+      "router": "gemini",
+      "model": "gemini-2.5-flash",
+      "key": "YOUR_GEMINI_API_KEY_1"
+    },
+    {
+      "id": "gemini_acc_2",
+      "router": "gemini",
+      "model": "gemini-2.5-flash",
+      "key": "YOUR_GEMINI_API_KEY_2"
+    },
+    {
+      "id": "deepseek_main",
+      "router": "deepseek",
+      "model": "deepseek-chat",
+      "key": "YOUR_DEEPSEEK_API_KEY"
+    }
+  ],
+  "routing_models": {
+    "segment": "gemini_acc_1",
+    "sub_translate": "gemini_acc_1",
+    "metadata": "deepseek_main"
+  },
+  "segments": [
+    {
+      "start": "00:00:10",
+      "end": "00:00:40",
+      "title": "Highlight 1 - Hook"
+    },
+    {
+      "start": "00:01:20",
+      "end": "00:01:50",
+      "title": "Highlight 2 - Peak Moment"
+    }
+  ],
+  "cache": {
+    "dir": "./cache"
+  },
+  "shorts": {
+    "enabled": true,
+    "style": "blur",
+    "face_tracking": true,
+    "pan_duration": 0.8
+  },
+  "subtitles": {
+    "enabled": true,
+    "preset": "hormozi",
+    "style": "karaoke",
+    "sdh_mode": "strip",
+    "emoji": true,
+    "font_size": 48,
+    "translate_lang": "id"
+  },
+  "audio": {
+    "loudnorm": {
+      "enabled": true,
+      "i": -14,
+      "lra": 7,
+      "tp": -2
+    },
+    "jump_cut": {
+      "enabled": true,
+      "min_silence": 1,
+      "margin": 0.2,
+      "noise": -30
+    }
+  },
+  "social": {
+    "generate_metadata": true,
+    "extract_thumbnail": true,
+    "thumbnail_count": 1
+  }
+}
