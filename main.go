@@ -8,12 +8,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/misbakhul29/clipper/pkg/ai"
 	"github.com/misbakhul29/clipper/pkg/clipper"
 	"github.com/misbakhul29/clipper/pkg/web"
 )
 
-const Version = "v1.36.0"
+const Version = "v1.36.2"
 
 func printUsage() {
 	fmt.Printf(`CLIPPER %s — Minimalist AI Video Clipper & Shorts Engine
@@ -76,7 +75,8 @@ func main() {
 			}
 			serveAddr = addr
 		}
-		srv := web.NewServer(serveAddr, &clipper.Config{})
+		defaultCfg := clipper.DefaultConfig()
+		srv := web.NewServer(serveAddr, &defaultCfg)
 		if err := srv.Start(); err != nil {
 			fmt.Fprintf(os.Stderr, "Web Studio error: %v\n", err)
 			os.Exit(1)
@@ -116,7 +116,8 @@ func main() {
 			if !strings.HasPrefix(serveAddr, ":") && !strings.Contains(serveAddr, ":") {
 				serveAddr = ":" + serveAddr
 			}
-			srv := web.NewServer(serveAddr, &clipper.Config{})
+			defaultCfg := clipper.DefaultConfig()
+			srv := web.NewServer(serveAddr, &defaultCfg)
 			if err := srv.Start(); err != nil {
 				fmt.Fprintf(os.Stderr, "Web Studio error: %v\n", err)
 				os.Exit(1)
@@ -161,69 +162,7 @@ func runConfig(cfgPath string) {
 }
 
 func generateSampleConfigFile(filePath string) error {
-	sample := clipper.Config{
-		InputFile:        "https://www.youtube.com/watch?v=sample_video",
-		OutputDir:        "./clips",
-		OutputFile:       "merged_highlight.mp4",
-		Mode:             clipper.ModeSplit,
-		Strategy:         clipper.StrategyFast,
-		Shorts:           true,
-		ShortsStyle:      "blur",
-		Quality:          "1080p",
-		AutoDetect:       "ai",
-		TargetDuration:   30,
-		TranslateLang:    "id",
-		Subtitles:        true,
-		SubPreset:        "hormozi",
-		SubFontSize:      48,
-		SubEmoji:         true,
-		SubSDHMode:       "strip",
-		Loudnorm:         true,
-		JumpCut:          true,
-		GenerateMetadata: true,
-		ExtractThumbnail: true,
-		ThumbnailCount:   1,
-		HWAccel:          "auto",
-		ShowProgress:     true,
-		FaceTracking:     true,
-		AIConfigs: []ai.AIProfile{
-			{
-				ID:     "gemini_acc_1",
-				Router: "gemini",
-				Model:  "gemini-2.5-flash",
-				Key:    "YOUR_GEMINI_API_KEY_1",
-			},
-			{
-				ID:     "gemini_acc_2",
-				Router: "gemini",
-				Model:  "gemini-2.5-flash",
-				Key:    "YOUR_GEMINI_API_KEY_2",
-			},
-			{
-				ID:     "deepseek_main",
-				Router: "deepseek",
-				Model:  "deepseek-chat",
-				Key:    "YOUR_DEEPSEEK_API_KEY",
-			},
-		},
-		RoutingModels: ai.AIRoutingModels{
-			Segment:      "gemini_acc_1",
-			SubTranslate: "gemini_acc_1",
-			Metadata:     "deepseek_main",
-		},
-		Segments: []clipper.Segment{
-			{
-				Start: "00:00:10",
-				End:   "00:00:40",
-				Title: "Highlight 1 - Hook",
-			},
-			{
-				Start: "00:01:20",
-				End:   "00:01:50",
-				Title: "Highlight 2 - Peak Moment",
-			},
-		},
-	}
+	sample := clipper.NewSampleConfig()
 	return saveConfig(filePath, sample)
 }
 
@@ -358,30 +297,26 @@ func runInteractiveWizard(defaultFile string) {
 		}
 	}
 
-	cfg := clipper.Config{
-		InputFile:        inputFile,
-		OutputDir:        outputDir,
-		OutputFile:       outputFile,
-		Mode:             mode,
-		Strategy:         strategy,
-		Shorts:           isShorts,
-		ShortsStyle:      shortsStyle,
-		Quality:          quality,
-		AutoDetect:       autoDetect,
-		Loudnorm:         loudnormEnabled,
-		JumpCut:          jumpCutEnabled,
-		Subtitles:        burnSubs,
-		SubPreset:        subPresetChoice,
-		SubSDHMode:       subSDHChoice,
-		SubEmoji:         subEmojiChoice,
-		GenerateMetadata: generateMeta,
-		ExtractThumbnail: extractThumbnails,
-		ThumbnailCount:   1,
-		HWAccel:          hwChoice,
-		ShowProgress:     true,
-		FaceTracking:     true,
-		Segments:         segments,
-	}
+	cfg := clipper.DefaultConfig()
+	cfg.InputFile = inputFile
+	cfg.OutputDir = outputDir
+	cfg.OutputFile = outputFile
+	cfg.Mode = mode
+	cfg.Strategy = strategy
+	cfg.Shorts = isShorts
+	cfg.ShortsStyle = shortsStyle
+	cfg.Quality = quality
+	cfg.AutoDetect = autoDetect
+	cfg.Loudnorm = loudnormEnabled
+	cfg.JumpCut = jumpCutEnabled
+	cfg.Subtitles = burnSubs
+	cfg.SubPreset = subPresetChoice
+	cfg.SubSDHMode = subSDHChoice
+	cfg.SubEmoji = subEmojiChoice
+	cfg.GenerateMetadata = generateMeta
+	cfg.ExtractThumbnail = extractThumbnails
+	cfg.HWAccel = hwChoice
+	cfg.Segments = segments
 
 	if err := saveConfig(fileOut, cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "\nError saving config: %v\n", err)

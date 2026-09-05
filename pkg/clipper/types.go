@@ -113,6 +113,89 @@ type Config struct {
 	Segments      []Segment           `json:"segments"`
 }
 
+// DefaultConfig returns a Config initialized with system-wide canonical defaults.
+func DefaultConfig() Config {
+	return Config{
+		OutputDir:        "./clips",
+		OutputFile:       "merged_highlight.mp4",
+		Mode:             ModeSplit,
+		Strategy:         StrategyFast,
+		Shorts:           true,
+		ShortsStyle:      "blur",
+		Quality:          "1080p",
+		CacheDir:         "./cache",
+		Concurrency:      runtime.NumCPU(),
+		AutoDetect:       "ai",
+		TargetDuration:   30,
+		TranslateLang:    "id",
+		Subtitles:        true,
+		SubPreset:        "hormozi",
+		SubSDHMode:       "strip",
+		SubEmoji:         true,
+		SubFontSize:      48,
+		GenerateMetadata: true,
+		ExtractThumbnail: true,
+		ThumbnailCount:   1,
+		HWAccel:          "auto",
+		ShowProgress:     true,
+		FaceTracking:     true,
+		PanDuration:      0.8,
+		Loudnorm:         true,
+		LoudnormI:        -14,
+		LoudnormLRA:      7,
+		LoudnormTP:       -2,
+		JumpCut:          true,
+		JumpCutMinSil:    1.0,
+		JumpCutMargin:    0.2,
+		JumpCutNoise:     -30.0,
+	}
+}
+
+// NewSampleConfig returns a populated sample Config for starter templates and config generation.
+// This serves as the single source of truth for CLI templates, initialization, and tests.
+func NewSampleConfig() Config {
+	cfg := DefaultConfig()
+	cfg.InputFile = "https://www.youtube.com/watch?v=sample_video"
+	cfg.AIConfigs = []ai.AIProfile{
+		{
+			ID:     "gemini_acc_1",
+			Router: "gemini",
+			Model:  "gemini-2.5-flash",
+			Key:    "YOUR_GEMINI_API_KEY_1",
+		},
+		{
+			ID:     "gemini_acc_2",
+			Router: "gemini",
+			Model:  "gemini-2.5-flash",
+			Key:    "YOUR_GEMINI_API_KEY_2",
+		},
+		{
+			ID:     "deepseek_main",
+			Router: "deepseek",
+			Model:  "deepseek-chat",
+			Key:    "YOUR_DEEPSEEK_API_KEY",
+		},
+	}
+	cfg.RoutingModels = ai.AIRoutingModels{
+		Segment:      "gemini_acc_1",
+		SubTranslate: "gemini_acc_1",
+		Metadata:     "deepseek_main",
+	}
+	cfg.Segments = []Segment{
+		{
+			Start: "00:00:10",
+			End:   "00:00:40",
+			Title: "Highlight 1 - Hook",
+		},
+		{
+			Start: "00:01:20",
+			End:   "00:01:50",
+			Title: "Highlight 2 - Peak Moment",
+		},
+	}
+	return cfg
+}
+
 // GetAITaskConfig resolves the effective AIProviderConfig for a given task (e.g. "segment", "sub_translate", "metadata").
 func (c *Config) GetAITaskConfig(task string) ai.AIProviderConfig {
 	fallback := c.AIConfig

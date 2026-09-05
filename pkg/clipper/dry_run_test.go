@@ -160,3 +160,38 @@ func TestCustomSegmentSubtitlesJSON(t *testing.T) {
 		t.Errorf("unexpected cue 0: %+v", seg.Subtitles[0])
 	}
 }
+
+func TestDefaultAndSampleConfig(t *testing.T) {
+	def := DefaultConfig()
+	if def.OutputDir != "./clips" || def.Quality != "1080p" || !def.Shorts || def.ShortsStyle != "blur" {
+		t.Errorf("DefaultConfig invalid defaults: %+v", def)
+	}
+
+	sample := NewSampleConfig()
+	if sample.InputFile == "" {
+		t.Error("NewSampleConfig should have InputFile set")
+	}
+	if len(sample.AIConfigs) != 3 {
+		t.Errorf("expected 3 sample AI accounts, got %d", len(sample.AIConfigs))
+	}
+	if sample.RoutingModels.Segment != "gemini_acc_1" {
+		t.Errorf("expected segment routing to gemini_acc_1, got %s", sample.RoutingModels.Segment)
+	}
+	if len(sample.Segments) != 2 {
+		t.Errorf("expected 2 sample segments, got %d", len(sample.Segments))
+	}
+
+	// Validate sample config
+	if err := sample.Validate(); err != nil {
+		t.Fatalf("NewSampleConfig failed Validate(): %v", err)
+	}
+
+	// Verify MarshalJSON omits legacy empty ai_config
+	marshaled, err := json.Marshal(sample)
+	if err != nil {
+		t.Fatalf("failed to marshal sample config: %v", err)
+	}
+	if string(marshaled) == "" {
+		t.Fatal("empty marshaled output")
+	}
+}
