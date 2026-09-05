@@ -188,7 +188,7 @@
         </div>
 
         <div class="ai-divider">
-          <span>✨ AI AUTO-HIGHLIGHTS & DETECTION</span>
+          <span>AI AUTO-HIGHLIGHTS & DETECTION</span>
         </div>
 
         <!-- AI & Auto-Detect Controls -->
@@ -196,9 +196,9 @@
           <div class="auto-detect-row">
             <div class="field-group" style="flex:1;">
               <select id="autoDetectMode" class="select-box" onchange="onAutoDetectModeChange()">
-                <option value="ai" selected>🤖 AI Smart Highlights (Gemini)</option>
-                <option value="silence">🎙️ Silence Voice Detection</option>
-                <option value="scene">🎬 Scene Transition Detection</option>
+                <option value="ai" selected>AI Smart Highlights</option>
+                <option value="silence">Silence Voice Detection</option>
+                <option value="scene">Scene Transition Detection</option>
               </select>
             </div>
             <div class="field-group" style="width:130px;">
@@ -538,7 +538,7 @@
     <div class="sub-modal-card" style="max-width:680px; max-height:90vh; overflow-y:auto;">
       <div class="sub-modal-header">
         <div class="sub-modal-title-wrap">
-          <span class="sub-modal-title">⚡ Multi-AI Accounts & Task Routing</span>
+          <span class="sub-modal-title">Multi-AI Accounts & Task Routing</span>
         </div>
         <button class="btn btn-secondary btn-icon" onclick="closeGlobalAISettings()" title="Close">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -549,20 +549,20 @@
         <!-- Section 1: Task Routing (One-to-Many) -->
         <div style="background:var(--bg-surface-elevated); padding:14px 16px; border-radius:10px; border:1px solid var(--border);">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-            <span style="font-size:13px; font-weight:700; color:var(--text-primary);">🎯 Task Routing (One-to-Many)</span>
+            <span style="font-size:13px; font-weight:700; color:var(--text-primary);">Task Routing (One-to-Many)</span>
             <span style="font-size:11px; color:var(--text-muted);">Pilih akun AI untuk masing-masing fitur</span>
           </div>
           <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap:12px;">
             <div class="field-group">
-              <label class="field-label" style="font-size:11.5px;">🎬 Segment Highlights</label>
+              <label class="field-label" style="font-size:11.5px;">Segment Highlights</label>
               <select id="routeSegmentProfile" class="select-box" onchange="saveGlobalAIRouting()"></select>
             </div>
             <div class="field-group">
-              <label class="field-label" style="font-size:11.5px;">💬 Subtitle Translate & Clean</label>
+              <label class="field-label" style="font-size:11.5px;">Subtitle Translate & Clean</label>
               <select id="routeSubtitleProfile" class="select-box" onchange="saveGlobalAIRouting()"></select>
             </div>
             <div class="field-group">
-              <label class="field-label" style="font-size:11.5px;">🏷️ Social Metadata & Hooks</label>
+              <label class="field-label" style="font-size:11.5px;">Social Metadata & Hooks</label>
               <select id="routeMetadataProfile" class="select-box" onchange="saveGlobalAIRouting()"></select>
             </div>
           </div>
@@ -571,7 +571,7 @@
         <!-- Section 2: Configured AI Profiles List -->
         <div>
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-            <span style="font-size:13px; font-weight:700; color:var(--text-primary);">🔑 Configured AI Profiles (`ai_configs`)</span>
+            <span style="font-size:13px; font-weight:700; color:var(--text-primary);">Configured AI Profiles (`ai_configs`)</span>
             <button class="btn btn-secondary btn-sm" onclick="showAddProfileForm()" style="font-size:11.5px;">+ Add Profile</button>
           </div>
 
@@ -627,7 +627,7 @@
     <div class="sub-modal-card" style="max-width:540px;">
       <div class="sub-modal-header">
         <div class="sub-modal-title-wrap">
-          <span class="sub-modal-title">💾 Storage & Cache Manager</span>
+          <span class="sub-modal-title">Storage & Cache Manager</span>
         </div>
         <button class="btn btn-secondary btn-icon" onclick="closeStorageModal()" title="Close">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>

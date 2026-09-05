@@ -96,7 +96,7 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Error creating config file: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Printf("✨ Created starter configuration template: %s\n", targetFile)
+		fmt.Printf("Created starter configuration template: %s\n", targetFile)
 		fmt.Printf("Edit %s or run:\n  clipper config %s\n", targetFile, targetFile)
 		return
 
@@ -257,7 +257,7 @@ func runInteractiveWizard(defaultFile string) {
 			subSDHChoice = "strip"
 		}
 
-		emojiChoice := promptString(reader, "\nAuto-inject contextual emojis (e.g. 💰, 🔥, 💡) into subtitles? (y/n)", "y")
+		emojiChoice := promptString(reader, "\nAuto-inject contextual emojis into subtitles? (y/n)", "y")
 		subEmojiChoice = strings.ToLower(emojiChoice) == "y" || strings.ToLower(emojiChoice) == "yes"
 	}
 

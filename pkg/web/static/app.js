@@ -1240,7 +1240,7 @@ function saveGlobalAIRouting() {
 
   const statusEl = document.getElementById('aiModalStatus');
   if (statusEl) {
-    statusEl.textContent = 'Task routing updated ✓';
+    statusEl.textContent = 'Task routing updated';
   }
 }
 
@@ -1302,7 +1302,7 @@ function saveNewProfile() {
 
   const statusEl = document.getElementById('aiModalStatus');
   if (statusEl) {
-    statusEl.textContent = `Profile '${id}' saved ✓`;
+    statusEl.textContent = `Profile '${id}' saved`;
   }
 }
 
@@ -1383,7 +1383,7 @@ async function fetchStorageStats() {
       if (clipsSizeEl) clipsSizeEl.textContent = data.clips_size_str;
       if (clipsCountEl) clipsCountEl.textContent = `${data.clips_count} rendered clips found`;
 
-      if (statusEl) statusEl.textContent = 'Storage data up to date ✓';
+      if (statusEl) statusEl.textContent = 'Storage data up to date';
     } else {
       if (statusEl) statusEl.textContent = 'Failed to fetch storage stats';
     }
@@ -1393,30 +1393,27 @@ async function fetchStorageStats() {
 }
 
 async function purgeCache() {
-  if (!confirm('Are you sure you want to purge all downloaded video and audio cache files?')) return;
   const btn = document.getElementById('purgeCacheBtn');
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:4px;"></span> Purging...';
+    btn.innerHTML = '<span class="spinner" style="width:14px; height:14px; margin-right:4px;"></span> Purging...';
   }
+
   try {
     const res = await fetch('/api/storage/clean-cache', { method: 'POST' });
     let data = {};
     const text = await res.text();
     try {
       data = JSON.parse(text);
-    } catch {
-      data = { error: text || `HTTP ${res.status} ${res.statusText}` };
-    }
+    } catch (_) {}
 
-    if (!res.ok) {
-      alert(data.error || 'Failed to purge cache.');
-      return;
+    if (res.ok) {
+      await fetchStorageStats();
+      alert(`Cache successfully cleaned!\nRemoved ${data.removed_count || 0} temporary file(s) (${data.freed_space || '0 B'}).`);
+    } else {
+      alert(`Failed to clean cache: ${data.error || text || 'Unknown error'}`);
     }
-    fetchStorageStats();
-    alert(data.message || 'Cache purged successfully.');
   } catch (err) {
-    console.error('Purge cache error:', err);
     alert('Failed to connect to Clipper server. Please make sure `./clipper serve :8000` is running in your terminal.');
   } finally {
     if (btn) {
@@ -1427,7 +1424,7 @@ async function purgeCache() {
 }
 
 async function cleanAllClips() {
-  if (!confirm('⚠️ Are you sure you want to DELETE ALL rendered clips and thumbnails? This action cannot be undone.')) return;
+  if (!confirm('Are you sure you want to DELETE ALL rendered clips and thumbnails? This action cannot be undone.')) return;
   const btn = document.getElementById('cleanClipsBtn');
   const topBtn = document.getElementById('clearAllClipsBtn');
   if (btn) btn.disabled = true;

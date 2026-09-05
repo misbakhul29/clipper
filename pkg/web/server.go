@@ -137,8 +137,8 @@ func (s *Server) Start() error {
 		WriteTimeout: 60 * time.Minute, // Allow long video streams
 	}
 
-	fmt.Printf("\n🚀 Clipper Web Studio running at: http://localhost%s\n", s.Addr)
-	fmt.Printf("📂 Serving clips from directory: %s\n", s.OutDir)
+	fmt.Printf("\nClipper Web Studio running at: http://localhost%s\n", s.Addr)
+	fmt.Printf("Serving clips from directory: %s\n", s.OutDir)
 	fmt.Println("Press Ctrl+C to stop the web server.")
 
 	return server.ListenAndServe()
