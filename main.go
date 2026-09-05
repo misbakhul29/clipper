@@ -12,7 +12,7 @@ import (
 	"github.com/misbakhul29/clipper/pkg/web"
 )
 
-const Version = "v1.33.0"
+const Version = "v1.35.0"
 
 func printUsage() {
 	fmt.Printf(`CLIPPER %s — Minimalist AI Video Clipper & Shorts Engine

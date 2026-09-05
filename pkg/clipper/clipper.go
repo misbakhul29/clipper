@@ -162,29 +162,36 @@ func (c *Clipper) Process(cfg *Config) error {
 	}
 
 	var allSubEntries []transcriber.SubtitleEntry
+	isTargetLang := true
+	targetLang := cfg.TranslateLang
+	if targetLang == "" {
+		targetLang = "id"
+	}
+
 	if cfg.Subtitles || cfg.GenerateMetadata {
 		if len(cachedSubEntries) > 0 {
 			allSubEntries = cachedSubEntries
 			fmt.Printf("Reusing %d cached subtitle entries for video clips!\n", len(allSubEntries))
 		} else {
-			fmt.Printf("Fetching subtitles for video clips...\n")
-			lang := cfg.TranslateLang
-			if lang == "" {
-				lang = "id"
-			}
-			var subs []transcriber.SubtitleEntry
-			var err error
+			fmt.Printf("Checking subtitles for video clips (target lang: %s)...\n", targetLang)
 			if cfg.UseWhisper {
-				subs, err = transcriber.TranscribeWithWhisper(cfg.InputFile, cfg.CacheDir, lang)
-			} else {
-				subs, err = transcriber.FetchSubtitles(originalInput, cfg.CacheDir, lang)
-				if err != nil || len(subs) == 0 {
-					subs, err = transcriber.TranscribeWithWhisper(cfg.InputFile, cfg.CacheDir, lang)
+				subs, err := transcriber.TranscribeWithWhisper(cfg.InputFile, cfg.CacheDir, targetLang)
+				if err == nil && len(subs) > 0 {
+					allSubEntries = subs
+					isTargetLang = true
+					fmt.Printf("Transcribed %d subtitle entries using Whisper!\n", len(allSubEntries))
 				}
-			}
-			if err == nil && len(subs) > 0 {
-				allSubEntries = subs
-				fmt.Printf("Loaded %d subtitle entries for video clips!\n", len(allSubEntries))
+			} else {
+				subs, matched, err := transcriber.FetchSubtitlesWithLangInfo(originalInput, cfg.CacheDir, targetLang)
+				if err == nil && len(subs) > 0 {
+					allSubEntries = subs
+					isTargetLang = matched
+					if isTargetLang {
+						fmt.Printf("Loaded %d subtitle entries matching target language '%s'!\n", len(allSubEntries), targetLang)
+					} else {
+						fmt.Printf("Loaded %d fallback subtitle entries (will translate & refine per clip segment to '%s')\n", len(allSubEntries), targetLang)
+					}
+				}
 			}
 		}
 	}
@@ -380,6 +387,15 @@ func (c *Clipper) Process(cfg *Config) error {
 					if len(removedGaps) > 0 {
 						segSubEntries = transcriber.AdjustSubtitlesForJumpCuts(segSubEntries, removedGaps)
 					}
+				} else if cfg.Subtitles {
+					// Skenario 3: No YouTube subtitles available at all -> Run STT per clip segment!
+					fmt.Printf("[%d/%d] Generating subtitles via per-clip Speech-To-Text (Whisper)...\n", j.index+1, len(cfg.Segments))
+					clipSubs, sttErr := transcriber.TranscribeWithWhisper(effectiveInput, cfg.CacheDir, targetLang)
+					if sttErr == nil && len(clipSubs) > 0 {
+						segSubEntries = clipSubs
+					} else if sttErr != nil {
+						fmt.Printf("[%d/%d] Per-clip STT warning: %v\n", j.index+1, len(cfg.Segments), sttErr)
+					}
 				}
 
 				if cfg.Subtitles && len(segSubEntries) > 0 {
@@ -389,16 +405,30 @@ func (c *Clipper) Process(cfg *Config) error {
 						sdhMode = "strip"
 					}
 					sliced = transcriber.FilterSDHEntries(sliced, sdhMode)
+
+					// Deterministic cleaning first
+					for sIdx := range sliced {
+						sliced[sIdx].Text = transcriber.CleanSubtitleGarbage(sliced[sIdx].Text)
+					}
+
 					if len(sliced) > 0 {
-						// On-demand token-saving translation for this specific clip segment (only when not already custom edited)
-						if len(j.seg.Subtitles) == 0 && cfg.TranslateLang != "" && (cfg.AIConfig.APIKey != "" || os.Getenv("OPENROUTER_API_KEY") != "" || os.Getenv("GEMINI_API_KEY") != "" || os.Getenv("DEEPSEEK_API_KEY") != "" || os.Getenv("OPENAI_API_KEY") != "") {
-							fmt.Printf("[%d/%d] Translating %d subtitle cues to '%s' via AI (%s / %s)...\n",
-								j.index+1, len(cfg.Segments), len(sliced), cfg.TranslateLang, cfg.AIConfig.APIRouter, cfg.AIConfig.Model)
-							translated, transErr := ai.TranslateSubtitlesMultiProvider(sliced, cfg.AIConfig, cfg.TranslateLang)
-							if transErr != nil {
-								fmt.Printf("[AI WARN] Subtitle translation for segment %d failed (%v), using original subtitles.\n", j.index+1, transErr)
-							} else if len(translated) > 0 {
-								sliced = translated
+						// AI Refine and Translate:
+						// If isTargetLang is false, translates to targetLang + cleans narrator/garbage.
+						// If isTargetLang is true, cleans narrator/garbage and polishes spoken dialogue.
+						needAI := len(j.seg.Subtitles) == 0 && (cfg.AIConfig.APIKey != "" || os.Getenv("OPENROUTER_API_KEY") != "" || os.Getenv("GEMINI_API_KEY") != "" || os.Getenv("DEEPSEEK_API_KEY") != "" || os.Getenv("OPENAI_API_KEY") != "")
+						if needAI {
+							needTranslation := !isTargetLang
+							actionLabel := "Polishing & cleaning"
+							if needTranslation {
+								actionLabel = fmt.Sprintf("Translating to '%s' & cleaning", targetLang)
+							}
+							fmt.Printf("[%d/%d] %s %d subtitle cues via AI (%s / %s)...\n",
+								j.index+1, len(cfg.Segments), actionLabel, len(sliced), cfg.AIConfig.APIRouter, cfg.AIConfig.Model)
+							refined, refErr := ai.RefineAndTranslateSubtitlesMultiProvider(sliced, cfg.AIConfig, targetLang, needTranslation)
+							if refErr != nil {
+								fmt.Printf("[AI WARN] Subtitle processing for segment %d (%v), using cleaned local subtitles.\n", j.index+1, refErr)
+							} else if len(refined) > 0 {
+								sliced = refined
 							}
 						}
 
